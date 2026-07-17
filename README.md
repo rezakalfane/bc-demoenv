@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Field Notes
 
-## Getting Started
+A deployable Next.js 16 starter with the App Router, Tailwind CSS 4, and Turso/libSQL. The example app reads from Turso in a Server Component and writes through Server Actions.
 
-First, run the development server:
+## Local development
+
+Node.js 20.19 or newer is required. No database account is needed for a first run: without environment variables, the app creates `local.db` in the project directory.
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+To develop against an existing Turso database instead, create `.env.local` from `.env.example` and set both values:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env.local
+```
 
-## Learn More
+## Deploy to Vercel with Turso
 
-To learn more about Next.js, take a look at the following resources:
+The current Vercel Marketplace slug is `tursocloud/database`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npx vercel@latest link
+npx vercel@latest integration add tursocloud/database
+npx vercel@latest env pull .env.local --yes
+npx vercel@latest deploy
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The integration injects `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` into the linked Vercel project. The app creates its `notes` table on the first request.
 
-## Deploy on Vercel
+For a production deployment after the initial preview is verified:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npx vercel@latest deploy --prod
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Useful commands
+
+```bash
+npm run dev     # start the local development server
+npm run lint    # run ESLint
+npm run build   # create a production build
+npm run start   # serve the production build
+```
+
+## Project records
+
+- [`CHANGELOG.md`](./CHANGELOG.md) records commits and merges in reverse chronological order.
+- [`HISTORY.md`](./HISTORY.md) records user prompts and implementation summaries in reverse chronological order.
