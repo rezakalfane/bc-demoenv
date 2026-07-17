@@ -13,7 +13,7 @@ export async function addNote(formData: FormData) {
   }
 
   await insertNote(user.id, title);
-  revalidatePath("/");
+  revalidatePath("/notes");
 }
 
 export async function deleteNote(formData: FormData) {
@@ -25,5 +25,5 @@ export async function deleteNote(formData: FormData) {
   }
 
   await removeNote(user.id, id);
-  revalidatePath("/");
+  revalidatePath("/notes");
 }

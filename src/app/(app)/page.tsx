@@ -1,106 +1,164 @@
-import { addNote, deleteNote } from "@/app/actions";
-import { getNotes } from "@/lib/db";
-import { requireAppUser } from "@/lib/auth";
+import Link from "next/link";
+import { Suspense } from "react";
+import {
+  getEnvironmentDashboards,
+  type EnvironmentDashboard,
+} from "@/lib/bigcommerce";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const user = await requireAppUser();
-  const notes = await getNotes(user.id);
+const metricKeys = ["channels", "categories", "products", "variants"] as const;
+const numberFormatter = new Intl.NumberFormat("en");
+const statusStyles = {
+  connected: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+  partial: "bg-amber-500/12 text-amber-700 dark:text-amber-300",
+  unavailable: "bg-red-500/10 text-red-700 dark:text-red-300",
+};
+const statusLabels = {
+  connected: "Connected",
+  partial: "Partial data",
+  unavailable: "Unavailable",
+};
+
+function EnvironmentCard({ environment }: { environment: EnvironmentDashboard }) {
+  const firstError = metricKeys
+    .map((key) => environment.metrics[key].error)
+    .find((error) => error !== null);
 
   return (
+    <article className="flex min-h-72 flex-col rounded-3xl border border-black/10 bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-semibold tracking-tight">
+            {environment.name}
+          </h2>
+          <p className="mt-1 truncate font-mono text-xs text-black/40 dark:text-white/40">
+            {environment.storeHash}
+          </p>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyles[environment.status]}`}
+        >
+          {statusLabels[environment.status]}
+        </span>
+      </div>
+
+      <dl className="mt-6 grid grid-cols-2 gap-3">
+        {metricKeys.map((key) => {
+          const metric = environment.metrics[key];
+
+          return (
+            <div
+              key={key}
+              className="rounded-2xl border border-black/8 bg-black/2.5 p-4 dark:border-white/8 dark:bg-white/3"
+            >
+              <dt className="text-xs font-medium text-black/45 dark:text-white/45">
+                {metric.label}
+              </dt>
+              <dd className="mt-2">
+                {metric.value === null ? (
+                  <span
+                    className="text-sm font-medium text-black/35 dark:text-white/35"
+                    title={metric.error ?? undefined}
+                  >
+                    Not available
+                  </span>
+                ) : (
+                  <span className="text-2xl font-semibold tracking-[-0.04em] tabular-nums">
+                    {numberFormatter.format(metric.value)}
+                  </span>
+                )}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+
+      {firstError ? (
+        <p className="mt-4 text-xs leading-5 text-amber-700 dark:text-amber-300">
+          {firstError}
+        </p>
+      ) : null}
+
+      <div className="mt-auto pt-5">
+        <Link
+          href="/settings"
+          className="text-xs font-medium text-black/45 transition hover:text-emerald-700 dark:text-white/45 dark:hover:text-emerald-300"
+        >
+          Manage environment →
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
+      {[0, 1, 2].map((item) => (
+        <div
+          key={item}
+          className="h-72 animate-pulse rounded-3xl border border-black/8 bg-black/3 dark:border-white/8 dark:bg-white/3"
+        />
+      ))}
+    </div>
+  );
+}
+
+async function EnvironmentGrid() {
+  const environments = await getEnvironmentDashboards();
+
+  if (environments.length === 0) {
+    return (
+      <div className="rounded-3xl border border-dashed border-black/15 px-6 py-14 text-center dark:border-white/15">
+        <p className="font-medium">No BigCommerce environments yet.</p>
+        <p className="mt-1 text-sm text-black/45 dark:text-white/45">
+          Add a store connection to start seeing catalog metrics.
+        </p>
+        <Link
+          href="/settings"
+          className="mt-5 inline-flex rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
+        >
+          Add an environment
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      {environments.map((environment) => (
+        <EnvironmentCard key={environment.id} environment={environment} />
+      ))}
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-12">
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="mx-auto w-full max-w-6xl">
         <header className="mb-8 flex flex-col gap-5 border-b border-black/10 pb-7 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              Notes
+              Dashboard
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-              Field notes
+              Store environments
             </h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-black/55 dark:text-white/55">
-              Your private scratchpad for demos, stores, and follow-up tasks.
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-black/55 dark:text-white/55">
+              A live overview of the channels and catalog resources available in
+              each saved BigCommerce environment.
             </p>
           </div>
-          <div className="w-fit rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-white/50">
-            {notes.length} {notes.length === 1 ? "note" : "notes"}
-          </div>
+          <span className="w-fit rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-white/50">
+            Live from BigCommerce
+          </span>
         </header>
 
-        <section aria-labelledby="new-note-heading" className="mb-10">
-          <h2 id="new-note-heading" className="sr-only">
-            Add a note
-          </h2>
-          <form action={addNote} className="flex gap-3">
-            <label htmlFor="note-title" className="sr-only">
-              Note
-            </label>
-            <input
-              id="note-title"
-              name="title"
-              type="text"
-              required
-              maxLength={120}
-              autoComplete="off"
-              placeholder="What should you remember?"
-              className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm shadow-sm outline-none transition placeholder:text-black/35 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:placeholder:text-white/30"
-            />
-            <button
-              type="submit"
-              className="rounded-2xl bg-neutral-950 px-5 py-3.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
-            >
-              Add note
-            </button>
-          </form>
-        </section>
-
-        <section aria-labelledby="notes-heading">
-          <h2 id="notes-heading" className="sr-only">
-            Notes
-          </h2>
-          {notes.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-black/15 px-6 py-14 text-center dark:border-white/15">
-              <p className="font-medium">Your notebook is empty.</p>
-              <p className="mt-1 text-sm text-black/45 dark:text-white/45">
-                Add the first note above to verify your database connection.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-black/8 overflow-hidden rounded-3xl border border-black/10 bg-white/65 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur dark:divide-white/8 dark:border-white/10 dark:bg-white/4">
-              {notes.map((note) => (
-                <li
-                  key={note.id}
-                  className="group flex items-center gap-4 px-5 py-4 sm:px-6"
-                >
-                  <span className="size-2 shrink-0 rounded-full bg-emerald-500/80" />
-                  <p className="min-w-0 flex-1 break-words text-sm leading-6">
-                    {note.title}
-                  </p>
-                  <time
-                    className="hidden shrink-0 text-xs text-black/35 sm:block dark:text-white/35"
-                    dateTime={note.createdAt}
-                  >
-                    {new Intl.DateTimeFormat("en", {
-                      month: "short",
-                      day: "numeric",
-                    }).format(new Date(note.createdAt))}
-                  </time>
-                  <form action={deleteNote}>
-                    <input type="hidden" name="id" value={note.id} />
-                    <button
-                      type="submit"
-                      aria-label={`Delete ${note.title}`}
-                      className="rounded-lg px-2 py-1 text-xs font-medium text-black/35 transition hover:bg-red-500/10 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:text-white/35 dark:hover:text-red-400"
-                    >
-                      Delete
-                    </button>
-                  </form>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <Suspense fallback={<DashboardSkeleton />}>
+          <EnvironmentGrid />
+        </Suspense>
       </div>
     </div>
   );

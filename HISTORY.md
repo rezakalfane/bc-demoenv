@@ -2,6 +2,44 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-17 — Publish the environment dashboard
+
+### Prompt
+
+> you can document, branch, commit, merge, push
+
+### Summary
+
+- Finalized README, CHANGELOG, and HISTORY documentation for the live BigCommerce Dashboard and background rendering fix.
+- Created `feature/environment-dashboard` and committed the verified implementation.
+- Merged the feature branch into `main` with a non-fast-forward merge and pushed `main` to the origin repository.
+
+## 2026-07-17 — Prevent the page background from repeating
+
+### Prompt
+
+> Can you apply the following small fix: body { margin: 0; background: radial-gradient(circle at 15% 0%, rgb(16 185 129 / 8%), transparent 28rem), var(--background); background-repeat: no-repeat; }
+
+### Summary
+
+- Added `background-repeat: no-repeat` to the global `body` rule.
+- Preserved the existing radial gradient and background color while preventing vertical repetition.
+
+## 2026-07-17 — Add a live environment dashboard
+
+### Prompt
+
+> Create a Dashboard page above Notes, with a view on the different environments (boxes, 3 columns layout): number of channels, categories, products, variants, ...
+
+### Summary
+
+- Added Dashboard as `/`, moved Notes to `/notes`, and placed Dashboard first in the authenticated sidebar.
+- Added a responsive environment-card grid that displays three columns on wide screens.
+- Added live Channels, Categories, Products, and Variants totals from current BigCommerce v3 collection endpoints.
+- Decrypted each environment token only in the server data layer and returned only safe metric DTOs to the rendered page.
+- Added uncached parallel requests, an eight-second timeout, bounded environment concurrency, and independent metric failures so partial scope access remains useful.
+- Added connected, partial-data, and unavailable states plus an empty state linking users to Settings.
+
 ## 2026-07-17 — Add user-scoped BigCommerce environment settings
 
 ### Prompt

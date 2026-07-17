@@ -4,6 +4,31 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-17
 
+### Merge — Integrate the environment dashboard into `main`
+
+- **Date:** 2026-07-17
+- **Source:** `feature/environment-dashboard`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the live BigCommerce Dashboard and background rendering fix after lint, TypeScript, production-build, whitespace, and live read-only API verification.
+
+### Commit — Add the live BigCommerce environment dashboard
+
+- **Date:** 2026-07-17 23:52 CEST
+- **Author:** Reza Kalfane
+- **Branch:** `feature/environment-dashboard`
+- **Type:** Feature commit
+
+- Added Dashboard as the authenticated home page and placed it above Notes in the application navigation.
+- Moved the private notes page to `/notes` and updated note revalidation to target the new route.
+- Added a responsive environment-card grid with three columns on wide screens.
+- Added live Channels, Categories, Products, and Variants totals from the BigCommerce REST Management API.
+- Added server-only credential decryption, uncached API requests, request timeouts, and bounded environment concurrency.
+- Added per-metric error isolation for invalid credentials, missing scopes, invalid store hashes, timeouts, and rate limits.
+- Prevented the page background gradient from repeating below its intended area.
+- Documented the Dashboard and its required read-only BigCommerce API scopes.
+
 ### Merge — Integrate user-scoped BigCommerce environments into `main`
 
 - **Date:** 2026-07-17

@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "BigCommerce Demo Env",
   description:
-    "Private notes and BigCommerce environment settings for authenticated users.",
+    "Live BigCommerce environment dashboards, private notes, and tenant-scoped settings.",
 };
 
 export default function RootLayout({
