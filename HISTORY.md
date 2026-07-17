@@ -2,6 +2,21 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-17 — Add user-scoped BigCommerce environment settings
+
+### Prompt
+
+> bsack to bc-demoenv, once logged in, app displays a panel on the left with pages and content on the right. Let's create a Settings page where you can add, edit, remove BigCommerce environments with name, store hash, access token. These settings are only for the logged in user (multi tenancy)
+
+### Summary
+
+- Added a shared authenticated route-group layout with a persistent left navigation panel and right-side page content.
+- Added Notes and Settings navigation while preserving `/` for notes and introducing `/settings` for BigCommerce environments.
+- Added create, edit, and remove flows for environment name, store hash, and access token with validated Server Actions and accessible pending feedback.
+- Added a tenant-scoped `bigcommerce_environments` table; every query includes the authenticated Clerk user ID.
+- Added AES-256-GCM encryption for access tokens, user-bound authenticated data, masked token hints, and dedicated encryption-key documentation.
+- Preserved token secrecy by never returning stored access tokens to the browser and by leaving an existing token unchanged when the edit field is blank.
+
 ## 2026-07-17 — Publish passwordless multi-tenant authentication
 
 ### Prompt

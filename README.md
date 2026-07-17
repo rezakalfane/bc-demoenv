@@ -1,6 +1,13 @@
-# Field Notes
+# BigCommerce Demo Env
 
-A deployable Next.js 16 application with the App Router, Tailwind CSS 4, Turso/libSQL, and Clerk passwordless authentication. Users can sign up or sign in with an emailed code, or sign in through a one-time link. Every database query scopes notes to the authenticated Clerk user.
+A deployable Next.js 16 application with the App Router, Tailwind CSS 4, Turso/libSQL, and Clerk passwordless authentication. After signing in, users get a shared application sidebar with private Notes and Settings pages. Every database query is scoped to the authenticated Clerk user.
+
+## Application pages
+
+- **Notes** provides a private scratchpad backed by Turso.
+- **Settings** manages named BigCommerce environments with a store hash and API access token.
+
+BigCommerce access tokens are encrypted with AES-256-GCM before storage. The application returns only the final four characters to the UI and binds each encrypted value to its owning Clerk user. Reads, updates, and deletes also include the Clerk user ID, so one user cannot access another user's settings.
 
 ## Local development
 
@@ -12,6 +19,14 @@ npx vercel@latest link
 npx vercel@latest integration add clerk
 npx vercel@latest env pull .env.local --yes
 ```
+
+Add a stable encryption secret to `.env.local` before saving BigCommerce environments:
+
+```bash
+openssl rand -base64 32
+```
+
+Store the generated value as `SETTINGS_ENCRYPTION_KEY`. For local compatibility the app can derive a key from `CLERK_SECRET_KEY`, but a dedicated value is recommended and must remain stable so saved tokens remain decryptable after Clerk key rotation.
 
 Configure the Clerk development instance under **User & authentication**:
 
@@ -51,7 +66,9 @@ npx vercel@latest deploy
 
 Clerk injects `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`. Turso injects `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Apply the Clerk settings from the local-development section to both development and production instances.
 
-The app creates or migrates the `notes` table on the first authenticated request. New notes store the Clerk user ID in `user_id`; reads and deletes include that user ID, preventing one user from accessing another user's notes. Notes created before this migration are preserved with no owner and remain hidden until an explicit ownership migration assigns them.
+Add `SETTINGS_ENCRYPTION_KEY` to the Development, Preview, and Production environments in Vercel before users save BigCommerce access tokens. Treat it as a permanent secret: changing it prevents existing tokens from being decrypted.
+
+The app creates or migrates the `notes` table and creates the `bigcommerce_environments` table on the first authenticated request. Both tables use tenant-aware indexes and user-scoped predicates. Notes created before authentication was added are preserved with no owner and remain hidden until an explicit ownership migration assigns them.
 
 For a production deployment after the initial preview is verified:
 

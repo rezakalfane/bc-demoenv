@@ -1,7 +1,6 @@
 import { addNote, deleteNote } from "@/app/actions";
 import { getNotes } from "@/lib/db";
 import { requireAppUser } from "@/lib/auth";
-import { SignOutButton } from "@/components/sign-out-button";
 
 export const dynamic = "force-dynamic";
 
@@ -10,30 +9,22 @@ export default async function Home() {
   const notes = await getNotes(user.id);
 
   return (
-    <main className="min-h-screen px-5 py-10 sm:px-8 sm:py-16">
-      <div className="mx-auto w-full max-w-3xl">
-        <header className="mb-10 flex flex-col gap-5 border-b border-black/10 pb-8 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
+    <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-12">
+      <div className="mx-auto w-full max-w-4xl">
+        <header className="mb-8 flex flex-col gap-5 border-b border-black/10 pb-7 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="mb-4 flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" />
-              Next.js + Turso
-            </div>
-            <h1 className="text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              Notes
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
               Field notes
             </h1>
-            <p className="mt-3 max-w-xl text-base leading-7 text-black/55 dark:text-white/55">
-              A small, production-shaped starter: server-rendered reads,
-              progressive mutations, and SQLite at the edge of your app.
+            <p className="mt-3 max-w-xl text-sm leading-6 text-black/55 dark:text-white/55">
+              Your private scratchpad for demos, stores, and follow-up tasks.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="hidden rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur sm:block dark:border-white/10 dark:bg-white/5 dark:text-white/50">
-              {user.email}
-            </div>
-            <div className="rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-white/50">
-              {notes.length} {notes.length === 1 ? "note" : "notes"}
-            </div>
-            <SignOutButton />
+          <div className="w-fit rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-white/50">
+            {notes.length} {notes.length === 1 ? "note" : "notes"}
           </div>
         </header>
 
@@ -110,19 +101,7 @@ export default async function Home() {
             </ul>
           )}
         </section>
-
-        <footer className="mt-10 flex items-center justify-between text-xs text-black/35 dark:text-white/35">
-          <span>App Router · Tailwind CSS · libSQL</span>
-          <a
-            href="https://vercel.com/marketplace/turso"
-            target="_blank"
-            rel="noreferrer"
-            className="transition hover:text-black dark:hover:text-white"
-          >
-            Turso on Vercel ↗
-          </a>
-        </footer>
       </div>
-    </main>
+    </div>
   );
 }

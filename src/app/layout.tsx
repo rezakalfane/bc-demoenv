@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Field Notes",
-  description: "A Next.js, Tailwind CSS, and Turso starter for Vercel.",
+  title: "BigCommerce Demo Env",
+  description:
+    "Private notes and BigCommerce environment settings for authenticated users.",
 };
 
 export default function RootLayout({
