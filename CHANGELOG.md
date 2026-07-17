@@ -4,6 +4,29 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-17
 
+### Merge — Integrate user-scoped BigCommerce environments into `main`
+
+- **Date:** 2026-07-17
+- **Source:** `feature/user-scoped-bigcommerce-environments`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the authenticated application shell and encrypted, tenant-scoped BigCommerce environment management after lint, TypeScript, production-build, whitespace, and libSQL isolation verification.
+
+### Commit — Add user-scoped BigCommerce environment settings
+
+- **Date:** 2026-07-17 23:34 CEST
+- **Author:** Reza Kalfane
+- **Branch:** `feature/user-scoped-bigcommerce-environments`
+- **Type:** Feature commit
+
+- Added a shared authenticated application shell with persistent Notes and Settings navigation.
+- Added a `/settings` page for creating, editing, and removing named BigCommerce store environments.
+- Added tenant-scoped Turso storage for environment names, store hashes, encrypted access tokens, and safe token hints.
+- Added AES-256-GCM token encryption with user-bound authenticated data and a dedicated `SETTINGS_ENCRYPTION_KEY` option.
+- Added server-side validation, authenticated Server Actions, pending states, success/error feedback, and removal confirmation.
+- Documented local and Vercel encryption-key configuration and the multi-tenant storage model.
+
 ### Merge — Integrate passwordless multi-tenant notes into `main`
 
 - **Date:** 2026-07-17
@@ -71,5 +94,3 @@ Details:
 - Added the initial README and repository guidance files.
 - Added ignore rules for dependencies, build output, environment files, and local tooling artifacts.
 - Created 19 files with 7,008 inserted lines.
-
-No merge commits are present in the repository history.
