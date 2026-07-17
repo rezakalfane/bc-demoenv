@@ -1,10 +1,13 @@
 import { addNote, deleteNote } from "@/app/actions";
 import { getNotes } from "@/lib/db";
+import { requireAppUser } from "@/lib/auth";
+import { SignOutButton } from "@/components/sign-out-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const notes = await getNotes();
+  const user = await requireAppUser();
+  const notes = await getNotes(user.id);
 
   return (
     <main className="min-h-screen px-5 py-10 sm:px-8 sm:py-16">
@@ -23,8 +26,14 @@ export default async function Home() {
               progressive mutations, and SQLite at the edge of your app.
             </p>
           </div>
-          <div className="shrink-0 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-white/50">
-            {notes.length} {notes.length === 1 ? "note" : "notes"}
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="hidden rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur sm:block dark:border-white/10 dark:bg-white/5 dark:text-white/50">
+              {user.email}
+            </div>
+            <div className="rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-black/50 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-white/50">
+              {notes.length} {notes.length === 1 ? "note" : "notes"}
+            </div>
+            <SignOutButton />
           </div>
         </header>
 

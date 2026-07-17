@@ -4,10 +4,41 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-17
 
-### Commit — Build deployable Next.js and Turso starter
+### Merge — Integrate passwordless multi-tenant notes into `main`
 
+- **Date:** 2026-07-17
+- **Source:** `feature/passwordless-multitenant-notes`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the complete Clerk authentication and tenant-isolation feature after lint, TypeScript, production-build, and whitespace verification.
+
+### Commit — Add passwordless authentication and tenant-scoped notes
+
+- **Date:** 2026-07-17 22:49 CEST
+- **Author:** Reza Kalfane
+- **Branch:** `feature/passwordless-multitenant-notes`
+- **Type:** Feature commit
+
+- Added Clerk passwordless sign-up/sign-in with email codes plus optional login-link sign-in and automatic completion in the original browser tab.
+- Replaced the unreliable `signUpIfMissing` transfer with Clerk's explicit standard sign-in-or-sign-up flow: unknown identifiers create a normal sign-up and verify through a sign-up-owned email code.
+- Restricted access to verified `@bigcommerce.com` and `@commerce.com` accounts in Clerk, the client form, and protected server code.
+- Added protected-route middleware, access-denied handling, current-user resolution, and sign-out controls.
+- Rendered Clerk email-link query statuses directly on the verification page so `client_mismatch`, expired, and failed links cannot stall on the loading state.
+- Detached the login-link long poll from short-lived button loading state so choosing another method cannot leave the form stuck on “Sending…”.
+- Invalidated abandoned login-link callbacks when users return to the method selector.
+- Scoped note creation, reads, and deletion to the authenticated Clerk user ID.
+- Added an idempotent schema migration for `notes.user_id` and a tenant-aware database index while preserving legacy rows without exposing them.
+- Provisioned and connected the Clerk Vercel Marketplace resource and enabled its wildcard domain allowlist.
+- Documented Clerk email-link settings and their security tradeoff, corporate email-scanner mismatches, local setup, Vercel deployment, and the legacy-note ownership behavior.
+
+### Commit `e58342e` — Build deployable Next.js and Turso starter
+
+- **Date:** 2026-07-17 21:22:23 CEST
+- **Author:** Reza Kalfane
 - **Branch:** `feature/nextjs-turso-starter`
 - **Type:** Feature commit
+- **Full SHA:** `e58342e50aeb1837d20dafe82ee37bac462759e5`
 
 Built the initial deployable application and its project documentation.
 
