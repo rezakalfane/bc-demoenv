@@ -34,24 +34,39 @@ function getClient() {
 }
 
 async function ensureSchema() {
-  schemaReady ??= getClient()
-    .execute(`
+  schemaReady ??= (async () => {
+    const db = getClient();
+
+    await db.execute(`
       CREATE TABLE IF NOT EXISTS notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
         title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 120),
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
-    `)
-    .then(() => undefined);
+    `);
+
+    const columns = await db.execute("PRAGMA table_info(notes)");
+    const hasUserId = columns.rows.some((column) => column.name === "user_id");
+
+    if (!hasUserId) {
+      await db.execute("ALTER TABLE notes ADD COLUMN user_id TEXT");
+    }
+
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS notes_user_id_id_idx ON notes(user_id, id DESC)",
+    );
+  })();
 
   return schemaReady;
 }
 
-export async function getNotes(): Promise<Note[]> {
+export async function getNotes(userId: string): Promise<Note[]> {
   await ensureSchema();
-  const result = await getClient().execute(
-    "SELECT id, title, created_at FROM notes ORDER BY id DESC LIMIT 50",
-  );
+  const result = await getClient().execute({
+    sql: "SELECT id, title, created_at FROM notes WHERE user_id = ? ORDER BY id DESC LIMIT 50",
+    args: [userId],
+  });
 
   return result.rows.map((row) => ({
     id: Number(row.id),
@@ -60,18 +75,18 @@ export async function getNotes(): Promise<Note[]> {
   }));
 }
 
-export async function addNote(title: string) {
+export async function addNote(userId: string, title: string) {
   await ensureSchema();
   await getClient().execute({
-    sql: "INSERT INTO notes (title) VALUES (?)",
-    args: [title],
+    sql: "INSERT INTO notes (user_id, title) VALUES (?, ?)",
+    args: [userId, title],
   });
 }
 
-export async function removeNote(id: number) {
+export async function removeNote(userId: string, id: number) {
   await ensureSchema();
   await getClient().execute({
-    sql: "DELETE FROM notes WHERE id = ?",
-    args: [id],
+    sql: "DELETE FROM notes WHERE id = ? AND user_id = ?",
+    args: [id, userId],
   });
 }
