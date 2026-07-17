@@ -1,13 +1,16 @@
 # BigCommerce Demo Env
 
-A deployable Next.js 16 application with the App Router, Tailwind CSS 4, Turso/libSQL, and Clerk passwordless authentication. After signing in, users get a shared application sidebar with private Notes and Settings pages. Every database query is scoped to the authenticated Clerk user.
+A deployable Next.js 16 application with the App Router, Tailwind CSS 4, Turso/libSQL, and Clerk passwordless authentication. After signing in, users get a shared application sidebar with a live BigCommerce Dashboard plus private Notes and Settings pages. Every database query is scoped to the authenticated Clerk user.
 
 ## Application pages
 
+- **Dashboard** shows live channel, category, product, and variant totals for every saved environment in a responsive three-column grid.
 - **Notes** provides a private scratchpad backed by Turso.
 - **Settings** manages named BigCommerce environments with a store hash and API access token.
 
-BigCommerce access tokens are encrypted with AES-256-GCM before storage. The application returns only the final four characters to the UI and binds each encrypted value to its owning Clerk user. Reads, updates, and deletes also include the Clerk user ID, so one user cannot access another user's settings.
+BigCommerce access tokens are encrypted with AES-256-GCM before storage. The application returns only the final four characters to the Settings UI and binds each encrypted value to its owning Clerk user. Reads, updates, deletes, and Dashboard credential lookups also include the Clerk user ID, so one user cannot access another user's settings. Dashboard API requests run only on the server and are never cached.
+
+For complete Dashboard metrics, create each BigCommerce store-level API account with **Products: read-only** and **Channel Settings: read-only** scopes. A missing scope affects only its related metric; the rest of the environment card continues to load.
 
 ## Local development
 

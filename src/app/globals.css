@@ -28,6 +28,7 @@ body {
   background:
     radial-gradient(circle at 15% 0%, rgb(16 185 129 / 8%), transparent 28rem),
     var(--background);
+  background-repeat: no-repeat;
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }

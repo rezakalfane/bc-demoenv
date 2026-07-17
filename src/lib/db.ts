@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createClient, type Client } from "@libsql/client";
-import { encryptSecret } from "@/lib/secret-encryption";
+import { decryptSecret, encryptSecret } from "@/lib/secret-encryption";
 
 export type Note = {
   id: number;
@@ -22,6 +22,13 @@ export type BigCommerceEnvironmentInput = {
   name: string;
   storeHash: string;
   accessToken?: string;
+};
+
+export type BigCommerceEnvironmentConnection = {
+  id: number;
+  name: string;
+  storeHash: string;
+  accessToken: string | null;
 };
 
 let client: Client | undefined;
@@ -154,6 +161,41 @@ export async function getBigCommerceEnvironments(
     createdAt: toIsoDate(row.created_at),
     updatedAt: toIsoDate(row.updated_at),
   }));
+}
+
+export async function getBigCommerceEnvironmentConnections(
+  userId: string,
+): Promise<BigCommerceEnvironmentConnection[]> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT id, name, store_hash, access_token_encrypted
+      FROM bigcommerce_environments
+      WHERE user_id = ?
+      ORDER BY name COLLATE NOCASE ASC, id ASC
+    `,
+    args: [userId],
+  });
+
+  return result.rows.map((row) => {
+    let accessToken: string | null = null;
+
+    try {
+      accessToken = decryptSecret(
+        String(row.access_token_encrypted),
+        userId,
+      );
+    } catch {
+      // Keep one invalid credential from preventing other environments loading.
+    }
+
+    return {
+      id: Number(row.id),
+      name: String(row.name),
+      storeHash: String(row.store_hash),
+      accessToken,
+    };
+  });
 }
 
 export async function addBigCommerceEnvironment(
