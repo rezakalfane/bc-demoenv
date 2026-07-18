@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-18
 
+### Merge — Integrate the Ably cleanup hotfix into `main`
+
+- **Date:** 2026-07-18
+- **Source:** `fix/ably-subscription-cleanup`
+- **Target:** `main`
+- **Type:** Non-fast-forward hotfix merge
+
+Integrated safe Ably subscription teardown for the Snapshots page after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Handle Ably subscription cleanup safely
+
+- **Date:** 2026-07-18
+- **Branch:** `fix/ably-subscription-cleanup`
+- **Type:** Bug-fix commit
+
+- Fixed the React Strict Mode race that could close Ably while its asynchronous channel subscription was still attaching.
+- Marked the effect as disposed before teardown so the expected `Connection closed` rejection no longer triggers the Next.js development error overlay.
+- Prevented scheduled refreshes after unmount and kept unexpected realtime connection failures non-fatal while retaining focus, visibility, and periodic fallback refreshes.
+- Documented the reported failure and implementation summary in prompt History.
+
 ### Merge — Integrate realtime snapshot updates into `main`
 
 - **Date:** 2026-07-18
