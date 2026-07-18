@@ -17,7 +17,9 @@ export function SnapshotLiveUpdates({ enabled }: { enabled: boolean }) {
   const [, startTransition] = useTransition();
 
   useEffect(() => {
+    let disposed = false;
     const refresh = () => {
+      if (disposed) return;
       if (refreshTimer.current !== null) {
         window.clearTimeout(refreshTimer.current);
       }
@@ -44,17 +46,24 @@ export function SnapshotLiveUpdates({ enabled }: { enabled: boolean }) {
       });
       channel = realtime.channels.get(SNAPSHOT_REALTIME_CHANNEL);
       void channel.subscribe([...SNAPSHOT_REALTIME_EVENTS], listener).catch((error) => {
-        console.error("Unable to subscribe to snapshot realtime updates", error);
+        if (!disposed) {
+          console.warn("Unable to subscribe to snapshot realtime updates; using fallback refreshes.", error);
+        }
       });
     }
 
     return () => {
+      disposed = true;
       window.clearInterval(fallbackTimer);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
       channel?.unsubscribe([...SNAPSHOT_REALTIME_EVENTS], listener);
-      realtime?.close();
+      try {
+        realtime?.close();
+      } catch (error) {
+        console.warn("Unable to close the snapshot realtime connection cleanly.", error);
+      }
     };
   }, [enabled, router]);
 

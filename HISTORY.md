@@ -2,6 +2,18 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-18 — Handle Ably subscription cleanup safely
+
+### Prompt
+
+> got this from the open snapshots page on another browser
+
+### Summary
+
+- Fixed the React Strict Mode race where effect cleanup closed Ably while its asynchronous channel subscription was still attaching.
+- Marked disposed subscriptions before teardown so the expected Connection closed rejection is ignored instead of triggering the Next.js error overlay.
+- Kept unexpected realtime failures non-fatal with a warning while the focus, visibility, and 30-second fallback refresh path remains active.
+
 ## 2026-07-18 — Add live snapshot publication updates
 
 ### Prompts
