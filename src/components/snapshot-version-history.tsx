@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { deleteSnapshotVersion } from "@/app/(app)/snapshots/delete-actions";
-import { VersionsIcon } from "@/components/action-icons";
+import { setSnapshotVersionPublished } from "@/app/(app)/snapshots/publish-actions";
+import { PublishedIcon, TrashIcon, VersionsIcon } from "@/components/action-icons";
 import { useCatalogOperationActive } from "@/components/catalog-operation-progress";
 
 export type SnapshotVersionOption = {
@@ -17,6 +18,7 @@ export type SnapshotVersionOption = {
   variantCount: number;
   payloadBytes: number;
   createdAt: string;
+  publishedAt: string | null;
 };
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
@@ -49,6 +51,8 @@ export function SnapshotVersionHistory({
   const [versionToDelete, setVersionToDelete] = useState<SnapshotVersionOption | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, startDeleteTransition] = useTransition();
+  const [isPublishing, startPublishTransition] = useTransition();
+  const [publishError, setPublishError] = useState<string | null>(null);
   const isActionInProgress = useCatalogOperationActive({ snapshotId: currentSnapshotId });
   const router = useRouter();
   const modalRef = useRef<HTMLElement>(null);
@@ -70,6 +74,18 @@ export function SnapshotVersionHistory({
         return;
       }
       setVersionToDelete(null);
+      router.refresh();
+    });
+  }
+
+  function updatePublishedVersion(version: SnapshotVersionOption) {
+    setPublishError(null);
+    startPublishTransition(async () => {
+      const result = await setSnapshotVersionPublished(version.id, !version.publishedAt);
+      if (result.error) {
+        setPublishError(result.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -128,7 +144,7 @@ export function SnapshotVersionHistory({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center justify-center gap-1 rounded bg-neutral-950 px-2 py-1 text-[10px] leading-none font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
+        className="inline-flex items-center justify-center gap-1.5 rounded-md bg-neutral-950 px-3 py-1.5 text-[11px] leading-none font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
       >
         <VersionsIcon />
         Choose version
@@ -184,6 +200,11 @@ export function SnapshotVersionHistory({
             </p>
 
             <div className="mt-5 min-h-0 space-y-3 overflow-y-auto pr-1">
+              {publishError ? (
+                <p role="alert" className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+                  {publishError}
+                </p>
+              ) : null}
               {versions.map((version) => {
                 const isCurrent = version.id === currentSnapshotId;
                 const isLatest = version.id === latestVersion?.id;
@@ -213,6 +234,11 @@ export function SnapshotVersionHistory({
                               Latest
                             </span>
                           ) : null}
+                          {version.publishedAt ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/12 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                              <PublishedIcon /> Published
+                            </span>
+                          ) : null}
                         </div>
                         <p className="mt-1 truncate text-xs text-black/45 dark:text-white/45">
                           {version.sourceEnvironmentName} · {version.sourceChannelName}
@@ -226,24 +252,37 @@ export function SnapshotVersionHistory({
                       </div>
 
                       <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isPublishing || isActionInProgress}
+                          onClick={() => updatePublishedVersion(version)}
+                          className="inline-flex items-center justify-center gap-1 rounded border border-blue-500/25 px-2 py-1 text-[10px] leading-none font-semibold text-blue-700 transition hover:bg-blue-500/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:text-blue-300"
+                        >
+                          <PublishedIcon />
+                          {version.publishedAt ? "Unpublish" : "Publish"}
+                        </button>
                         {!isCurrent ? (
                           <Link
                             href={`/snapshots/${version.id}`}
-                            className="inline-flex items-center justify-center rounded-xl border border-black/10 px-3.5 py-2 text-xs font-semibold transition hover:border-emerald-500/30 hover:bg-emerald-500/8 hover:text-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-white/10 dark:hover:text-emerald-300"
+                            className="inline-flex items-center justify-center gap-1 rounded border border-black/10 px-2 py-1 text-[10px] leading-none font-semibold transition hover:border-emerald-500/30 hover:bg-emerald-500/8 hover:text-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-white/10 dark:hover:text-emerald-300"
                           >
+                            <VersionsIcon />
                             View version
                           </Link>
                         ) : null}
                         {!isCurrent ? (
                           <button
                             type="button"
-                            disabled={isActionInProgress}
+                            disabled={isActionInProgress || Boolean(version.publishedAt)}
+                            title={version.publishedAt ? "Unpublish this version before deleting it." : undefined}
+                            aria-label={version.publishedAt ? `Delete version ${version.snapshotVersion} unavailable: unpublish it first` : `Delete version ${version.snapshotVersion}`}
                             onClick={() => {
                               setDeleteError(null);
                               setVersionToDelete(version);
                             }}
-                            className="rounded-xl border border-red-500/25 px-3.5 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-300"
+                            className="inline-flex items-center justify-center gap-1 rounded border border-red-500/25 px-2 py-1 text-[10px] leading-none font-semibold text-red-700 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-300"
                           >
+                            <TrashIcon />
                             Delete version
                           </button>
                         ) : null}

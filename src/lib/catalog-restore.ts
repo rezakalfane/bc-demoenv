@@ -4,7 +4,7 @@ import { requireAppUser } from "@/lib/auth";
 import {
   getBigCommerceEnvironmentConnection,
   getBigCommerceEnvironmentConnections,
-  getCatalogSnapshot,
+  getAccessibleCatalogSnapshot,
   type BigCommerceEnvironmentConnection,
   type CatalogSnapshotRecord,
 } from "@/lib/db";
@@ -1339,7 +1339,7 @@ export async function restoreCatalogSnapshot(input: {
   onProgress?: (currentStep: string, stepIndex?: number, totalSteps?: number) => Promise<void>;
 }): Promise<CatalogRestoreResult> {
   const userId = input.userId ?? (await requireAppUser()).id;
-  const snapshot = await getCatalogSnapshot(userId, input.snapshotId);
+  const snapshot = await getAccessibleCatalogSnapshot(userId, input.snapshotId);
 
   if (!snapshot) {
     throw new CatalogRestoreError("The selected snapshot was not found.");

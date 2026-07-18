@@ -35,3 +35,17 @@ export function HistoryIcon() {
 export function TrashIcon() {
   return <svg {...iconProps}><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>;
 }
+
+export function PublishedIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      {...iconProps}
+      width={14}
+      height={14}
+      className={className}
+    >
+      <path d="M12 3 9.8 7.5 5 8.2l3.5 3.4-.8 4.8 4.3-2.3 4.3 2.3-.8-4.8L19 8.2l-4.8-.7Z" />
+      <path d="m9.7 11.2 1.5 1.5 3.3-3.5" />
+    </svg>
+  );
+}

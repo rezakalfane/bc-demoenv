@@ -397,7 +397,7 @@ export function SnapshotForm({
         aria-controls="snapshot-name-panel"
         disabled={isActionInProgress}
         onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex w-full items-center justify-center gap-1 rounded border border-emerald-600/25 bg-emerald-500/10 px-2 py-1 text-[10px] leading-none font-semibold text-emerald-800 transition hover:bg-emerald-500/16 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto dark:text-emerald-300"
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-600/25 bg-emerald-500/10 px-3 py-1.5 text-[11px] leading-none font-semibold text-emerald-800 transition hover:bg-emerald-500/16 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto dark:text-emerald-300"
       >
         <CameraIcon />
         {isOpen ? "Cancel snapshot" : "Take snapshot"}

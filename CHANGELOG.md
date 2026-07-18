@@ -4,6 +4,31 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-18
 
+### Merge — Integrate cross-user snapshot publishing into `main`
+
+- **Date:** 2026-07-18
+- **Source:** `feature/snapshot-publishing`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated owner-controlled snapshot-version publishing, read-only cross-user catalog templates, shared restoration, publication audit history, deletion protection, and consistent compact catalog action styling after TypeScript, lint, production-build, SQL authorization, and whitespace verification.
+
+### Commit — Add cross-user snapshot publishing
+
+- **Date:** 2026-07-18
+- **Branch:** `feature/snapshot-publishing`
+- **Type:** Feature commit
+
+- Added owner-only Publish and Unpublish controls with a database-enforced limit of one published version per snapshot series.
+- Exposed only the published immutable version to other authenticated users in the Snapshots index and channel restore selector.
+- Rendered shared templates as read-only, hiding private versions, creation, History, publishing, and deletion while retaining restoration to the viewer's own channels.
+- Added blue published borders, icons, badges, and version metadata across snapshot cards and detail pages.
+- Added tenant-safe direct-access and restore authorization for published snapshots without exposing unpublished versions.
+- Protected published versions and series from deletion until they are unpublished, including disabled UI feedback and server-side validation.
+- Added durable Published and Unpublished History events with snapshot version, source, catalog counts, payload size, and timestamps, including automatic unpublication when switching versions.
+- Standardized compact action sizing, corrected global form-control font inheritance, and slightly enlarged page-level action rows while keeping dense version-row actions smaller.
+- Updated README and prompt History documentation for the complete publishing workflow.
+
 ### Merge — Integrate channel catalog and snapshot management into `main`
 
 - **Date:** 2026-07-18
