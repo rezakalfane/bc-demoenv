@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAppUser } from "@/lib/auth";
-import { createCatalogOperation } from "@/lib/db";
+import { createCatalogOperation, getAccessibleCatalogSnapshot } from "@/lib/db";
 import type { CatalogRestoreResult } from "@/lib/catalog-restore";
 import { runCatalogOperation } from "@/lib/catalog-operation-runner";
 import { after } from "next/server";
@@ -52,6 +52,10 @@ export async function restoreSnapshot(
 
   try {
     const user = await requireAppUser();
+    const snapshot = await getAccessibleCatalogSnapshot(user.id, snapshotId);
+    if (!snapshot) {
+      return errorState("The snapshot is no longer published or is unavailable.");
+    }
     const operationId = await createCatalogOperation(user.id, { kind: "restore", snapshotId, environmentId: destinationEnvironmentId, channelId: destinationChannelId, payload: { snapshotId, destinationEnvironmentId, destinationChannelId } });
     after(async () => {
       await runCatalogOperation(user.id, operationId);

@@ -17,6 +17,7 @@ import { getCatalogRestoreDestinations } from "@/lib/catalog-restore";
 import { getSnapshotCatalogHistory } from "@/lib/catalog-history";
 import { requireAppUser } from "@/lib/auth";
 import { getActiveSnapshotOperations } from "@/lib/db";
+import { PublishedIcon } from "@/components/action-icons";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -52,25 +53,29 @@ export default async function SnapshotPage({
     notFound();
   }
 
-  const [snapshot, restoreDestinations, history] = await Promise.all([
+  const [snapshot, restoreDestinations] = await Promise.all([
     getCatalogSnapshotView(parsedSnapshotId),
     getCatalogRestoreDestinations(),
-    getSnapshotCatalogHistory(parsedSnapshotId),
   ]);
 
   if (!snapshot) {
     notFound();
   }
 
+  const history = snapshot.isOwner
+    ? await getSnapshotCatalogHistory(parsedSnapshotId)
+    : [];
+
   const user = await requireAppUser();
-  const activeCapture = (await getActiveSnapshotOperations(user.id)).find((operation) => {
+  const activeCapture = snapshot.isOwner ? (await getActiveSnapshotOperations(user.id)).find((operation) => {
     try {
       const payload = JSON.parse(operation.payloadJson) as { name?: unknown };
       return String(payload.name ?? "").localeCompare(snapshot.summary.name, undefined, { sensitivity: "base" }) === 0;
     } catch {
       return false;
     }
-  });
+  }) : undefined;
+  const publishedVersion = snapshot.versions.find((version) => version.publishedAt);
 
   const selectedCategory = Number.isSafeInteger(parsedCategoryId)
     ? findCatalogCategory(snapshot.categories, parsedCategoryId)
@@ -107,7 +112,13 @@ export default async function SnapshotPage({
                 Catalog snapshot
               </p>
               <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-                <span className="inline-flex items-center gap-3">{snapshot.summary.name}<CatalogActivityBadge snapshotId={snapshot.summary.id} /></span>
+                <span className="inline-flex items-center gap-3">
+                  {snapshot.summary.name}
+                  {publishedVersion ? (
+                    <><PublishedIcon className="text-blue-600 dark:text-blue-300" /><span className="sr-only">Published snapshot</span></>
+                  ) : null}
+                  <CatalogActivityBadge snapshotId={snapshot.summary.id} />
+                </span>
               </h1>
               <p className="mt-3 text-sm text-black/45 dark:text-white/45">
                 {snapshot.summary.sourceEnvironmentName} ·{" "}
@@ -124,6 +135,7 @@ export default async function SnapshotPage({
               `${snapshot.summary.metafieldCount} metafields`,
               formatBytes(snapshot.summary.payloadBytes),
               `Snapshot version ${snapshot.summary.snapshotVersion}`,
+              ...(publishedVersion ? [`Published version ${publishedVersion.snapshotVersion}`] : []),
               `Manifest format v${snapshot.summary.formatVersion}`,
             ].map((value) => (
               <div key={value} className="rounded-full border border-black/10 bg-white/60 px-3 py-1.5 text-xs text-black/50 dark:border-white/10 dark:bg-white/5 dark:text-white/50">
@@ -138,6 +150,8 @@ export default async function SnapshotPage({
               <p>Updated <time dateTime={snapshot.summary.updatedAt}>{dateFormatter.format(new Date(snapshot.summary.updatedAt))}</time></p>
             </div>
             <div className="flex flex-wrap justify-end gap-1.5">
+              {snapshot.isOwner ? (
+                <>
                 <SnapshotCreateVersion
                   viewedSnapshotId={snapshot.summary.id}
                   latest={latestVersion}
@@ -164,13 +178,25 @@ export default async function SnapshotPage({
                   snapshotName={snapshot.summary.name}
                   versionCount={snapshot.versions.length}
                 />
+                </>
+              ) : (
+                <SnapshotRestore
+                  snapshot={snapshot.summary}
+                  destinations={restoreDestinations}
+                  matchSourceDestination={false}
+                  stepNames={[
+                    ...snapshot.categories.map((category) => `Restoring category ${category.name}`),
+                    ...snapshot.products.map((product) => `Restoring product ${product.name}`),
+                  ]}
+                />
+              )}
             </div>
           </div>
         </header>
 
         <div className="mt-4 flex flex-wrap">
           <CatalogOperationProgress
-            redirectToCreatedSnapshot
+            redirectToCreatedSnapshot={snapshot.isOwner}
             snapshotId={snapshot.summary.id}
             initialOperation={activeCapture ? {
               kind: "snapshot",
@@ -184,7 +210,7 @@ export default async function SnapshotPage({
         </div>
 
         <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/7 p-4 text-xs leading-5 text-emerald-900 dark:text-emerald-200">
-          Restoration-ready manifest: choose any saved environment and active
+          {snapshot.isOwner ? "Restoration-ready manifest" : "Published read-only manifest"}: choose any saved environment and active
           channel to reconcile categories, products, variants, images, metadata,
           and channel/category assignments from this immutable version.
         </div>

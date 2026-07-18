@@ -41,5 +41,5 @@ body[class*="catalog-clearing-"] .channel-live-categories {
 
 button,
 input {
-  font: inherit;
+  font-family: inherit;
 }

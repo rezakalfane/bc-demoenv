@@ -5,7 +5,7 @@ import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
 import {
   addCatalogSnapshot,
   getBigCommerceEnvironmentConnection,
-  getCatalogSnapshot,
+  getAccessibleCatalogSnapshot,
   getCatalogSnapshotVersionsByName,
   getLatestCatalogSnapshotByName,
   type BigCommerceEnvironmentConnection,
@@ -117,6 +117,7 @@ export type CatalogSnapshotManifestV1 = {
 export type CatalogSnapshotView = {
   summary: CatalogSnapshotSummary;
   versions: CatalogSnapshotSummary[];
+  isOwner: boolean;
   categories: CatalogCategory[];
   products: CatalogProduct[];
   currency: string;
@@ -838,16 +839,16 @@ export async function getCatalogSnapshotView(
   snapshotId: number,
 ): Promise<CatalogSnapshotView | null> {
   const user = await requireAppUser();
-  const snapshot = await getCatalogSnapshot(user.id, snapshotId);
+  const snapshot = await getAccessibleCatalogSnapshot(user.id, snapshotId);
 
   if (!snapshot) {
     return null;
   }
 
-  const versions = await getCatalogSnapshotVersionsByName(
-    user.id,
-    snapshot.name,
-  );
+  const isOwner = snapshot.ownerUserId === user.id;
+  const versions = isOwner
+    ? await getCatalogSnapshotVersionsByName(user.id, snapshot.name)
+    : [snapshot];
 
   try {
     const manifest = asRecord(JSON.parse(snapshot.payloadJson));
@@ -869,6 +870,7 @@ export async function getCatalogSnapshotView(
     return {
       summary: snapshot,
       versions,
+      isOwner,
       categories,
       products: parsePreviewProducts(preview.products),
       currency: /^[A-Z]{3}$/.test(currency) ? currency : "USD",
@@ -878,6 +880,7 @@ export async function getCatalogSnapshotView(
     return {
       summary: snapshot,
       versions,
+      isOwner,
       categories: [],
       products: [],
       currency: "USD",

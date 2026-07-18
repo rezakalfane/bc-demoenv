@@ -2,6 +2,69 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-18 — Audit snapshot publication changes
+
+### Prompt
+
+> Publish and Unpublish events should be added to the history log with details
+
+### Summary
+
+- Persisted tenant-scoped Published and Unpublished audit events with snapshot name, version, ID, source environment/channel, catalog counts, payload size, and event time.
+- Added publication events to snapshot History in descending chronological order alongside creation, restore, deletion, and other snapshot activity.
+- Publishing a different version records the automatic unpublication of the previous version before recording the newly published version.
+- Avoided duplicate audit entries for no-op publish or unpublish requests.
+
+## 2026-07-18 — Disable deletion for published versions
+
+### Prompt
+
+> You can't delete a published version. disable the delete button in this case. Version first needs to be unpublished before you can delete it
+
+### Summary
+
+- Disabled Delete version for any currently published snapshot version, matching the existing server-side deletion protection.
+- Added accessible explanatory text indicating that the version must be unpublished before deletion becomes available.
+
+## 2026-07-18 — Slightly larger page action buttons
+
+### Prompt
+
+> you can make these buttons slighlt bigger
+
+### Summary
+
+- Increased channel and snapshot page action triggers to 11px labels with slightly wider gaps, `px-3 py-1.5` padding, and medium-small radii.
+- Kept Choose version's per-version Publish, View, and Delete controls at their smaller 10px scale.
+
+## 2026-07-18 — Compact snapshot version actions
+
+### Prompt
+
+> use the same small button label icon size
+
+### Summary
+
+- Matched Publish, Unpublish, View version, and Delete version to the compact 10px label/icon scale used by snapshot header actions.
+- Reduced padding, gaps, radii, and line-height while retaining full keyboard focus and disabled states.
+- Added matching version and trash icons to the View and Delete actions for consistent visual treatment.
+- Fixed the global form-control font shorthand that overrode Tailwind font sizes on buttons, ensuring button and link actions now render at the same declared scale.
+
+## 2026-07-18 — Publish snapshot versions across users
+
+### Prompt
+
+> In the choose you can publish one of the version of the snapshot. Snashot with a published version have a published icon next to the title. A published version can be unpublished. When a snashot has a publised version, it appears on other's Snapshots list as readonly (no new version or take snapshot on it possibility), with only the published version visible, and can be used by other users to restore to one of their channels. published snapshots have a blue border in the snapshots page, with the same published icon next to their name (no create new version, no choose version, no history, no delete button displayed on others accounts)
+
+### Summary
+
+- Added owner-only Publish and Unpublish controls to each entry in Choose version, with at most one published version per snapshot series.
+- Added blue published icons, badges, and card borders to published snapshot series.
+- Included published snapshots in other authenticated users' Snapshots index and channel restore selector while exposing only the published immutable version.
+- Rendered shared snapshot details as read-only with Restore Snapshot as the only mutation control; private versions, creation, version selection, History, publishing, and deletion remain owner-only.
+- Enforced the same access boundary in Turso queries and restore execution so direct URLs and Server Action calls cannot expose unpublished or owner-only snapshot data.
+- Protected published versions and series from deletion until the owner explicitly unpublishes them.
+
 ## 2026-07-18 — Make header actions visibly smaller
 
 ### Prompt

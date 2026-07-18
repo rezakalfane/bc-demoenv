@@ -96,11 +96,16 @@ export async function getSnapshotCatalogHistory(snapshotId: number) {
     details: [`${version.sourceEnvironmentName} · ${version.sourceChannelName}`, `${version.categoryCount} categories · ${version.productCount} products · ${version.variantCount} variants`],
     error: null,
   }));
-  const deletionEntries: CatalogHistoryEntry[] = deletionEvents.map((event) => {
+  const eventEntries: CatalogHistoryEntry[] = deletionEvents.map((event) => {
     const payload = parseRecord(event.payloadJson);
+    const eventTitle = {
+      version_deleted: `Snapshot version ${event.snapshotVersion} deleted`,
+      version_published: `Snapshot version ${event.snapshotVersion} published`,
+      version_unpublished: `Snapshot version ${event.snapshotVersion} unpublished`,
+    }[event.eventType];
     return {
       id: `snapshot-event-${event.id}`,
-      title: `Snapshot version ${event.snapshotVersion} deleted`,
+      title: eventTitle,
       status: "completed",
       createdAt: event.createdAt,
       updatedAt: event.createdAt,
@@ -113,6 +118,6 @@ export async function getSnapshotCatalogHistory(snapshotId: number) {
     };
   });
   const versionsById = new Map(versions.map((version) => [version.id, version]));
-  return [...versionEntries, ...deletionEntries, ...operations.filter((operation) => operation.kind === "restore").map((operation) => operationEntry(operation, operation.snapshotId ? versionsById.get(operation.snapshotId) : undefined))]
+  return [...versionEntries, ...eventEntries, ...operations.filter((operation) => operation.kind === "restore").map((operation) => operationEntry(operation, operation.snapshotId ? versionsById.get(operation.snapshotId) : undefined))]
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 }

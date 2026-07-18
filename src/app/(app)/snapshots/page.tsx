@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAppUser } from "@/lib/auth";
 import { getActiveSnapshotOperations, getCatalogSnapshotSeries } from "@/lib/db";
 import { CatalogOperationProgress } from "@/components/catalog-operation-progress";
+import { PublishedIcon } from "@/components/action-icons";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +82,7 @@ export default async function SnapshotsPage() {
             {snapshots.map((snapshot) => (
               <article
                 key={snapshot.id}
-                className="flex min-h-72 flex-col rounded-3xl border border-black/10 bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4"
+                className={`flex min-h-72 flex-col rounded-3xl border bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:bg-white/4 ${snapshot.publishedSnapshotId ? "border-blue-500/45 dark:border-blue-400/40" : "border-black/10 dark:border-white/10"}`}
               >
                 <div className="min-w-0">
                   <h2 className="break-words text-lg font-semibold tracking-tight">
@@ -89,13 +90,23 @@ export default async function SnapshotsPage() {
                       href={`/snapshots/${snapshot.id}`}
                       className="block rounded-sm transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:hover:text-emerald-300"
                     >
-                      {snapshot.name}
+                      <span className="inline-flex items-center gap-2">
+                        {snapshot.name}
+                        {snapshot.publishedSnapshotId ? (
+                          <><PublishedIcon className="text-blue-600 dark:text-blue-300" /><span className="sr-only">Published snapshot</span></>
+                        ) : null}
+                      </span>
                     </Link>
                   </h2>
                   <p className="mt-1 truncate text-xs text-black/40 dark:text-white/40">
                     {snapshot.sourceEnvironmentName} ·{" "}
                     {snapshot.sourceChannelName}
                   </p>
+                  {!snapshot.isOwner ? (
+                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700 dark:text-blue-300">
+                      Published catalog · read only
+                    </p>
+                  ) : null}
                 </div>
 
                 <dl className="mt-6 grid grid-cols-2 gap-3 text-sm">
@@ -137,8 +148,8 @@ export default async function SnapshotsPage() {
                       Manifest format v{snapshot.formatVersion}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-emerald-500/12 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                    Latest v{snapshot.snapshotVersion}
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${snapshot.publishedSnapshotId ? "bg-blue-500/12 text-blue-700 dark:text-blue-300" : "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"}`}>
+                    {snapshot.publishedSnapshotId ? `Published v${snapshot.publishedVersion}` : `Latest v${snapshot.snapshotVersion}`}
                   </span>
                 </div>
               </article>

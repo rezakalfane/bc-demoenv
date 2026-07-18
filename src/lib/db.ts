@@ -33,6 +33,7 @@ export type BigCommerceEnvironmentConnection = {
 
 export type CatalogSnapshotSummary = {
   id: number;
+  ownerUserId: string;
   name: string;
   snapshotVersion: number;
   formatVersion: number;
@@ -47,13 +48,14 @@ export type CatalogSnapshotSummary = {
   imageCount: number;
   metafieldCount: number;
   payloadBytes: number;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export type CatalogSnapshotInput = Omit<
   CatalogSnapshotSummary,
-  "id" | "snapshotVersion" | "createdAt" | "updatedAt"
+  "id" | "ownerUserId" | "snapshotVersion" | "publishedAt" | "createdAt" | "updatedAt"
 > & {
   payloadJson: string;
 };
@@ -64,11 +66,14 @@ export type CatalogSnapshotRecord = CatalogSnapshotSummary & {
 
 export type CatalogSnapshotSeriesSummary = CatalogSnapshotSummary & {
   versionCount: number;
+  publishedSnapshotId: number | null;
+  publishedVersion: number | null;
+  isOwner: boolean;
 };
 
 export type CatalogSnapshotEvent = {
   id: number;
-  eventType: "version_deleted";
+  eventType: "version_deleted" | "version_published" | "version_unpublished";
   snapshotName: string;
   snapshotId: number;
   snapshotVersion: number;
@@ -191,6 +196,16 @@ async function ensureSchema() {
       );
     }
 
+    const hasPublishedAt = snapshotColumns.rows.some(
+      (column) => column.name === "published_at",
+    );
+
+    if (!hasPublishedAt) {
+      await db.execute(
+        "ALTER TABLE catalog_snapshots ADD COLUMN published_at TEXT",
+      );
+    }
+
     await db.execute("DROP INDEX IF EXISTS catalog_snapshots_user_name_idx");
 
     await db.execute(
@@ -199,6 +214,10 @@ async function ensureSchema() {
 
     await db.execute(
       "CREATE INDEX IF NOT EXISTS catalog_snapshots_user_created_idx ON catalog_snapshots(user_id, id DESC)",
+    );
+
+    await db.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS catalog_snapshots_one_published_version_idx ON catalog_snapshots(user_id, name COLLATE NOCASE) WHERE published_at IS NOT NULL",
     );
 
     await db.execute(`
@@ -477,6 +496,7 @@ export async function removeBigCommerceEnvironment(
 function toCatalogSnapshotSummary(row: Record<string, unknown>) {
   return {
     id: Number(row.id),
+    ownerUserId: String(row.user_id),
     name: String(row.name),
     snapshotVersion: Number(row.snapshot_version),
     formatVersion: Number(row.format_version),
@@ -491,6 +511,7 @@ function toCatalogSnapshotSummary(row: Record<string, unknown>) {
     imageCount: Number(row.image_count),
     metafieldCount: Number(row.metafield_count),
     payloadBytes: Number(row.payload_bytes),
+    publishedAt: row.published_at == null ? null : toIsoDate(row.published_at),
     createdAt: toIsoDate(row.created_at),
     updatedAt: toIsoDate(row.updated_at),
   } satisfies CatalogSnapshotSummary;
@@ -498,6 +519,7 @@ function toCatalogSnapshotSummary(row: Record<string, unknown>) {
 
 const catalogSnapshotColumns = `
   id,
+  user_id,
   name,
   snapshot_version,
   format_version,
@@ -512,6 +534,7 @@ const catalogSnapshotColumns = `
   image_count,
   metafield_count,
   payload_bytes,
+  published_at,
   created_at,
   updated_at
 `;
@@ -524,10 +547,10 @@ export async function getCatalogSnapshots(
     sql: `
       SELECT ${catalogSnapshotColumns}
       FROM catalog_snapshots
-      WHERE user_id = ?
-      ORDER BY id DESC
+      WHERE user_id = ? OR published_at IS NOT NULL
+      ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, id DESC
     `,
-    args: [userId],
+    args: [userId, userId],
   });
 
   return result.rows.map((row) => toCatalogSnapshotSummary(row));
@@ -556,15 +579,21 @@ export async function getCatalogSnapshotSeries(
   userId: string,
 ): Promise<CatalogSnapshotSeriesSummary[]> {
   await ensureSchema();
-  const result = await getClient().execute({
+  const ownedResult = await getClient().execute({
     sql: `
-      SELECT ${catalogSnapshotColumns}, version_count
+      SELECT ${catalogSnapshotColumns}, version_count, published_snapshot_id, published_version
       FROM (
         SELECT
           ${catalogSnapshotColumns},
           COUNT(*) OVER (
             PARTITION BY name COLLATE NOCASE
           ) AS version_count,
+          MAX(CASE WHEN published_at IS NOT NULL THEN id END) OVER (
+            PARTITION BY name COLLATE NOCASE
+          ) AS published_snapshot_id,
+          MAX(CASE WHEN published_at IS NOT NULL THEN snapshot_version END) OVER (
+            PARTITION BY name COLLATE NOCASE
+          ) AS published_version,
           ROW_NUMBER() OVER (
             PARTITION BY name COLLATE NOCASE
             ORDER BY snapshot_version DESC, id DESC
@@ -578,10 +607,24 @@ export async function getCatalogSnapshotSeries(
     args: [userId],
   });
 
-  return result.rows.map((row) => ({
+  const sharedResult = await getClient().execute({
+    sql: `
+      SELECT ${catalogSnapshotColumns}, 1 AS version_count,
+             id AS published_snapshot_id, snapshot_version AS published_version
+      FROM catalog_snapshots
+      WHERE published_at IS NOT NULL AND user_id <> ?
+      ORDER BY published_at DESC, id DESC
+    `,
+    args: [userId],
+  });
+
+  return [...ownedResult.rows, ...sharedResult.rows].map((row) => ({
     ...toCatalogSnapshotSummary(row),
     versionCount: Number(row.version_count),
-  }));
+    publishedSnapshotId: row.published_snapshot_id == null ? null : Number(row.published_snapshot_id),
+    publishedVersion: row.published_version == null ? null : Number(row.published_version),
+    isOwner: String(row.user_id) === userId,
+  })).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
 export async function getLatestCatalogSnapshotSeries(
@@ -634,6 +677,54 @@ export async function getCatalogSnapshot(
     ...toCatalogSnapshotSummary(row),
     payloadJson: String(row.payload_json),
   };
+}
+
+export async function getAccessibleCatalogSnapshot(
+  userId: string,
+  id: number,
+): Promise<CatalogSnapshotRecord | null> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT ${catalogSnapshotColumns}, payload_json
+      FROM catalog_snapshots
+      WHERE id = ? AND (user_id = ? OR published_at IS NOT NULL)
+      LIMIT 1
+    `,
+    args: [id, userId],
+  });
+  const row = result.rows[0];
+  return row ? { ...toCatalogSnapshotSummary(row), payloadJson: String(row.payload_json) } : null;
+}
+
+export async function setPublishedCatalogSnapshotVersion(
+  userId: string,
+  id: number,
+  publish: boolean,
+) {
+  await ensureSchema();
+  const snapshot = await getCatalogSnapshot(userId, id);
+  if (!snapshot) return false;
+
+  if (publish) {
+    await getClient().batch([
+      {
+        sql: "UPDATE catalog_snapshots SET published_at = NULL WHERE user_id = ? AND name = ? COLLATE NOCASE",
+        args: [userId, snapshot.name],
+      },
+      {
+        sql: "UPDATE catalog_snapshots SET published_at = CURRENT_TIMESTAMP WHERE user_id = ? AND id = ?",
+        args: [userId, id],
+      },
+    ], "write");
+  } else {
+    await getClient().execute({
+      sql: "UPDATE catalog_snapshots SET published_at = NULL WHERE user_id = ? AND id = ?",
+      args: [userId, id],
+    });
+  }
+
+  return true;
 }
 
 export async function getCatalogSnapshotVersionsByName(

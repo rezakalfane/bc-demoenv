@@ -54,6 +54,7 @@ export function SnapshotRestore({
   snapshotOptions = [],
   initialDestinationEnvironmentId,
   initialDestinationChannelId,
+  matchSourceDestination = true,
   stepNames = [],
 }: {
   snapshot: {
@@ -90,6 +91,7 @@ export function SnapshotRestore({
   }>;
   initialDestinationEnvironmentId?: number;
   initialDestinationChannelId?: number;
+  matchSourceDestination?: boolean;
   stepNames?: string[];
 }) {
   const router = useRouter();
@@ -111,15 +113,15 @@ export function SnapshotRestore({
   const initialEnvironment =
     readyDestinations.find((destination) =>
       destination.id === initialDestinationEnvironmentId,
-    ) ?? readyDestinations.find(
+    ) ?? (matchSourceDestination ? readyDestinations.find(
       (destination) => destination.id === activeSnapshot.sourceEnvironmentId,
-    ) ?? readyDestinations[0];
+    ) : undefined) ?? readyDestinations[0];
   const initialChannel =
     initialEnvironment?.channels.find((channel) =>
       channel.id === initialDestinationChannelId,
-    ) ?? initialEnvironment?.channels.find(
+    ) ?? (matchSourceDestination ? initialEnvironment?.channels.find(
       (channel) => channel.id === activeSnapshot.sourceChannelId,
-    ) ?? initialEnvironment?.channels[0];
+    ) : undefined) ?? initialEnvironment?.channels[0];
   const [isOpen, setIsOpen] = useState(false);
   const [environmentId, setEnvironmentId] = useState(
     initialEnvironment?.id.toString() ?? "",
@@ -219,7 +221,7 @@ export function SnapshotRestore({
             ? "Add a reachable BigCommerce environment and channel first."
             : undefined
         }
-        className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] leading-none font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+        className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] leading-none font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
       >
         <RestoreIcon />
         Restore Snapshot
