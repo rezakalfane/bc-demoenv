@@ -4,6 +4,30 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-18
 
+### Merge — Integrate realtime snapshot updates into `main`
+
+- **Date:** 2026-07-18
+- **Source:** `feature/realtime-snapshot-updates`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated publisher attribution, deterministic snapshot/environment ordering, and optional Ably-powered live snapshot publication updates after production-build, TypeScript, lint, dependency, and whitespace verification.
+
+### Commit — Add realtime snapshot publication updates
+
+- **Date:** 2026-07-18
+- **Branch:** `feature/realtime-snapshot-updates`
+- **Type:** Feature commit
+
+- Displayed the publishing owner's primary Clerk email on cross-user read-only snapshot cards.
+- Ordered published snapshot series first by name, remaining series second by name, and Dashboard environments explicitly by name after metric loading.
+- Added the official Ably SDK and a Clerk-protected endpoint that issues one-hour, subscribe-only tokens for the published-snapshots channel.
+- Published snapshot.published and snapshot.unpublished invalidation events after successful Turso mutations, including automatic unpublication when switching versions.
+- Added a debounced Snapshots-page subscriber that refreshes authoritative server data immediately after events.
+- Added focus, visibility, and 30-second fallback refreshes for missed events or deployments without Ably configuration.
+- Kept `ABLY_API_KEY` server-only and made realtime optional so the application remains functional before provider setup.
+- Documented local/Vercel configuration, architecture, prompts, and verification details.
+
 ### Merge — Integrate cross-user snapshot publishing into `main`
 
 - **Date:** 2026-07-18

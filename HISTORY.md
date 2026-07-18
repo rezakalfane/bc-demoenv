@@ -2,6 +2,35 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-18 — Add live snapshot publication updates
+
+### Prompts
+
+> How can we setup some push events so other users UI are updated live, for instance when a new snapshot is published, users in the snapshots page can see that appear.
+
+> Ok let's implement it
+
+### Summary
+
+- Added optional Ably Pub/Sub integration while retaining Turso as the authoritative snapshot store.
+- Added a Clerk-protected token endpoint issuing one-hour, subscribe-only capabilities for the global published-snapshots channel.
+- Published compact snapshot.published and snapshot.unpublished invalidation events after successful database mutations, including automatic unpublication when switching versions.
+- Added a Snapshots-page realtime subscriber that debounces events into `router.refresh()` calls, plus focus, visibility, and 30-second fallback refreshes.
+- Kept the feature operational without `ABLY_API_KEY`; realtime connections are skipped and fallback refresh remains active.
+- Documented local and Vercel configuration and kept the Ably server API key out of client bundles.
+
+## 2026-07-18 — Identify publishers and sort cards by name
+
+### Prompt
+
+> in Snapshots, when a published read-only snapshot is displayed, also display the owner email who published it, to know where it's coming from. List published snapshots first in the list of snapshots (ordered by name). Rest of snapshots are also ordered by name. in Dashboard, env are ordered by name for now..
+
+### Summary
+
+- Added the publishing owner's primary Clerk email to read-only shared snapshot cards, resolving only the distinct owners represented on the current page.
+- Sorted published snapshot series first by name, followed by unpublished/private series sorted by name.
+- Added an explicit final case-insensitive name sort to Dashboard environments after asynchronous BigCommerce metrics load.
+
 ## 2026-07-18 — Audit snapshot publication changes
 
 ### Prompt
