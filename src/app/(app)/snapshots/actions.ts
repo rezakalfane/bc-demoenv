@@ -2,9 +2,12 @@
 
 import { requireAppUser } from "@/lib/auth";
 import {
+  CatalogOperationAlreadyActiveError,
   createCatalogOperation,
+  getCatalogSnapshotCaptureKey,
   getCatalogSnapshotSummariesByIds,
   getLatestCatalogSnapshotByName,
+  normalizeCatalogSnapshotName,
 } from "@/lib/db";
 import { runCatalogOperation } from "@/lib/catalog-operation-runner";
 import { after } from "next/server";
@@ -42,7 +45,9 @@ export async function createSnapshot(
 ): Promise<SnapshotActionState> {
   const environmentId = Number(formData.get("environmentId"));
   const channelId = Number(formData.get("channelId"));
-  const name = formData.get("name")?.toString().trim() ?? "";
+  const name = normalizeCatalogSnapshotName(
+    formData.get("name")?.toString() ?? "",
+  );
   const confirmedSnapshotValue = formData.get("confirmedSnapshotId")
     ?.toString()
     .trim();
@@ -95,12 +100,23 @@ export async function createSnapshot(
         },
       };
     }
-    const operationId = await createCatalogOperation(user.id, { kind: "snapshot", environmentId, channelId, payload: { environmentId, channelId, name, confirmedSnapshotId } });
+    const operationId = await createCatalogOperation(user.id, {
+      kind: "snapshot",
+      environmentId,
+      channelId,
+      payload: { environmentId, channelId, name, confirmedSnapshotId },
+      operationKey: getCatalogSnapshotCaptureKey(name),
+    });
     after(async () => {
       await runCatalogOperation(user.id, operationId);
     });
     return { status: "success", message: "Snapshot capture started in the background.", conflict: null, operationId };
   } catch (error) {
+    if (error instanceof CatalogOperationAlreadyActiveError) {
+      return errorState(
+        `A snapshot capture named ${name} is already in progress. Wait for it to finish or cancel it before trying again.`,
+      );
+    }
     console.error("Unable to start catalog snapshot operation", error);
     return errorState("The catalog snapshot operation could not be started.");
   }
@@ -130,6 +146,7 @@ export async function createNextSnapshotVersion(snapshotId: number) {
         name: latest.name,
         confirmedSnapshotId: latest.id,
       },
+      operationKey: getCatalogSnapshotCaptureKey(latest.name),
     });
     after(async () => {
       await runCatalogOperation(user.id, operationId);
@@ -143,6 +160,13 @@ export async function createNextSnapshotVersion(snapshotId: number) {
       nextVersion: latest.snapshotVersion + 1,
     };
   } catch (error) {
+    if (error instanceof CatalogOperationAlreadyActiveError) {
+      return {
+        error:
+          "A capture for this snapshot is already in progress. Wait for it to finish or cancel it before trying again.",
+        operationId: null,
+      };
+    }
     console.error("Unable to create the next snapshot version", error);
     return { error: "The new snapshot version could not be started.", operationId: null };
   }

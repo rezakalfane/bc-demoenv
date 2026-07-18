@@ -89,6 +89,21 @@ export type CatalogOperation = {
   resultJson: string | null; error: string | null; createdAt: string; updatedAt: string;
 };
 
+export class CatalogOperationAlreadyActiveError extends Error {
+  constructor() {
+    super("A matching catalog operation is already active.");
+    this.name = "CatalogOperationAlreadyActiveError";
+  }
+}
+
+export function normalizeCatalogSnapshotName(name: string) {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+export function getCatalogSnapshotCaptureKey(name: string) {
+  return normalizeCatalogSnapshotName(name).toLocaleLowerCase("en-US");
+}
+
 let client: Client | undefined;
 let schemaReady: Promise<void> | undefined;
 
@@ -239,12 +254,27 @@ async function ensureSchema() {
     await db.execute(`CREATE TABLE IF NOT EXISTS catalog_operations (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, kind TEXT NOT NULL,
       environment_id INTEGER, channel_id INTEGER, snapshot_id INTEGER,
+      operation_key TEXT,
       status TEXT NOT NULL DEFAULT 'queued', current_step TEXT NOT NULL DEFAULT '',
       step_index INTEGER NOT NULL DEFAULT 0, total_steps INTEGER NOT NULL DEFAULT 0,
       payload_json TEXT NOT NULL, result_json TEXT, error TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
+    const catalogOperationColumns = await db.execute(
+      "PRAGMA table_info(catalog_operations)",
+    );
+    const hasCatalogOperationKey = catalogOperationColumns.rows.some(
+      (column) => column.name === "operation_key",
+    );
+    if (!hasCatalogOperationKey) {
+      await db.execute(
+        "ALTER TABLE catalog_operations ADD COLUMN operation_key TEXT",
+      );
+    }
     await db.execute("CREATE INDEX IF NOT EXISTS catalog_operations_user_idx ON catalog_operations(user_id, id DESC)");
+    await db.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS catalog_operations_one_active_key_idx ON catalog_operations(user_id, kind, operation_key) WHERE operation_key IS NOT NULL AND status IN ('queued', 'running')",
+    );
   })();
 
   return schemaReady;
@@ -254,9 +284,13 @@ function toCatalogOperation(row: Record<string, unknown>): CatalogOperation {
   return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
 }
 
-export async function createCatalogOperation(userId: string, input: { kind: CatalogOperation["kind"]; environmentId?: number; channelId?: number; snapshotId?: number; payload: unknown; totalSteps?: number }) {
+export async function createCatalogOperation(userId: string, input: { kind: CatalogOperation["kind"]; environmentId?: number; channelId?: number; snapshotId?: number; payload: unknown; totalSteps?: number; operationKey?: string }) {
   await ensureSchema();
-  const r = await getClient().execute({ sql: `INSERT INTO catalog_operations (user_id,kind,environment_id,channel_id,snapshot_id,payload_json,total_steps) VALUES (?,?,?,?,?,?,?) RETURNING id`, args: [userId,input.kind,input.environmentId ?? null,input.channelId ?? null,input.snapshotId ?? null,JSON.stringify(input.payload),input.totalSteps ?? 0] });
+  const r = await getClient().execute({ sql: `INSERT INTO catalog_operations (user_id,kind,environment_id,channel_id,snapshot_id,payload_json,total_steps,operation_key) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING RETURNING id`, args: [userId,input.kind,input.environmentId ?? null,input.channelId ?? null,input.snapshotId ?? null,JSON.stringify(input.payload),input.totalSteps ?? 0,input.operationKey ?? null] });
+  if (!r.rows[0]) {
+    if (input.operationKey) throw new CatalogOperationAlreadyActiveError();
+    throw new Error("The catalog operation could not be created.");
+  }
   return Number(r.rows[0].id);
 }
 export async function getCatalogOperation(userId: string, id: number) { await ensureSchema(); const r = await getClient().execute({sql:"SELECT * FROM catalog_operations WHERE user_id = ? AND id = ?",args:[userId,id]}); return r.rows[0] ? toCatalogOperation(r.rows[0] as Record<string,unknown>) : null; }

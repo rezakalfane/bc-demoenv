@@ -2,6 +2,18 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Prevent concurrent snapshot captures with the same name
+
+### Prompt
+
+> Can you enforce that there can't be two snapshot captures with the same name. Some modal bug allowed it to happen
+
+### Summary
+
+- Added a database-enforced, per-user uniqueness guard for queued and running snapshot captures using a normalized snapshot-name operation key.
+- Prevented duplicate captures across modal submissions, repeated clicks, tabs, browsers, and concurrent server requests while retaining deliberate version creation after the active capture finishes.
+- Normalized snapshot-name whitespace before conflict lookup and persistence, and returned a specific actionable error when the same named capture is already active.
+
 ## 2026-07-18 — Handle Ably subscription cleanup safely
 
 ### Prompt
