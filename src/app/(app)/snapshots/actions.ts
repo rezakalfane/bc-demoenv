@@ -9,8 +9,7 @@ import {
   getLatestCatalogSnapshotByName,
   normalizeCatalogSnapshotName,
 } from "@/lib/db";
-import { runCatalogOperation } from "@/lib/catalog-operation-runner";
-import { after } from "next/server";
+import { startCatalogSnapshotWorkflow } from "@/workflows/catalog-snapshot";
 
 export type SnapshotConflict = {
   id: number;
@@ -107,9 +106,7 @@ export async function createSnapshot(
       payload: { environmentId, channelId, name, confirmedSnapshotId },
       operationKey: getCatalogSnapshotCaptureKey(name),
     });
-    after(async () => {
-      await runCatalogOperation(user.id, operationId);
-    });
+    await startCatalogSnapshotWorkflow(user.id, operationId);
     return { status: "success", message: "Snapshot capture started in the background.", conflict: null, operationId };
   } catch (error) {
     if (error instanceof CatalogOperationAlreadyActiveError) {
@@ -148,9 +145,7 @@ export async function createNextSnapshotVersion(snapshotId: number) {
       },
       operationKey: getCatalogSnapshotCaptureKey(latest.name),
     });
-    after(async () => {
-      await runCatalogOperation(user.id, operationId);
-    });
+    await startCatalogSnapshotWorkflow(user.id, operationId);
 
     return {
       error: null,

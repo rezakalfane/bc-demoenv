@@ -2,6 +2,22 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Make large snapshot captures durable and resumable
+
+### Prompts
+
+> Got a snapshot capture in progress on Vercel, but it's stuck and doesn't progress anymore. I just closed the browser on my laptop but it's supposed to work on the server, right?
+
+> Stalling again at 888
+
+### Summary
+
+- Confirmed from Vercel runtime logs that two captures were killed at the platform's 300-second Function limit, first at product 848 and then at product 888 of 1,522; closing the browser was not the cause.
+- Replaced snapshot capture's single `after()` callback with Vercel Workflow DevKit orchestration and retryable 30-product server steps that survive individual Function limits, browser closure, navigation, restarts, and deployments.
+- Added Turso staging state and idempotent product-batch checkpoints, plus atomic finalization so retries cannot create duplicate snapshot versions.
+- Stored Workflow run IDs on catalog operations, preserved per-product progress, retained cancellation checks, and added automatic failure recovery for snapshot operations with no heartbeat for ten minutes.
+- Excluded Workflow's internal routes from Clerk proxy protection, documented Vercel's zero-configuration Workflow provisioning, and blocked the legacy single-invocation snapshot runner.
+
 ## 2026-07-19 — Prevent concurrent snapshot captures with the same name
 
 ### Prompt

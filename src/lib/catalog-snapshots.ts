@@ -4,10 +4,18 @@ import { requireAppUser } from "@/lib/auth";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
 import {
   addCatalogSnapshot,
+  completeCatalogSnapshotCapture,
   getBigCommerceEnvironmentConnection,
   getAccessibleCatalogSnapshot,
+  getCatalogOperation,
+  getCatalogSnapshotCaptureProducts,
+  getCatalogSnapshotCaptureState,
   getCatalogSnapshotVersionsByName,
   getLatestCatalogSnapshotByName,
+  initializeCatalogSnapshotCaptureState,
+  removeCatalogSnapshotCaptureState,
+  saveCatalogSnapshotProductBatch,
+  updateCatalogOperation,
   type BigCommerceEnvironmentConnection,
   type CatalogSnapshotSummary,
 } from "@/lib/db";
@@ -16,6 +24,7 @@ const API_BASE_URL = "https://api.bigcommerce.com/stores";
 const REQUEST_TIMEOUT_MS = 12_000;
 const PAGE_SIZE = 250;
 const CAPTURE_CONCURRENCY = 5;
+const WORKFLOW_PRODUCT_BATCH_SIZE = 30;
 const FORMAT_VERSION = 1 as const;
 const PRODUCT_INCLUDES = [
   "variants",
@@ -554,21 +563,28 @@ async function enrichProduct(
   return { data: product, metafields, variantMetafields };
 }
 
+async function loadChannelProductIds(
+  environment: ConnectedEnvironment,
+  channelId: number,
+) {
+  const assignments = await fetchV3Collection(
+    environment,
+    `/v3/catalog/products/channel-assignments?channel_id:in=${channelId}`,
+    "product channel assignments",
+  );
+  return [...new Set(assignments.flatMap((value) => {
+    const id = readPositiveInteger(asRecord(value)?.product_id);
+    return id ? [id] : [];
+  }))];
+}
+
 async function loadProductData(
   environment: ConnectedEnvironment,
   channelId: number,
   onProgress?: SnapshotProgress,
 ) {
   await onProgress?.("Resolving products assigned to this channel", 30, 100);
-  const assignments = await fetchV3Collection(
-    environment,
-    `/v3/catalog/products/channel-assignments?channel_id:in=${channelId}`,
-    "product channel assignments",
-  );
-  const productIds = [...new Set(assignments.flatMap((value) => {
-    const id = readPositiveInteger(asRecord(value)?.product_id);
-    return id ? [id] : [];
-  }))];
+  const productIds = await loadChannelProductIds(environment, channelId);
   if (productIds.length === 0) {
     await onProgress?.("No products are assigned to this channel", 85, 100);
     return [];
@@ -796,6 +812,341 @@ export async function createCatalogSnapshot(input: {
 
     throw new SnapshotCaptureError(getRequestErrorMessage(error));
   }
+}
+
+async function updateWorkflowCaptureProgress(
+  userId: string,
+  operationId: number,
+  currentStep: string,
+  stepIndex: number,
+) {
+  const operation = await getCatalogOperation(userId, operationId);
+  if (!operation || operation.status === "cancelled") {
+    throw new SnapshotCaptureError("Snapshot capture was cancelled.");
+  }
+  if (operation.status === "failed") {
+    throw new SnapshotCaptureError(
+      operation.error || "Snapshot capture is no longer active.",
+    );
+  }
+  await updateCatalogOperation(userId, operationId, {
+    status: "running",
+    currentStep,
+    stepIndex,
+    totalSteps: 100,
+  });
+}
+
+export async function initializeWorkflowCatalogSnapshot(
+  userId: string,
+  operationId: number,
+) {
+  const staged = await getCatalogSnapshotCaptureState(userId, operationId);
+  if (staged) {
+    return {
+      nextProductIndex: staged.nextProductIndex,
+      totalProducts: staged.totalProducts,
+    };
+  }
+
+  const operation = await getCatalogOperation(userId, operationId);
+  if (!operation || operation.kind !== "snapshot") {
+    throw new SnapshotCaptureError("Snapshot operation was not found.");
+  }
+  if (!["queued", "running"].includes(operation.status)) {
+    throw new SnapshotCaptureError("Snapshot capture is no longer active.");
+  }
+  const payload = JSON.parse(operation.payloadJson) as Record<string, unknown>;
+  const environmentId = Number(payload.environmentId);
+  const channelId = Number(payload.channelId);
+  const requestedName = readString(payload.name).trim();
+  const confirmedSnapshotId = payload.confirmedSnapshotId
+    ? Number(payload.confirmedSnapshotId)
+    : undefined;
+  if (
+    !Number.isSafeInteger(environmentId) ||
+    environmentId < 1 ||
+    !Number.isSafeInteger(channelId) ||
+    channelId < 1 ||
+    !requestedName
+  ) {
+    throw new SnapshotCaptureError("Snapshot operation details are invalid.");
+  }
+
+  const environment = await getBigCommerceEnvironmentConnection(
+    userId,
+    environmentId,
+  );
+  if (!environment) {
+    throw new SnapshotCaptureError("The selected environment was not found.");
+  }
+  if (!environment.accessToken) {
+    throw new SnapshotCaptureError(
+      "The saved token could not be decrypted. Re-save it in Settings.",
+    );
+  }
+  const existingSnapshot = await getLatestCatalogSnapshotByName(
+    userId,
+    requestedName,
+  );
+  if (existingSnapshot && confirmedSnapshotId !== existingSnapshot.id) {
+    throw new SnapshotVersionConfirmationRequired(existingSnapshot);
+  }
+  const snapshotName = existingSnapshot?.name ?? requestedName;
+  const connectedEnvironment = {
+    ...environment,
+    accessToken: environment.accessToken,
+  };
+  const progress = (currentStep: string, stepIndex = 0) =>
+    updateWorkflowCaptureProgress(
+      userId,
+      operationId,
+      currentStep,
+      stepIndex,
+    );
+
+  await progress("Loading source channel details", 3);
+  const channel = await loadChannel(connectedEnvironment, channelId);
+  const channelName = readString(channel.name);
+  await progress(`Capturing channel: ${channelName}`, 5);
+  const categoryData = await loadCategoryData(
+    connectedEnvironment,
+    channelId,
+    progress,
+  );
+  await progress("Resolving products assigned to this channel", 28);
+  const productIds = await loadChannelProductIds(
+    connectedEnvironment,
+    channelId,
+  );
+  await progress("Capturing brands, tax classes, and store currency", 30);
+  const supportingData = await loadSupportingData(connectedEnvironment);
+  const state = await initializeCatalogSnapshotCaptureState({
+    operationId,
+    userId,
+    snapshotName,
+    environmentId,
+    channelId,
+    channelJson: JSON.stringify(channel),
+    categoryDataJson: JSON.stringify(categoryData),
+    supportingDataJson: JSON.stringify(supportingData),
+    productIdsJson: JSON.stringify(productIds),
+    totalProducts: productIds.length,
+  });
+  await progress(
+    productIds.length > 0
+      ? `Ready to capture ${productIds.length} products in resumable batches`
+      : "No products are assigned to this channel",
+    productIds.length > 0 ? 32 : 88,
+  );
+  return {
+    nextProductIndex: state.nextProductIndex,
+    totalProducts: state.totalProducts,
+  };
+}
+
+export async function captureWorkflowCatalogSnapshotProductBatch(
+  userId: string,
+  operationId: number,
+) {
+  const state = await getCatalogSnapshotCaptureState(userId, operationId);
+  if (!state) throw new SnapshotCaptureError("Snapshot capture state was not found.");
+  const operation = await getCatalogOperation(userId, operationId);
+  if (!operation || !["queued", "running"].includes(operation.status)) {
+    throw new SnapshotCaptureError("Snapshot capture was cancelled.");
+  }
+  const productIds = JSON.parse(state.productIdsJson) as number[];
+  const startIndex = state.nextProductIndex;
+  if (startIndex >= productIds.length) {
+    return { nextProductIndex: startIndex, totalProducts: productIds.length };
+  }
+  const endIndex = Math.min(
+    startIndex + WORKFLOW_PRODUCT_BATCH_SIZE,
+    productIds.length,
+  );
+  const batchIds = productIds.slice(startIndex, endIndex);
+  const environment = await getBigCommerceEnvironmentConnection(
+    userId,
+    state.environmentId,
+  );
+  if (!environment?.accessToken) {
+    throw new SnapshotCaptureError(
+      "The source environment or its access token is no longer available.",
+    );
+  }
+  const connectedEnvironment = {
+    ...environment,
+    accessToken: environment.accessToken,
+  };
+  await updateWorkflowCaptureProgress(
+    userId,
+    operationId,
+    `Loading product records ${startIndex + 1}–${endIndex} of ${productIds.length}`,
+    32 + Math.round((startIndex / Math.max(productIds.length, 1)) * 56),
+  );
+  const rawProducts = (
+    await fetchV3Collection(
+      connectedEnvironment,
+      `/v3/catalog/products?id:in=${batchIds.join(",")}&include=${PRODUCT_INCLUDES}`,
+      "products",
+    )
+  ).flatMap((value) => {
+    const product = asRecord(value);
+    return product ? [product] : [];
+  });
+  const productsById = new Map(
+    rawProducts.flatMap((product) => {
+      const productId = readPositiveInteger(product.id);
+      return productId ? [[productId, product] as const] : [];
+    }),
+  );
+  const products = batchIds.flatMap((productId) => {
+    const product = productsById.get(productId);
+    return product ? [product] : [];
+  });
+  const enrichedProducts: SnapshotProductRecord[] = [];
+  for (let offset = 0; offset < products.length; offset += 1) {
+    const product = products[offset];
+    const absoluteIndex = startIndex + offset;
+    const name =
+      readString(product.name) ||
+      `product #${readPositiveInteger(product.id) ?? "unknown"}`;
+    const variantCount = Array.isArray(product.variants)
+      ? product.variants.length
+      : 0;
+    const imageCount = Array.isArray(product.images) ? product.images.length : 0;
+    await updateWorkflowCaptureProgress(
+      userId,
+      operationId,
+      `Capturing product ${absoluteIndex + 1} of ${productIds.length}: ${name} · ${variantCount} variants · ${imageCount} images · metadata`,
+      32 +
+        Math.round(
+          ((absoluteIndex + 1) / Math.max(productIds.length, 1)) * 56,
+        ),
+    );
+    enrichedProducts.push(await enrichProduct(connectedEnvironment, product));
+  }
+  await saveCatalogSnapshotProductBatch({
+    userId,
+    operationId,
+    startIndex,
+    nextProductIndex: endIndex,
+    productsJson: enrichedProducts.map((product) => JSON.stringify(product)),
+  });
+  return { nextProductIndex: endIndex, totalProducts: productIds.length };
+}
+
+export async function finalizeWorkflowCatalogSnapshot(
+  userId: string,
+  operationId: number,
+) {
+  const operation = await getCatalogOperation(userId, operationId);
+  if (operation?.snapshotId) return operation.snapshotId;
+  if (!operation || !["queued", "running"].includes(operation.status)) {
+    throw new SnapshotCaptureError("Snapshot capture was cancelled.");
+  }
+  const state = await getCatalogSnapshotCaptureState(userId, operationId);
+  if (!state) throw new SnapshotCaptureError("Snapshot capture state was not found.");
+  if (state.nextProductIndex < state.totalProducts) {
+    throw new SnapshotCaptureError("Snapshot product capture is incomplete.");
+  }
+  const environment = await getBigCommerceEnvironmentConnection(
+    userId,
+    state.environmentId,
+  );
+  if (!environment) {
+    throw new SnapshotCaptureError("The source environment was not found.");
+  }
+  const channel = asRecord(JSON.parse(state.channelJson));
+  if (!channel) throw new SnapshotCaptureError("Snapshot channel data is invalid.");
+  const categoryData = JSON.parse(state.categoryDataJson) as Awaited<
+    ReturnType<typeof loadCategoryData>
+  >;
+  const supportingData = JSON.parse(state.supportingDataJson) as Awaited<
+    ReturnType<typeof loadSupportingData>
+  >;
+  const products = (
+    await getCatalogSnapshotCaptureProducts(operationId)
+  ).map((payloadJson) => JSON.parse(payloadJson) as SnapshotProductRecord);
+  const previewCategories = categoryData.categoryTree.flatMap((value) => {
+    const category = parsePreviewCategory(value);
+    return category ? [category] : [];
+  });
+  const previewProducts = products.flatMap((product) => {
+    const preview = toPreviewProduct(product.data);
+    return preview ? [preview] : [];
+  });
+  const productCounts = countProductChildren(products);
+  const categoryMetafieldCount = categoryData.categories.reduce(
+    (total, category) => total + category.metafields.length,
+    0,
+  );
+  const channelName = readString(channel.name);
+  const manifest: CatalogSnapshotManifestV1 = {
+    formatVersion: FORMAT_VERSION,
+    capturedAt: new Date().toISOString(),
+    source: {
+      environmentId: environment.id,
+      environmentName: environment.name,
+      storeHash: environment.storeHash,
+      channelId: state.channelId,
+      channelName,
+    },
+    store: supportingData.store,
+    catalog: {
+      channel,
+      tree: categoryData.tree,
+      categoryTree: categoryData.categoryTree,
+      categories: categoryData.categories,
+      brands: supportingData.brands,
+      taxClasses: supportingData.taxClasses,
+      products,
+    },
+    preview: {
+      currency: supportingData.store.currency,
+      categories: previewCategories,
+      products: previewProducts,
+    },
+  };
+  const payloadJson = JSON.stringify(manifest);
+  await updateWorkflowCaptureProgress(
+    userId,
+    operationId,
+    `Saving manifest: ${categoryData.categories.length} categories · ${products.length} products · ${productCounts.variantCount} variants · ${productCounts.imageCount} images`,
+    97,
+  );
+  return completeCatalogSnapshotCapture(userId, operationId, {
+    name: state.snapshotName,
+    formatVersion: FORMAT_VERSION,
+    sourceEnvironmentId: environment.id,
+    sourceEnvironmentName: environment.name,
+    sourceStoreHash: environment.storeHash,
+    sourceChannelId: state.channelId,
+    sourceChannelName: channelName,
+    categoryCount: categoryData.categories.length,
+    productCount: products.length,
+    variantCount: productCounts.variantCount,
+    imageCount: productCounts.imageCount,
+    metafieldCount: productCounts.metafieldCount + categoryMetafieldCount,
+    payloadBytes: Buffer.byteLength(payloadJson, "utf8"),
+    payloadJson,
+  });
+}
+
+export async function failWorkflowCatalogSnapshot(
+  userId: string,
+  operationId: number,
+  message: string,
+) {
+  const operation = await getCatalogOperation(userId, operationId);
+  if (operation && operation.status !== "cancelled" && operation.status !== "completed") {
+    await updateCatalogOperation(userId, operationId, {
+      status: "failed",
+      currentStep: "Failed",
+      error: message || "The snapshot workflow failed.",
+    });
+  }
+  await removeCatalogSnapshotCaptureState(operationId);
 }
 
 function parsePreviewProducts(value: unknown) {

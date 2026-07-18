@@ -86,7 +86,22 @@ export type CatalogOperation = {
   environmentId: number | null; channelId: number | null; snapshotId: number | null;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   currentStep: string; stepIndex: number; totalSteps: number; payloadJson: string;
-  resultJson: string | null; error: string | null; createdAt: string; updatedAt: string;
+  resultJson: string | null; error: string | null; workflowRunId: string | null;
+  createdAt: string; updatedAt: string;
+};
+
+export type CatalogSnapshotCaptureState = {
+  operationId: number;
+  userId: string;
+  snapshotName: string;
+  environmentId: number;
+  channelId: number;
+  channelJson: string;
+  categoryDataJson: string;
+  supportingDataJson: string;
+  productIdsJson: string;
+  nextProductIndex: number;
+  totalProducts: number;
 };
 
 export class CatalogOperationAlreadyActiveError extends Error {
@@ -258,6 +273,7 @@ async function ensureSchema() {
       status TEXT NOT NULL DEFAULT 'queued', current_step TEXT NOT NULL DEFAULT '',
       step_index INTEGER NOT NULL DEFAULT 0, total_steps INTEGER NOT NULL DEFAULT 0,
       payload_json TEXT NOT NULL, result_json TEXT, error TEXT,
+      workflow_run_id TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
     const catalogOperationColumns = await db.execute(
@@ -271,17 +287,47 @@ async function ensureSchema() {
         "ALTER TABLE catalog_operations ADD COLUMN operation_key TEXT",
       );
     }
+    const hasWorkflowRunId = catalogOperationColumns.rows.some(
+      (column) => column.name === "workflow_run_id",
+    );
+    if (!hasWorkflowRunId) {
+      await db.execute(
+        "ALTER TABLE catalog_operations ADD COLUMN workflow_run_id TEXT",
+      );
+    }
     await db.execute("CREATE INDEX IF NOT EXISTS catalog_operations_user_idx ON catalog_operations(user_id, id DESC)");
     await db.execute(
       "CREATE UNIQUE INDEX IF NOT EXISTS catalog_operations_one_active_key_idx ON catalog_operations(user_id, kind, operation_key) WHERE operation_key IS NOT NULL AND status IN ('queued', 'running')",
     );
+    await db.execute(`CREATE TABLE IF NOT EXISTS catalog_snapshot_capture_state (
+      operation_id INTEGER PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      snapshot_name TEXT NOT NULL,
+      environment_id INTEGER NOT NULL,
+      channel_id INTEGER NOT NULL,
+      channel_json TEXT NOT NULL,
+      category_data_json TEXT NOT NULL,
+      supporting_data_json TEXT NOT NULL,
+      product_ids_json TEXT NOT NULL,
+      next_product_index INTEGER NOT NULL DEFAULT 0,
+      total_products INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS catalog_snapshot_capture_products (
+      operation_id INTEGER NOT NULL,
+      product_index INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (operation_id, product_index)
+    )`);
   })();
 
   return schemaReady;
 }
 
 function toCatalogOperation(row: Record<string, unknown>): CatalogOperation {
-  return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
+  return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), workflowRunId: row.workflow_run_id == null ? null : String(row.workflow_run_id), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
 }
 
 export async function createCatalogOperation(userId: string, input: { kind: CatalogOperation["kind"]; environmentId?: number; channelId?: number; snapshotId?: number; payload: unknown; totalSteps?: number; operationKey?: string }) {
@@ -294,7 +340,7 @@ export async function createCatalogOperation(userId: string, input: { kind: Cata
   return Number(r.rows[0].id);
 }
 export async function getCatalogOperation(userId: string, id: number) { await ensureSchema(); const r = await getClient().execute({sql:"SELECT * FROM catalog_operations WHERE user_id = ? AND id = ?",args:[userId,id]}); return r.rows[0] ? toCatalogOperation(r.rows[0] as Record<string,unknown>) : null; }
-export async function updateCatalogOperation(userId: string, id: number, patch: Partial<Pick<CatalogOperation,"status"|"currentStep"|"stepIndex"|"totalSteps"|"resultJson"|"error"|"payloadJson"|"snapshotId">>) { await ensureSchema(); const fields: string[]=[]; const args: Array<string | number | null>=[]; for (const [k,v] of Object.entries(patch)) { const col=k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`); fields.push(`${col} = ?`); args.push(v ?? null); } if (!fields.length) return; fields.push("updated_at = CURRENT_TIMESTAMP"); args.push(userId,id); await getClient().execute({sql:`UPDATE catalog_operations SET ${fields.join(", ")} WHERE user_id = ? AND id = ?`,args}); }
+export async function updateCatalogOperation(userId: string, id: number, patch: Partial<Pick<CatalogOperation,"status"|"currentStep"|"stepIndex"|"totalSteps"|"resultJson"|"error"|"payloadJson"|"snapshotId"|"workflowRunId">>) { await ensureSchema(); const fields: string[]=[]; const args: Array<string | number | null>=[]; for (const [k,v] of Object.entries(patch)) { const col=k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`); fields.push(`${col} = ?`); args.push(v ?? null); } if (!fields.length) return; fields.push("updated_at = CURRENT_TIMESTAMP"); args.push(userId,id); await getClient().execute({sql:`UPDATE catalog_operations SET ${fields.join(", ")} WHERE user_id = ? AND id = ?`,args}); }
 
 export async function getCatalogOperationsForChannel(userId: string, environmentId: number, channelId: number) {
   await ensureSchema();
@@ -312,11 +358,185 @@ export async function getCatalogOperationsForSnapshots(userId: string, snapshotI
 
 export async function getActiveSnapshotOperations(userId: string) {
   await ensureSchema();
+  await expireStaleSnapshotOperations(userId);
   const result = await getClient().execute({
     sql: "SELECT * FROM catalog_operations WHERE user_id = ? AND kind = 'snapshot' AND status IN ('queued', 'running') ORDER BY id DESC",
     args: [userId],
   });
   return result.rows.map((row) => toCatalogOperation(row as Record<string, unknown>));
+}
+
+export async function expireStaleSnapshotOperations(userId: string) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      UPDATE catalog_operations
+      SET status = 'failed',
+          current_step = 'Failed',
+          error = 'The previous snapshot worker stopped before completing. Start the capture again; durable captures now resume in server-side batches.',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ?
+        AND kind = 'snapshot'
+        AND status = 'running'
+        AND updated_at < datetime('now', '-10 minutes')
+    `,
+    args: [userId],
+  });
+}
+
+function toCatalogSnapshotCaptureState(
+  row: Record<string, unknown>,
+): CatalogSnapshotCaptureState {
+  return {
+    operationId: Number(row.operation_id),
+    userId: String(row.user_id),
+    snapshotName: String(row.snapshot_name),
+    environmentId: Number(row.environment_id),
+    channelId: Number(row.channel_id),
+    channelJson: String(row.channel_json),
+    categoryDataJson: String(row.category_data_json),
+    supportingDataJson: String(row.supporting_data_json),
+    productIdsJson: String(row.product_ids_json),
+    nextProductIndex: Number(row.next_product_index),
+    totalProducts: Number(row.total_products),
+  };
+}
+
+export async function getCatalogSnapshotCaptureState(
+  userId: string,
+  operationId: number,
+) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT *
+      FROM catalog_snapshot_capture_state
+      WHERE user_id = ? AND operation_id = ?
+      LIMIT 1
+    `,
+    args: [userId, operationId],
+  });
+  const row = result.rows[0];
+  return row
+    ? toCatalogSnapshotCaptureState(row as Record<string, unknown>)
+    : null;
+}
+
+export async function initializeCatalogSnapshotCaptureState(input: {
+  operationId: number;
+  userId: string;
+  snapshotName: string;
+  environmentId: number;
+  channelId: number;
+  channelJson: string;
+  categoryDataJson: string;
+  supportingDataJson: string;
+  productIdsJson: string;
+  totalProducts: number;
+}) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO catalog_snapshot_capture_state (
+        operation_id, user_id, snapshot_name, environment_id, channel_id,
+        channel_json, category_data_json, supporting_data_json,
+        product_ids_json, total_products
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (
+        SELECT 1 FROM catalog_operations
+        WHERE id = ? AND user_id = ? AND status IN ('queued', 'running')
+      )
+      ON CONFLICT(operation_id) DO NOTHING
+    `,
+    args: [
+      input.operationId,
+      input.userId,
+      input.snapshotName,
+      input.environmentId,
+      input.channelId,
+      input.channelJson,
+      input.categoryDataJson,
+      input.supportingDataJson,
+      input.productIdsJson,
+      input.totalProducts,
+      input.operationId,
+      input.userId,
+    ],
+  });
+  const state = await getCatalogSnapshotCaptureState(
+    input.userId,
+    input.operationId,
+  );
+  if (!state) throw new Error("Snapshot capture was cancelled before initialization.");
+  return state;
+}
+
+export async function saveCatalogSnapshotProductBatch(input: {
+  userId: string;
+  operationId: number;
+  startIndex: number;
+  nextProductIndex: number;
+  productsJson: string[];
+}) {
+  await ensureSchema();
+  const operation = await getCatalogOperation(input.userId, input.operationId);
+  if (!operation || !["queued", "running"].includes(operation.status)) {
+    throw new Error("Snapshot capture was cancelled.");
+  }
+  const statements = input.productsJson.map((payloadJson, offset) => ({
+    sql: `
+      INSERT INTO catalog_snapshot_capture_products (
+        operation_id, product_index, payload_json
+      ) VALUES (?, ?, ?)
+      ON CONFLICT(operation_id, product_index)
+      DO UPDATE SET payload_json = excluded.payload_json
+    `,
+    args: [input.operationId, input.startIndex + offset, payloadJson],
+  }));
+  statements.push({
+    sql: `
+      UPDATE catalog_snapshot_capture_state
+      SET next_product_index = MAX(next_product_index, ?),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE operation_id = ? AND user_id = ?
+    `,
+    args: [input.nextProductIndex, input.operationId, input.userId],
+  });
+  await getClient().batch(statements, "write");
+}
+
+export async function getCatalogSnapshotCaptureProducts(
+  operationId: number,
+) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT payload_json
+      FROM catalog_snapshot_capture_products
+      WHERE operation_id = ?
+      ORDER BY product_index ASC
+    `,
+    args: [operationId],
+  });
+  return result.rows.map((row) => String(row.payload_json));
+}
+
+export async function removeCatalogSnapshotCaptureState(operationId: number) {
+  await ensureSchema();
+  await getClient().batch(
+    [
+      {
+        sql: "DELETE FROM catalog_snapshot_capture_products WHERE operation_id = ?",
+        args: [operationId],
+      },
+      {
+        sql: "DELETE FROM catalog_snapshot_capture_state WHERE operation_id = ?",
+        args: [operationId],
+      },
+    ],
+    "write",
+  );
 }
 
 export async function getNotes(userId: string): Promise<Note[]> {
@@ -884,6 +1104,115 @@ export async function addCatalogSnapshot(
     id: Number(row.id),
     snapshotVersion: Number(row.snapshot_version),
   };
+}
+
+export async function completeCatalogSnapshotCapture(
+  userId: string,
+  operationId: number,
+  input: CatalogSnapshotInput,
+) {
+  await ensureSchema();
+  const transaction = await getClient().transaction("write");
+
+  try {
+    const operationResult = await transaction.execute({
+      sql: `
+        SELECT status, snapshot_id
+        FROM catalog_operations
+        WHERE user_id = ? AND id = ?
+        LIMIT 1
+      `,
+      args: [userId, operationId],
+    });
+    const operation = operationResult.rows[0];
+    if (!operation) throw new Error("Snapshot operation was not found.");
+    if (operation.snapshot_id != null) {
+      await transaction.commit();
+      return Number(operation.snapshot_id);
+    }
+    if (!["queued", "running"].includes(String(operation.status))) {
+      throw new Error("Snapshot capture was cancelled before it was saved.");
+    }
+
+    const result = await transaction.execute({
+      sql: `
+        INSERT INTO catalog_snapshots (
+          user_id, name, snapshot_version, format_version,
+          source_environment_id, source_environment_name, source_store_hash,
+          source_channel_id, source_channel_name, category_count,
+          product_count, variant_count, image_count, metafield_count,
+          payload_bytes, payload_json
+        )
+        SELECT
+          ?, ?, COALESCE(MAX(version_number), 0) + 1, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?
+        FROM (
+          SELECT snapshot_version AS version_number
+          FROM catalog_snapshots
+          WHERE user_id = ? AND name = ? COLLATE NOCASE
+          UNION ALL
+          SELECT snapshot_version AS version_number
+          FROM catalog_snapshot_events
+          WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE
+        )
+        RETURNING id, snapshot_version
+      `,
+      args: [
+        userId,
+        input.name,
+        input.formatVersion,
+        input.sourceEnvironmentId,
+        input.sourceEnvironmentName,
+        input.sourceStoreHash,
+        input.sourceChannelId,
+        input.sourceChannelName,
+        input.categoryCount,
+        input.productCount,
+        input.variantCount,
+        input.imageCount,
+        input.metafieldCount,
+        input.payloadBytes,
+        input.payloadJson,
+        userId,
+        input.name,
+        userId,
+        input.name,
+      ],
+    });
+    const saved = result.rows[0];
+    if (!saved) throw new Error("The catalog snapshot version could not be saved.");
+    const snapshotId = Number(saved.id);
+    const snapshotVersion = Number(saved.snapshot_version);
+
+    await transaction.execute({
+      sql: `
+        UPDATE catalog_operations
+        SET status = 'completed', current_step = ?, step_index = 100,
+            total_steps = 100, snapshot_id = ?, result_json = ?, error = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ? AND id = ? AND status IN ('queued', 'running')
+      `,
+      args: [
+        `Snapshot saved as version ${snapshotVersion}`,
+        snapshotId,
+        JSON.stringify(snapshotId),
+        userId,
+        operationId,
+      ],
+    });
+    await transaction.execute({
+      sql: "DELETE FROM catalog_snapshot_capture_products WHERE operation_id = ?",
+      args: [operationId],
+    });
+    await transaction.execute({
+      sql: "DELETE FROM catalog_snapshot_capture_state WHERE operation_id = ?",
+      args: [operationId],
+    });
+    await transaction.commit();
+    return snapshotId;
+  } finally {
+    transaction.close();
+  }
 }
 
 export async function removeCatalogSnapshotSeries(userId: string, name: string) {
