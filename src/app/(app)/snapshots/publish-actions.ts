@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireAppUser } from "@/lib/auth";
 import {
   addCatalogSnapshotEvent,
@@ -10,6 +11,7 @@ import {
   type CatalogSnapshotEvent,
   type CatalogSnapshotSummary,
 } from "@/lib/db";
+import { publishSnapshotRealtimeEvent } from "@/lib/snapshot-realtime";
 
 async function recordPublicationEvent(
   userId: string,
@@ -76,6 +78,26 @@ export async function setSnapshotVersionPublished(
     published ? "version_published" : "version_unpublished",
     snapshot,
   );
+
+  const occurredAt = new Date().toISOString();
+  after(async () => {
+    if (previouslyPublished) {
+      await publishSnapshotRealtimeEvent({
+        type: "snapshot.unpublished",
+        snapshotId: previouslyPublished.id,
+        snapshotName: previouslyPublished.name,
+        snapshotVersion: previouslyPublished.snapshotVersion,
+        occurredAt,
+      });
+    }
+    await publishSnapshotRealtimeEvent({
+      type: published ? "snapshot.published" : "snapshot.unpublished",
+      snapshotId: snapshot.id,
+      snapshotName: snapshot.name,
+      snapshotVersion: snapshot.snapshotVersion,
+      occurredAt,
+    });
+  });
 
   revalidatePath("/snapshots");
   revalidatePath(`/snapshots/${snapshotId}`);

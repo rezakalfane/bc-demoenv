@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { clerkClient } from "@clerk/nextjs/server";
 import { requireAppUser } from "@/lib/auth";
 import { getActiveSnapshotOperations, getCatalogSnapshotSeries } from "@/lib/db";
 import { CatalogOperationProgress } from "@/components/catalog-operation-progress";
 import { PublishedIcon } from "@/components/action-icons";
+import { SnapshotLiveUpdates } from "@/components/snapshot-live-updates";
+import { isSnapshotRealtimeConfigured } from "@/lib/snapshot-realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +42,37 @@ export default async function SnapshotsPage() {
       channelId: Number(payload.channelId || operation.channelId),
     };
   });
+  const sortedSnapshots = snapshots.toSorted((left, right) => {
+    const publicationOrder = Number(Boolean(right.publishedSnapshotId)) - Number(Boolean(left.publishedSnapshotId));
+    if (publicationOrder !== 0) return publicationOrder;
+    const nameOrder = left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+    return nameOrder !== 0 ? nameOrder : left.id - right.id;
+  });
+  const sharedOwnerIds = [...new Set(
+    sortedSnapshots
+      .filter((snapshot) => !snapshot.isOwner)
+      .map((snapshot) => snapshot.ownerUserId),
+  )];
+  const publisherEmails = new Map<string, string>();
+
+  if (sharedOwnerIds.length > 0) {
+    const client = await clerkClient();
+    const publishers = await Promise.all(sharedOwnerIds.map(async (ownerUserId) => {
+      try {
+        const owner = await client.users.getUser(ownerUserId);
+        return [ownerUserId, owner.primaryEmailAddress?.emailAddress ?? ""] as const;
+      } catch {
+        return [ownerUserId, ""] as const;
+      }
+    }));
+    for (const [ownerUserId, email] of publishers) {
+      if (email) publisherEmails.set(ownerUserId, email);
+    }
+  }
 
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-12">
+      <SnapshotLiveUpdates enabled={isSnapshotRealtimeConfigured()} />
       <div className="mx-auto w-full max-w-6xl">
         <header className="mb-8 border-b border-black/10 pb-7 dark:border-white/10">
           <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
@@ -79,7 +110,7 @@ export default async function SnapshotsPage() {
                 </div>
               </article>
             ))}
-            {snapshots.map((snapshot) => (
+            {sortedSnapshots.map((snapshot) => (
               <article
                 key={snapshot.id}
                 className={`flex min-h-72 flex-col rounded-3xl border bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:bg-white/4 ${snapshot.publishedSnapshotId ? "border-blue-500/45 dark:border-blue-400/40" : "border-black/10 dark:border-white/10"}`}
@@ -103,9 +134,12 @@ export default async function SnapshotsPage() {
                     {snapshot.sourceChannelName}
                   </p>
                   {!snapshot.isOwner ? (
-                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700 dark:text-blue-300">
-                      Published catalog · read only
-                    </p>
+                    <div className="mt-2 text-[11px] text-blue-700 dark:text-blue-300">
+                      <p className="font-semibold uppercase tracking-[0.14em]">Published catalog · read only</p>
+                      <p className="mt-1 normal-case tracking-normal text-black/45 dark:text-white/45">
+                        Published by {publisherEmails.get(snapshot.ownerUserId) ?? "email unavailable"}
+                      </p>
+                    </div>
                   ) : null}
                 </div>
 

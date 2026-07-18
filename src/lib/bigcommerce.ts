@@ -453,7 +453,12 @@ export async function getEnvironmentDashboards() {
     dashboards.push(...(await Promise.all(batch.map(loadEnvironmentDashboard))));
   }
 
-  return dashboards;
+  return dashboards.sort((left, right) => {
+    const nameOrder = left.name.localeCompare(right.name, undefined, {
+      sensitivity: "base",
+    });
+    return nameOrder !== 0 ? nameOrder : left.id - right.id;
+  });
 }
 
 export async function getEnvironmentDetails(environmentId: number) {
