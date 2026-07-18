@@ -33,6 +33,12 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+body[class*="catalog-clearing-"] .channel-live-products,
+body[class*="catalog-clearing-"] .channel-live-categories {
+  opacity: 0.28;
+  transition: opacity 200ms ease;
+}
+
 button,
 input {
   font: inherit;

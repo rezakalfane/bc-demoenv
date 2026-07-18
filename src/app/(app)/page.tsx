@@ -4,6 +4,7 @@ import {
   getEnvironmentDashboards,
   type EnvironmentDashboard,
 } from "@/lib/bigcommerce";
+import { CatalogActivityBadge } from "@/components/catalog-operation-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,12 @@ function EnvironmentCard({ environment }: { environment: EnvironmentDashboard })
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold tracking-tight">
-            {environment.name}
+            <Link
+              href={`/environments/${environment.id}`}
+              className="rounded-sm transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:hover:text-emerald-300"
+            >
+              <span className="inline-flex items-center gap-3">{environment.name}<CatalogActivityBadge environmentId={environment.id} /></span>
+            </Link>
           </h2>
           <p className="mt-1 truncate font-mono text-xs text-black/40 dark:text-white/40">
             {environment.storeHash}
