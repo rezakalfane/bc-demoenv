@@ -4,6 +4,27 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate durable snapshot capture into `main`
+
+- **Date:** 2026-07-19
+- **Source:** `fix/durable-snapshot-workflow`
+- **Target:** `main`
+- **Type:** Non-fast-forward hotfix merge
+
+Integrated resumable Vercel Workflow snapshot capture after TypeScript, lint, whitespace, optimized production-build, generated endpoint, and local Workflow accessibility verification.
+
+### Commit — Make snapshot capture durable on Vercel
+
+- **Date:** 2026-07-19
+- **Branch:** `fix/durable-snapshot-workflow`
+- **Type:** Bug-fix commit
+
+- Replaced the single five-minute server invocation used by snapshot capture with a durable Vercel Workflow that survives browser closure, navigation, deployments, and individual function limits.
+- Split captures into retryable 30-product steps, persisted product batches and exact progress in Turso, and finalized snapshot versions atomically and idempotently.
+- Added stale-operation recovery, cancellation cleanup, and Workflow run identifiers while preserving the existing durable operation UI and snapshot-name uniqueness controls.
+- Exposed Workflow's generated internal endpoints outside Clerk protection and documented their role and Vercel zero-configuration behavior.
+- Kept restore and clear operations unchanged while limiting this reliability migration to snapshot capture.
+
 ### Merge — Integrate snapshot capture uniqueness into `main`
 
 - **Date:** 2026-07-19

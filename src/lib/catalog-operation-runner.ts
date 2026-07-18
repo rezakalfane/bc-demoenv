@@ -8,7 +8,6 @@ import {
   clearCatalogChannel,
   restoreCatalogSnapshot,
 } from "@/lib/catalog-restore";
-import { createCatalogSnapshot } from "@/lib/catalog-snapshots";
 
 export async function runCatalogOperation(userId: string, operationId: number) {
   const operation = await getCatalogOperation(userId, operationId);
@@ -56,16 +55,9 @@ export async function runCatalogOperation(userId: string, operationId: number) {
         onProgress: progress,
       });
     } else {
-      result = await createCatalogSnapshot({
-        environmentId: Number(payload.environmentId),
-        channelId: Number(payload.channelId),
-        name: String(payload.name),
-        confirmedSnapshotId: payload.confirmedSnapshotId
-          ? Number(payload.confirmedSnapshotId)
-          : undefined,
-        userId,
-        onProgress: progress,
-      });
+      throw new Error(
+        "Snapshot operations must be started through the durable workflow.",
+      );
     }
 
     const latestBeforeCompletion = await getCatalogOperation(userId, operationId);
@@ -81,9 +73,6 @@ export async function runCatalogOperation(userId: string, operationId: number) {
       stepIndex: 1,
       totalSteps: 1,
       resultJson: JSON.stringify(result),
-      ...(operation.kind === "snapshot" && typeof result === "number"
-        ? { snapshotId: result }
-        : {}),
       error: null,
     });
     return "completed";
