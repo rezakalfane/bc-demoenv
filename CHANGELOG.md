@@ -2,6 +2,28 @@
 
 This file records every commit and merge in reverse chronological order. Entries are based on Git history; uncommitted working-tree changes are not represented as commits.
 
+## 2026-07-19
+
+### Merge — Integrate snapshot capture uniqueness into `main`
+
+- **Date:** 2026-07-19
+- **Source:** `fix/snapshot-capture-uniqueness`
+- **Target:** `main`
+- **Type:** Non-fast-forward hotfix merge
+
+Integrated database-enforced prevention of concurrent, same-name snapshot captures after TypeScript, lint, whitespace, optimized production-build, and concurrent libSQL verification.
+
+### Commit — Prevent concurrent same-name snapshot captures
+
+- **Date:** 2026-07-19
+- **Branch:** `fix/snapshot-capture-uniqueness`
+- **Type:** Bug-fix commit
+
+- Added normalized snapshot-name operation keys and a partial unique database index allowing only one queued or running capture per user and name.
+- Protected both channel Take snapshot and snapshot Create new version entry points from duplicate submissions across tabs, browsers, and concurrent server requests.
+- Preserved deliberate snapshot version creation after the active capture completes and returned actionable conflict messages while a capture is active.
+- Normalized excess whitespace in snapshot names and documented the reported modal race in prompt History.
+
 ## 2026-07-18
 
 ### Merge — Integrate the Ably cleanup hotfix into `main`
