@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 
 const navigationItems = [
   { href: "/", label: "Dashboard", icon: "D" },
+  { href: "/snapshots", label: "Snapshots", icon: "S" },
   { href: "/notes", label: "Notes", icon: "N" },
-  { href: "/settings", label: "Settings", icon: "S" },
+  { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
 export function AppNavigation() {
@@ -17,7 +18,7 @@ export function AppNavigation() {
       {navigationItems.map((item) => {
         const isActive =
           item.href === "/"
-            ? pathname === "/"
+            ? pathname === "/" || pathname.startsWith("/environments/")
             : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
         return (

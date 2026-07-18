@@ -1,7 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: {
+    maximumRedirects: 0,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "cdn11.bigcommerce.com",
+        port: "",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

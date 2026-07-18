@@ -2,6 +2,637 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-18 — Make header actions visibly smaller
+
+### Prompt
+
+> buttons are not smaller...
+
+### Summary
+
+- Reduced snapshot and channel header controls again to a visibly compact 10px label/icon scale.
+- Applied 4px vertical and 8px horizontal padding, tight line-height, and compact corner radii so the resulting button footprint is materially smaller.
+
+## 2026-07-18 — Protect the viewed snapshot version
+
+### Prompt
+
+> Update: we can't delete a selected version for viewing, but you can delete the others, including the latest
+
+### Summary
+
+- Choose version now hides deletion only for the version currently selected for viewing.
+- Any other version, including the latest version, can be deleted with the existing confirmation flow and audit event.
+- Server validation confirms that the protected viewed version and deletion target belong to the same tenant-owned snapshot series.
+- Deleted version numbers remain reserved when calculating the next version, preventing a deleted latest version number from being reused.
+
+## 2026-07-18 — Disable actions on active catalog surfaces
+
+### Prompt
+
+> Disable action buttons when an action is in progress in the same channel / or same snapshot
+
+### Summary
+
+- Added a reactive catalog-operation scope hook synchronized through local storage and operation-change events.
+- Take snapshot, Restore Snapshot, and Clear catalog disable only when their channel has an active operation.
+- Create new version, Restore Snapshot, Delete snapshot, and older-version deletion disable only when their snapshot has an active operation.
+- History and Choose version remain available so users can inspect activity and retained versions while background work continues.
+
+## 2026-07-18 — Log snapshot-version deletions
+
+### Prompt
+
+> I don't want to add the Delete version button, I just want to log the fact that a version has been deleted
+
+### Summary
+
+- Removed Delete version controls and their confirmation UI from snapshot History.
+- Older versions remain deletable only from Choose version.
+- Successful version deletions now write a durable tenant-scoped audit event containing the deleted snapshot name, version, ID, source environment/channel, catalog counts, and deletion timestamp.
+- Snapshot History merges retained versions, restore operations, and deletion audit events in descending date order.
+
+## 2026-07-18 — Delete snapshot versions from History
+
+### Prompt
+
+> Snapshot version deletion can be added to snapshot history
+
+### Summary
+
+- Snapshot History now provides a Delete version action on each older immutable version entry.
+- Deletion uses the existing confirmation modal pattern and server-side latest-version protection.
+- Deleting the version currently being viewed navigates to the latest retained version; deleting another older version refreshes History in place.
+
+## 2026-07-18 — Smaller snapshot and channel buttons
+
+### Prompt
+
+> Can you make these buttons smaller (smaller font, smaller button)
+
+### Summary
+
+- Reduced snapshot and channel header action labels to 11px and icons to 12px.
+- Tightened button padding, icon gaps, and corner radii without changing modal confirmation controls or metadata tags.
+
+## 2026-07-18 — Compact snapshot and channel action rows
+
+### Prompt
+
+> In snapshot page and channel page, move the buttons below the title, subtitle and tags, aligned to the right, make also the icons smaller (also smaller font), use icon button or icon  + label button where it nakes the most sense and if it's easy to understand
+
+### Summary
+
+- Snapshot and channel headers now render title/subtitle first, metadata tags second, and a dedicated right-aligned action row underneath.
+- Header actions use consistent compact sizing with 14px icons, 12px labels, reduced padding, and tighter gaps.
+- Primary, versioning, history, restore, and destructive actions retain concise labels alongside their icons to avoid ambiguous or risky icon-only controls.
+
+## 2026-07-18 — Immediate new-version progress and navigation
+
+### Prompts
+
+> When creating a new version, I don't immediately see the progress bar, I have to navgate out and back to the snapshot page
+
+> Also when the new version capture is finished, switch to that snapshot
+
+### Summary
+
+- New-version captures are now associated with the open snapshot immediately, so the shared progress bar appears as soon as the confirmation modal closes.
+- Refreshed server operation props are synchronized back into the mounted progress component instead of requiring navigation away and back.
+- Operation status responses now expose the created snapshot ID; successful new-version captures clear the operation marker and navigate directly to the newly created snapshot version.
+
+## 2026-07-18 — Create a new version from snapshot details
+
+### Prompt
+
+> In a snapshot page, add a "Create new version" action that will trigger a Take snapshot using the env/channel from the last version. display a confirm modal with the details
+
+### Summary
+
+- Snapshot detail pages now expose a Create new version action using the named series' latest version as the authoritative source, even when an older version is being viewed.
+- The confirmation modal shows the snapshot name, current-to-next version, source environment/channel, catalog counts, and latest capture date.
+- Confirmation queues the existing persisted background capture workflow with the latest version pre-authorized, preserving every previous version and showing the shared progress after the modal closes.
+
+## 2026-07-18 — Snapshot names and versions in channel history
+
+### Prompt
+
+> In channel history, show more than snapshot ID: snapshot name and version would be better
+
+### Summary
+
+- Channel History now resolves each tenant-owned snapshot reference and displays its name, version, and ID for both capture and restore operations.
+- History summary lookup avoids loading large snapshot manifest payloads.
+- New restore results persist the snapshot name and version so future History entries remain descriptive even if their source snapshot is later deleted.
+
+## 2026-07-18 — Detailed snapshot capture progress
+
+### Prompt
+
+> When capturing snapshot, it only shows "Loading channel, categories, products, and store metadata", can you give more details in the progress bar?
+
+### Summary
+
+- Snapshot progress now identifies the source channel and assigned category tree.
+- Category capture reports each category name and its position in the category set while retrieving metadata.
+- Product capture reports assignment discovery, product-record batches, and each product name with variant and image counts while retrieving product and variant metadata.
+- Supporting store metadata, manifest totals, and the newly saved snapshot version are persisted as final progress steps.
+
+## 2026-07-18 — Retry rate-limited snapshot captures
+
+### Prompt
+
+> Snapshot captured
+> Jul 18, 2026, 8:23 PM
+> failed
+> Snapshot: Test 2
+> Failed
+> BigCommerce rate limit reached. Try the snapshot again shortly.
+
+### Summary
+
+- Snapshot API reads are now serialized per store to prevent concurrent product and variant metadata requests from exhausting the BigCommerce quota.
+- Capture requests inspect BigCommerce rate-limit headers, pause proactively near quota exhaustion, and retry HTTP 429 responses with reset-aware exponential backoff.
+- A capture only fails with a rate-limit error after the expanded automatic retry window is exhausted.
+
+## 2026-07-18 — Channel-scoped snapshots and deletion
+
+### Prompt
+
+> Last snapshot tookl an unusual long time. it captures the whole store catalog and not only the products in the snapshoted channel! (Test 2) so we have 577 products instead of just 51 in the original channel. add a delete snapshot button, and also a delete version for other than current versions
+
+### Summary
+
+- Snapshot capture now reads BigCommerce product/channel assignments and fetches full product data only for product IDs assigned to the selected channel.
+- Snapshot detail pages now provide a typed-confirmation Delete snapshot action that permanently removes the complete tenant-owned snapshot series and all versions.
+- Choose Version now allows permanent deletion of older versions with a confirmation modal, while both the UI and database protect the latest version.
+
+## 2026-07-18 — Show pending snapshot captures
+
+### Prompt
+
+> Can we also see snapshot in progress in Snapshots, with the progress bar. If it's cancelled, remove it and if the user was on the snapshot page, go back to snapshots
+
+### Summary
+
+- The Snapshots index now queries persisted queued/running capture operations and renders them as in-progress cards with the shared server-backed progress bar.
+- Cancelling a capture marks the operation cancelled, removes its pending card after refresh, and prevents the runner from overwriting cancellation with completion.
+- Existing snapshot detail pages detect an active capture for the same snapshot series; cancelling there redirects to `/snapshots`.
+
+## 2026-07-18 — Continue restore after item errors
+
+### Prompt
+
+> Log errors but don't stop the whole import process and continue to the next items. Also investigate what could have been wrong there.
+
+### Summary
+
+- Product-level restore failures are now collected as warnings while subsequent products, related-product updates, and channel-assignment batches continue.
+- Operations finish as completed-with-warnings and retain each warning in History instead of failing the entire restore.
+- Investigation showed the affected snapshot product had no product metafields, but restore still made an unnecessary metafield request immediately after product creation; empty metafield collections are now skipped.
+- Metafield writes now exclude response-only fields such as `resource_type`, `resource_id`, ownership, IDs, and timestamps.
+
+## 2026-07-18 — Product-level restore progress
+
+### Prompt
+
+> When displaying "Creating and updating products, variants, images, and metadata" in progress bar, also show what's being created
+
+### Summary
+
+- Restore progress now names the current product and identifies whether it is being created or reused.
+- New-product steps show variant and image counts while attributes and metadata are restored.
+- Existing-product steps show category assignment and queued channel assignment while confirming preserved catalog data.
+- Final progress reports channel-assignment batches and created/assigned totals.
+
+## 2026-07-18 — Exclude terminated storefront channels
+
+### Prompt
+
+> For env rezakalfane I see 16 channels where there should be 4
+
+### Summary
+
+- Verified that BigCommerce returns 16 storefront channel records for the environment, including 12 terminated Catalyst storefronts.
+- Dashboard counts, environment channel lists, and restore destinations now include only storefront channels with `active` or `prelaunch` status, matching the four storefronts visible in the control panel.
+
+## 2026-07-18 — Count assigned products as restored updates
+
+### Prompt
+
+> Snapshot restored should show product updated as they were assigned to channel and categories
+
+### Summary
+
+- Existing products receiving restored channel/category assignments are now counted as updated without changing their catalog attributes.
+- Older completed fast-restore history entries infer the updated count from the captured snapshot product count when the stored result reported zero.
+
+## 2026-07-18 — Channel and snapshot activity history
+
+### Prompt
+
+> When looking at a channel, add an History button to access the history of Taking snapshot, Restoring snapshot and Clearing catalog with details? Same on a Snapshot, show History of Snapshot creation, update, restore with details
+
+### Summary
+
+- Added an accessible History modal to channel pages, scoped to the exact environment/channel and showing snapshot, restore, and clear operations.
+- Added snapshot-series History combining immutable version creation/update records with restore operations.
+- History entries include status, timestamps, destination/result counts, current steps, and persisted errors.
+- Completed snapshot operations now retain the created snapshot ID for durable audit association.
+
+## 2026-07-18 — Persist snapshot capture in the background
+
+### Prompt
+
+> apply the pattern to take snapshot
+
+### Summary
+
+- Snapshot capture now persists its operation before closing the modal and runs through the server scheduler, so navigation and reloads do not cancel the capture request.
+- Existing-name/version confirmation is resolved before queuing the background job.
+- Capture progress is stored in Turso across catalog loading, manifest saving, and completion, with background errors surfaced by the shared progress UI.
+
+## 2026-07-18 — Fast restore for existing products
+
+### Prompt
+
+> in restore snapshot, don't update existing products, but just assign them to the channel, place them in the right categories and skip the rest of the attributes / variants / metadata. It will restore faster when products exist
+
+### Summary
+
+- Existing products matched by SKU or slug are now preserved and receive only snapshot category links and the destination channel assignment.
+- Existing product attributes, variants, images, modifiers, related products, and metadata are not updated.
+- Products absent from the destination are still fully created from the snapshot.
+- Reduced destination product matching data to variants-only while retaining SKU and slug matching.
+
+## 2026-07-18 — Repair snapshot restore execution
+
+### Prompt
+
+> can you also make the restore snapshot work?
+
+### Summary
+
+- Removed the modal click handler that could unmount the restore form before its Server Action executed.
+- Persist restore operations first and schedule their runner server-side so navigation or reloads cannot cancel the worker request.
+- Pass the authenticated tenant explicitly into background restoration and publish durable category, product/variant/image/metadata, and verification phases to the shared progress bar.
+
+## 2026-07-18 — Repair Clear catalog execution and progress
+
+### Prompt
+
+> Check code, clearing DOES NOT work at all, progress bar DOES NOT work either
+
+### Summary
+
+- Found that closing the confirmation modal during the click event unmounted the form before its Server Action executed; the UI then displayed a local-only progress marker although no operation or BigCommerce request existed.
+- Start clear only after the Server Action has persisted an operation, and schedule its runner on the server so navigation cannot cancel the work.
+- Drive progress, completion, and errors from the persisted Turso operation, including real product/category batch steps.
+- Verified the BigCommerce mutation against Test channel 1: 51 product assignments and 26 categories were removed, with zero remaining afterward; products were preserved.
+
+## 2026-07-18 — Verify Clear catalog mutations
+
+### Prompt
+
+> doesn't look that categories are removed in BC and products are unassigned in BC. Control panel shows the same numbers, nothing is removed during the clear process which is very slow by the way
+
+### Summary
+
+- Increased Clear catalog mutation batches to the BigCommerce limit used by the API.
+- Added post-delete verification for product-channel assignments and category-tree contents.
+- Clear now reports an explicit scope/filter failure instead of claiming success when BigCommerce leaves records behind.
+- Reduced unnecessary inter-batch delay while retaining 429 backoff and a short eventual-consistency wait before verification.
+
+## 2026-07-18 — Reflect Clear catalog state immediately in the browser
+
+### Prompt
+
+> update UI when categories and products are unassaigned (without reloading the catalog, just update the UI)
+
+### Summary
+
+- Added a client-side clear-state synchronizer scoped to the active environment/channel.
+- The live category and product browser now visually transitions into a clearing state immediately when unassignment begins, while the server operation continues in the background.
+
+## 2026-07-18 — Scope activity indicators to the active surface
+
+### Prompt
+
+> status indicator and progress bars appear in too many places. It should only appear in the selected channel / env / snapshot
+
+### Summary
+
+- Scoped operation progress to the target environment/channel.
+- Scoped restore activity to the selected snapshot version.
+- Unrelated Dashboard cards, channel cards, and snapshot pages no longer show another surface’s active operation.
+
+## 2026-07-18 — Show named catalog operation steps
+
+### Prompt
+
+> Show the exact steps in the progress bar (the product being assigned, unassigned, the category being created or removed, etc.)
+
+### Summary
+
+- Progress state now accepts named category and product work items.
+- Restore displays named category/product restoration steps; Clear catalog displays named category removal and product unassignment steps.
+- Snapshot detail and channel pages use the same step-aware progress component.
+
+## 2026-07-18 — Show activity indicators in dashboards and channel lists
+
+### Prompt
+
+> I would lke to see that activity indicator also in the channel listing page and the dashboard
+
+### Summary
+
+- Added the shared animated catalog-operation badge to Dashboard environment cards.
+- Added the same badge to environment headers and channel-list cards.
+
+## 2026-07-18 — Add operation cancellation and activity indicators
+
+### Prompt
+
+> Add a cancel button at the bottom right of the progress bar section to cancel an action. When an action is in progress, show some animated icons in the channel box or environment box or related snapshot box
+
+### Summary
+
+- Added a shared Cancel control to the full-width operation progress bar.
+- Added animated activity badges beside channel and snapshot titles while an operation is tracked.
+- Cancel immediately stops client-side progress polling and clears the active operation marker.
+
+## 2026-07-18 — Reduce progress-refresh rate-limit pressure
+
+### Prompt
+
+> BigCommerce rate limit reached. Try again shortly.
+
+### Summary
+
+- Removed duplicate refresh timers from the individual operation components.
+- Reduced shared progress refresh frequency to once every eight seconds.
+- Added automatic retry/backoff for channel catalog reads as well as catalog mutations.
+
+## 2026-07-18 — Throttle Clear catalog requests
+
+### Prompt
+
+> BigCommerce rate reached, maybe why clearing doesn't work, should be Throttle
+
+### Summary
+
+- Added automatic 429 retries with exponential backoff and `Retry-After` support to restore/clear BigCommerce mutations.
+- Added a small delay between Clear catalog assignment and category batches to reduce burst traffic.
+
+## 2026-07-18 — Unify catalog operation progress across navigation
+
+### Prompt
+
+> Taking snapshot, restoring snapshot and clearing snapshot are exclusive and can't occur at the same time. They all use the same kind of progress bar below the buttons and above the catalog browser. When navigating snapshots, we can also see the progress on taking or restoring a snapshot
+
+### Summary
+
+- Added one shared catalog-operation marker for snapshot capture, restore, and clear actions.
+- Enforced mutual exclusion before opening any of the three action dialogs.
+- Added one consistent full-width progress bar below channel actions and to snapshot pages, with periodic refresh while active.
+- Shared operation state survives page navigation and reloads through browser storage.
+
+## 2026-07-18 — Persist operation progress above the catalog
+
+### Prompt
+
+> Catalog browser should refresh as products are created / assigned to the channel. When clearing a catalog, progress bar should be below the buttons and above the catalog browser, full width. It should also show even if I reload the page during a clear or take snapshot or restore snapshot
+
+### Summary
+
+- Made restore and clear progress indicators full-width rows below channel buttons and above the catalog browser.
+- Added periodic catalog refresh while an operation is active so newly assigned products can appear without waiting for the final response.
+- Persisted active-operation markers in browser storage so reloading the channel keeps the progress state visible.
+
+## 2026-07-18 — Move operation progress above the catalog
+
+### Prompt
+
+> When clicking on Restore in the modal, close the modal and display the progress bar in the channel page above the catalog browser! Not in the modal
+
+### Summary
+
+- Restore and Clear catalog dialogs now close immediately when submitted.
+- Their progress bars render in the channel action area above the catalog browser while the server action continues.
+- The catalog refreshes automatically when the operation completes; failures reopen the relevant dialog with the error.
+
+## 2026-07-18 — Add channel operation progress and destination defaults
+
+### Prompt
+
+> When restoring a snapshot from a channel page, prefill Destination env and channel with the right values. Run restore in the background and update product browser at it goes. Display a nice progress bar above the catalog with the current step in progress. Also do the same for Clear catalog action
+
+### Summary
+
+- Channel restore now defaults to the channel and environment currently being viewed.
+- Restore and Clear catalog dialogs show staged progress indicators while their server actions run.
+- The channel catalog refreshes automatically after each successful operation so product and category browsers reflect the completed change.
+
+## 2026-07-18 — Make snapshot image restoration tolerant of invalid URLs
+
+### Prompt
+
+> BigCommerce rejected images for product 130: The field 'image_url' is invalid. The restore may be partially complete.
+
+### Summary
+
+- Normalized captured image URLs by removing store-generated query strings and rejecting URLs over BigCommerce’s image URL length limit.
+- Changed image restore ordering to upload valid images before removing previous product images.
+- Rejected image URLs are skipped so one invalid image cannot abort the rest of the catalog restore; the immutable snapshot remains available for retry.
+
+## 2026-07-18 — Add channel restore, snapshot, and clear actions
+
+### Prompt
+
+> Add a restore snapshot button when in a channel, allow to select a snapshot and version. Open a nice modal window to do that. Also open such nice modal window when taking a new snapshot. Then add a Clear catalog button removing categories, and unassigning products to that channel (don't delete products, it will be an option later)
+
+### Summary
+
+- Added a channel-level Restore Snapshot button with snapshot/version selection and the existing destination-aware confirmation flow.
+- Converted Take snapshot into a modal dialog.
+- Added Clear catalog with typed confirmation; it removes categories from the selected channel tree and unassigns channel products while retaining the products in the store.
+
+## 2026-07-18 — Filter channel catalogs by product assignments
+
+### Prompt
+
+> When navigating to a channel, I sshould only see products that are associated with that channel! I've created a new empty test channel in BigGear Demo and I can see products when openinh it where it should be empty...
+
+### Summary
+
+- Changed the channel catalog loader to resolve BigCommerce product-channel assignments first.
+- Product cards are now loaded only for IDs assigned to the selected channel, so an empty channel displays zero products even when the store contains catalog products elsewhere.
+
+## 2026-07-18 — Preserve destination records during restoration
+
+### Prompt
+
+> also don't remove categories that are not in a snapshot during restore, same for products and variants
+
+### Summary
+
+- Changed restoration to preserve destination categories that are not present in the snapshot.
+- Removed deletion of destination variants and variant options; matching variants are updated and missing variants are created, while unrelated variants remain.
+- Removed cleanup of destination category assignments and channel assignments, so products and assignments outside the snapshot remain intact.
+- Updated the restore modal, README, and changelog to describe the additive behavior.
+
+## 2026-07-18 — Allow restoration into any destination channel
+
+### Prompt
+
+> don't restrict to the channel ID as I need to provision new channels with the tool
+
+### Summary
+
+- Confirmed that snapshot source channel IDs are provenance only; they are not used to restrict restoration.
+- Restore Snapshot now discovers every reachable non-deleted channel across the logged-in user's saved environments and lets the user select a different destination environment/channel.
+- Category, product, variant, image, metadata, hierarchy, and channel-assignment IDs are remapped against the selected destination, allowing a snapshot to provision a newly created channel.
+- Kept destructive confirmation, tenant scoping, and explicit partial-restore reporting for the selected destination.
+
+## 2026-07-18 — Show complete catalog-template names
+
+### Prompt
+
+> It's important to see the full name of the snapshot to void confusion, you can move the version number at the bottom right of the card
+
+### Summary
+
+- Removed snapshot-name truncation and allowed long names to wrap naturally across multiple lines.
+- Moved the latest-version badge from the card heading to the bottom-right footer so it no longer competes with the snapshot identity.
+
+## 2026-07-18 — Group catalog templates and browse version history
+
+### Prompt
+
+> When listing Catalog templates, don't show separate elements for different versions of the same snapshot, merge them, then when opening a snapshot we can list all versions when clicking on a Restore Snapshot button
+
+### Summary
+
+- Replaced the all-version template query with a tenant-scoped series query that returns the latest capture and retained-version count for each case-insensitive snapshot name.
+- Kept the Catalog templates page reverse-chronological while rendering exactly one card per snapshot series.
+- Loaded the selected snapshot's complete tenant-scoped version history on detail pages.
+- Added an accessible Restore Snapshot modal showing every immutable version, its source environment/channel, capture date, catalog counts, and payload size.
+- Linked each historical version back to its catalog preview while leaving destination-store restoration for the next implementation phase.
+
+## 2026-07-18 — Add immutable snapshot versions and name autocomplete
+
+### Prompts
+
+> When trying to save a snapshot with an existing name, ask for confirmation in a nice modal window (showing the existing snapshot details). Increment the snapshot version when saving it, keep the previous ones so it will be feasible to implement a rollback feature
+
+> even better, use autocompletion when entering a snapshot name, allowing to use an existing one (display snapshot name and version and channel in subtitle in the autosuggest panel)
+
+> also restrict the snapshot returned to the same channel id only - like compatible snapshots
+
+> forget the last request and continue, we could overwrite other channels snapshots
+
+### Summary
+
+- Converted snapshot names into tenant-scoped version series with immutable rows and atomic next-version allocation, preserving every previous catalog payload for future rollback.
+- Added snapshot-name autocomplete using the latest version of every user-owned series, with version and source-channel subtitles; the final clarification intentionally keeps suggestions available across channels.
+- Added a server-authoritative duplicate check that returns the latest snapshot metadata before any BigCommerce capture starts.
+- Added an accessible confirmation modal showing source, timestamps, counts, payload size, current version, and the proposed next version.
+- Kept stale confirmations safe by requiring the latest snapshot ID; if a newer version appears before confirmation, the modal refreshes with that newer version instead of silently saving.
+
+## 2026-07-18 — Add restoration-ready catalog snapshots
+
+### Prompt
+
+> Add an option to take a Snapshot of the catalog (record metadata like name, creation date, update date - ask for a Snapshot name) in the database: categories will all attributes, products will all attributes with their variants and all attributes, and all metadata fields as well, and all images link. Add a Snapshot item below Dashboard to navigate the different snapshots the same way as products. A Smapshot should be sufficient to re-create products in a Store (or optionally update existing ones) and re-create all categories and products-categories link. Next actions to implement would be "Load Snapshot", "CLear catalog" (with the option to remove all categories as well). I need the tool to manage all my demo environments and be able to easily create catalog templates and load them to new channels / stores.
+
+### Summary
+
+- Added a tenant-scoped `catalog_snapshots` table with unique names, source environment/channel metadata, format version, category/product/variant/image/metafield counts, payload size, full JSON manifest, and creation/update timestamps.
+- Added a channel-level naming form and authenticated Server Action that captures the complete manifest before atomically saving and redirecting to the snapshot.
+- Captured raw category attributes and hierarchy, category metafields, complete expanded product records, variants and variant metafields, product metafields, options, modifiers, custom fields, pricing rules, videos, all image links, brands, tax classes, and product-category IDs.
+- Added Snapshots below Dashboard, a reverse-chronological template-card index, and tenant-protected snapshot detail pages using the same expandable category tree and filtered product grid as live catalogs.
+- Added a versioned preview DTO alongside the raw restoration data so browsing remains safe while future restore logic can map all source IDs to destination resources.
+- Explicitly deferred Load Snapshot, create-versus-update behavior, Clear catalog, optional category removal, destructive confirmation, and destination ID mapping to the next implementation phase.
+
+## 2026-07-18 — Add interactive category filtering
+
+### Prompt
+
+> Make the tree view expandable / collapsable and also clikcable to list products for a specific category
+
+### Summary
+
+- Replaced the static category list with a focused client component containing accessible expand/collapse buttons and nested tree semantics.
+- Added shareable `?category=` links, an All products option, selected-category styling, and automatic expansion of the selected category's ancestor path.
+- Added category membership to the safe product DTO and filtered products on the server for the selected category and all of its descendants.
+- Disabled category-link prefetching to prevent visible tree links from triggering unnecessary live BigCommerce catalog requests.
+- Preserved the existing product-grid column setting while adding category-specific counts, headings, and empty states.
+
+## 2026-07-18 — Fix BigCommerce product image configuration
+
+### Prompt
+
+> Invalid src prop (https://cdn11.bigcommerce.com/s-dsodqqwyls/products/130/images/445/b3-invoice-product-logo__03907.1781714471.386.513.png?c=1) on `next/image`, hostname "cdn11.bigcommerce.com" is not configured under images in your `next.config.js`
+
+### Summary
+
+- Traced the generic Next.js hostname error to the remote pattern's empty-query requirement, which rejected BigCommerce's `?c=1` cache parameter.
+- Restricted optimized images to the exact `cdn11.bigcommerce.com` host while allowing its query parameters.
+- Documented that the Next.js development server must restart after configuration changes.
+
+## 2026-07-18 — Add channel catalog overviews
+
+### Prompt
+
+> When clicking on a channel, go to a Channel page where you can see an overview of the catalog (tree view on the categories on a left panel, grid of products with image, name, short desc, price in a 6 columns grid)
+
+### Summary
+
+- Made environment channel names and catalog calls-to-action link to a nested dynamic channel route.
+- Added tenant-scoped environment lookup and live channel validation so users cannot access another user's credentials or a deleted/unrelated channel.
+- Resolved each channel's assigned BigCommerce category tree and rendered its nested categories in a responsive, sticky left panel.
+- Loaded channel-filtered products with pagination and rendered optimized images, plain-text short descriptions, calculated prices, and store currency in a six-column wide-screen grid.
+- Added a strict BigCommerce CDN image allowlist, request timeouts, parallel category/product loading, independent error states, loading skeletons, empty states, and invalid-route 404 handling.
+
+## 2026-07-18 — Order channels by name
+
+### Prompt
+
+> Order channels by name ascending
+
+### Summary
+
+- Added a reusable server-side channel-name collator with case-insensitive, numeric-aware comparison.
+- Sorted the filtered channel DTOs before both Dashboard counting and environment-page site loading, keeping the rendered list consistently ascending.
+
+## 2026-07-18 — Filter deleted channels and duplicate URLs
+
+### Prompt
+
+> There should be only 4 channels for BigGear Demo, and only one URL per channel...
+
+### Summary
+
+- Inspected BigGear Demo's live channel and site responses without exposing its access token.
+- Confirmed that the fifth record was a disabled channel with `deleted` status and that every channel site returned primary, canonical, and checkout URL variants.
+- Excluded deleted channels from both Dashboard totals and environment detail pages.
+- Selected only each channel site's primary URL, with its root URL as a fallback, while preserving HTTP and HTTPS validation.
+- Added channel pagination so totals and detail pages remain complete beyond the first API page.
+
+## 2026-07-18 — Add environment channel pages
+
+### Prompt
+
+> In the Dashboard, make environment names clickable. It will go in an environment page, and will list the different channels with name, clickable URLs (new tab)
+
+### Summary
+
+- Made each Dashboard environment name link to its own dynamic detail page while keeping Dashboard highlighted in the application navigation.
+- Added a server-only, tenant-scoped environment lookup that requires both the environment ID and authenticated Clerk user ID.
+- Loaded the selected store's channels and resolved their site URLs with bounded concurrency and independent per-channel failure handling.
+- Added channel cards with names, optional metadata, and validated HTTP or HTTPS storefront links that open safely in a new tab.
+- Added loading, empty, API-error, missing-URL, and not-found states without exposing saved BigCommerce access tokens to the browser.
+
 ## 2026-07-17 — Publish the environment dashboard
 
 ### Prompt
@@ -275,3 +906,8 @@ This file records user prompts and implementation summaries in reverse chronolog
 - Left Vercel project linking, Turso provisioning, environment pulls, and live database initialization for the deployment step because no project had been linked yet.
 - Recorded that the installed global Vercel CLI was 54.6.1 while 56.3.1 was current, and recommended upgrading it.
 - Recorded two moderate npm audit findings caused by Next.js 16.2.10's transitive PostCSS pin; no high or critical findings were present.
+## 2026-07-18 — Persisted background catalog operations
+
+- Clear and restore now create durable Turso operation records and return immediately.
+- A protected API worker performs the BigCommerce mutations while the client polls status, so navigation and reloads no longer restart the action.
+- Progress polling exposes the current server step and cancellation endpoint; clear verifies that product assignments and channel categories were actually removed.
