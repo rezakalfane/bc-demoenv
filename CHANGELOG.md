@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate destination-scoped shipping assignments
+
+- **Date:** 2026-07-19
+- **Source:** `fix/shipping-destination-channel`
+- **Target:** `main`
+- **Type:** Non-fast-forward bug-fix merge
+
+Integrated destination-scoped shipping-method restoration after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Scope restored shipping methods to the destination channel
+
+- **Date:** 2026-07-19
+- **Branch:** `fix/shipping-destination-channel`
+- **Type:** Bug-fix commit
+
+- Assigned newly created shipping methods only to the channel selected for restoration.
+- Preserved existing method-to-channel assignments and appended only the destination channel with deduplication.
+- Prevented shipping restores from automatically exposing methods to unrelated storefront channels.
+- Updated README behavior guidance and reverse-chronological prompt History.
+
 ### Merge — Integrate snapshot portability and configuration-restoration fixes
 
 - **Date:** 2026-07-19

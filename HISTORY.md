@@ -2,6 +2,18 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Scope restored shipping methods to the destination channel
+
+### Prompt
+
+> Instead of adding all channels to a shipping method, just add the channel being processed to the existing list
+
+### Summary
+
+- Assigned newly created shipping methods only to the channel selected as the restore destination.
+- Preserved every existing method-to-channel assignment and appended only the destination channel when updating a method.
+- Avoided automatically exposing restored shipping methods to unrelated active or prelaunch storefronts.
+
 ## 2026-07-19 — Repair rejected shipping-zone restoration
 
 ### Prompts
