@@ -2,6 +2,18 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Sanitize default tax-zone restoration
+
+### Prompt
+
+> Regarding tax restoring: Warning: Tax zone Default Zone: BigCommerce rejected tax zone Default Zone: The default zone cannot have any locations or customer groups attached to it. Please remove these fields from the default zone update request and try again.
+
+### Summary
+
+- Confirmed from BigCommerce's Tax Rates and Zones API documentation that the default zone cannot accept `shopper_target_settings`, which contains its immutable locations and customer groups; live verification also confirmed its `enabled` status is immutable.
+- Removed the complete nested targeting object and enabled flag from default-zone update payloads while retaining captured targeting for ordinary tax zones and compatibility cleanup for older snapshot shapes.
+- Mapped an existing destination default zone before its best-effort metadata update, allowing tax-rate reconciliation to continue even if BigCommerce rejects another editable zone field.
+
 ## 2026-07-19 — Map and restore translations independently
 
 ### Prompt

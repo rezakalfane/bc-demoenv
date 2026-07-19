@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate default tax-zone restoration fix
+
+- **Date:** 2026-07-19
+- **Source:** `fix/default-tax-zone-restore`
+- **Target:** `main`
+- **Type:** Non-fast-forward bug-fix merge
+
+Integrated BigCommerce default tax-zone payload sanitization and resilient tax-rate mapping after official API review, live `rezakalfane` validation, TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Sanitize default tax-zone restoration
+
+- **Date:** 2026-07-19
+- **Branch:** `fix/default-tax-zone-restore`
+- **Type:** Bug-fix commit
+
+- Removed the immutable nested shopper targeting and enabled status from default tax-zone update requests while retaining ordinary-zone locations and customer groups.
+- Matched the default destination zone by its immutable ID with a name fallback and retained its mapping before best-effort metadata updates so tax rates can still reconcile.
+- Confirmed the sanitized payload against the authorized `rezakalfane` environment with a successful BigCommerce `200` response for zone `1`.
+- Updated README tax-restoration guidance and reverse-chronological prompt History.
+
 ### Merge — Integrate safe configuration and localization restoration
 
 - **Date:** 2026-07-19
