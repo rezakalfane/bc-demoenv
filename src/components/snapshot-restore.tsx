@@ -83,6 +83,156 @@ function RestoreSubmitButton({
   );
 }
 
+type CompletedRestorePreflight = NonNullable<
+  RestorePreflightActionState["result"]
+>;
+
+function PreflightComparison({ result }: { result: CompletedRestorePreflight }) {
+  const catalogRows = result.catalog
+    ? [
+        {
+          label: "Categories",
+          snapshot: result.catalog.categoriesInSnapshot,
+          newRecords: result.catalog.categoriesToCreate,
+          matched: result.catalog.categoriesToUpdate,
+          skipped: result.catalog.destinationCategoriesPreserved,
+          conflicts: result.catalog.categoriesConflicting,
+        },
+        {
+          label: "Products",
+          snapshot: result.catalog.productsInSnapshot,
+          newRecords: result.catalog.productsToCreate,
+          matched: result.catalog.productsToMatch,
+          skipped: result.catalog.destinationProductsPreserved,
+          conflicts: result.catalog.productsConflicting,
+        },
+      ]
+    : [];
+  const storeWideGroups = result.selectedGroups.filter(
+    (group) => group.scope !== "channel",
+  );
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-white/3">
+      <div className="flex flex-col gap-2 border-b border-black/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-white/8">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold">Snapshot → Destination</h4>
+          <p className="mt-0.5 truncate text-[11px] text-black/45 dark:text-white/45">
+            {result.snapshotName} v{result.snapshotVersion} → {result.destinationEnvironmentName} · {result.destinationChannelName}
+          </p>
+        </div>
+        <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+          result.canRestore
+            ? "bg-emerald-500/12 text-emerald-800 dark:text-emerald-200"
+            : "bg-red-500/12 text-red-800 dark:text-red-200"
+        }`}>
+          {result.canRestore ? "Ready" : "Blocked"}
+        </span>
+      </div>
+
+      {catalogRows.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[34rem] border-collapse text-left text-xs">
+            <caption className="sr-only">Catalog record comparison between the snapshot and destination</caption>
+            <thead className="bg-black/2 text-[10px] uppercase tracking-wide text-black/40 dark:bg-white/3 dark:text-white/40">
+              <tr>
+                <th scope="col" className="px-4 py-2 font-semibold">Records</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Snapshot</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">New</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Matched</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Skipped</th>
+                <th scope="col" className="px-4 py-2 text-right font-semibold">Conflicting</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/6 dark:divide-white/6">
+              {catalogRows.map((row) => (
+                <tr key={row.label}>
+                  <th scope="row" className="px-4 py-2.5 font-semibold">{row.label}</th>
+                  <td className="px-3 py-2.5 text-right text-black/55 dark:text-white/55">{row.snapshot}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-emerald-700 dark:text-emerald-300">{row.newRecords}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-blue-700 dark:text-blue-300">{row.matched}</td>
+                  <td className="px-3 py-2.5 text-right text-black/45 dark:text-white/45">{row.skipped}</td>
+                  <td className={`px-4 py-2.5 text-right font-semibold ${row.conflicts > 0 ? "text-red-700 dark:text-red-300" : "text-black/35 dark:text-white/35"}`}>{row.conflicts}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="border-t border-black/6 px-4 py-2 text-[10px] text-black/40 dark:border-white/6 dark:text-white/40">
+            Skipped records exist only in the destination and will be preserved.
+          </p>
+        </div>
+      ) : (
+        <p className="px-4 py-3 text-xs text-black/45 dark:text-white/45">Catalog was not selected for this restore.</p>
+      )}
+
+      {result.catalog ? (
+        <div className="grid grid-cols-2 border-t border-black/8 dark:border-white/8">
+          <div className="border-r border-black/8 px-4 py-3 dark:border-white/8">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-black/40 dark:text-white/40">Existing assignments</p>
+            <p className="mt-1 text-lg font-semibold">{result.catalog.productsAlreadyAssigned}</p>
+            <p className="text-[10px] text-black/40 dark:text-white/40">Already on this channel</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-black/40 dark:text-white/40">New assignments</p>
+            <p className="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-300">{result.catalog.channelAssignmentsToAdd}</p>
+            <p className="text-[10px] text-black/40 dark:text-white/40">Will be added to this channel</p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid border-t border-black/8 md:grid-cols-2 dark:border-white/8">
+        <div className="border-b border-black/8 px-4 py-3 md:border-r md:border-b-0 dark:border-white/8">
+          <div className="flex items-center justify-between gap-3">
+            <h5 className="text-xs font-semibold">Store-wide changes</h5>
+            <span className="text-[10px] text-black/40 dark:text-white/40">{storeWideGroups.length}</span>
+          </div>
+          {storeWideGroups.length > 0 ? (
+            <ul className="mt-2 space-y-1.5">
+              {storeWideGroups.map((group) => (
+                <li key={group.id} className="flex items-center justify-between gap-3 text-[11px]">
+                  <span className="min-w-0 truncate">{group.label}</span>
+                  <span className="shrink-0 text-black/40 dark:text-white/40">
+                    {group.resourceCount} resources · {group.scope === "mixed" ? "Channel + store" : "Store-wide"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-[11px] text-black/40 dark:text-white/40">None selected.</p>
+          )}
+        </div>
+
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <h5 className="text-xs font-semibold">Manual actions required</h5>
+            <span className="text-[10px] text-black/40 dark:text-white/40">{result.manualActions.length}</span>
+          </div>
+          {result.manualActions.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] leading-4 text-amber-900 dark:text-amber-100">
+              {result.manualActions.map((action) => <li key={action}>{action}</li>)}
+            </ul>
+          ) : (
+            <p className="mt-2 text-[11px] text-black/40 dark:text-white/40">No manual follow-up identified.</p>
+          )}
+        </div>
+      </div>
+
+      {result.warnings.length > 0 ? (
+        <div className="border-t border-amber-500/20 bg-amber-500/7 px-4 py-3 text-[11px] leading-4 text-amber-950 dark:text-amber-100">
+          <p className="font-semibold">Warnings ({result.warnings.length})</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+        </div>
+      ) : null}
+      {result.blockingIssues.length > 0 ? (
+        <div role="alert" className="border-t border-red-500/20 bg-red-500/7 px-4 py-3 text-[11px] leading-4 text-red-950 dark:text-red-100">
+          <p className="font-semibold">Conflicts to resolve ({result.blockingIssues.length})</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">{result.blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function SnapshotRestore({
   snapshot,
   destinations,
@@ -665,28 +815,15 @@ export function SnapshotRestore({
                         <p className="mt-3 font-semibold">Running destination preflight…</p>
                         <p className="mt-1 text-xs opacity-70">Checking catalog matches, resources, warnings, and store-wide impact.</p>
                       </div>
+                    ) : preflightMatchesCurrentSelection && currentPreflight ? (
+                      <>
+                        <p className="mt-4 text-xs font-medium" aria-live="polite">{preflightState.message}</p>
+                        <PreflightComparison result={currentPreflight} />
+                      </>
                     ) : preflightMatchesCurrentSelection && preflightState.message ? (
-                      <div className={`mt-4 rounded-2xl border p-4 text-xs leading-5 ${
-                        preflightPassed
-                          ? "border-emerald-500/25 bg-emerald-500/8 text-emerald-900 dark:text-emerald-100"
-                          : "border-red-500/25 bg-red-500/8 text-red-900 dark:text-red-100"
-                      }`} role={preflightPassed ? "status" : "alert"}>
-                        <p className="font-semibold">{preflightState.message}</p>
-                        {currentPreflight?.catalog ? (
-                          <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Categories created</dt><dd className="text-base font-semibold">{currentPreflight.catalog.categoriesToCreate}</dd></div>
-                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Categories matched</dt><dd className="text-base font-semibold">{currentPreflight.catalog.categoriesToUpdate}</dd></div>
-                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Products created</dt><dd className="text-base font-semibold">{currentPreflight.catalog.productsToCreate}</dd></div>
-                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Products matched</dt><dd className="text-base font-semibold">{currentPreflight.catalog.productsToMatch}</dd></div>
-                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Assignments added</dt><dd className="text-base font-semibold">{currentPreflight.catalog.channelAssignmentsToAdd}</dd></div>
-                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Already assigned</dt><dd className="text-base font-semibold">{currentPreflight.catalog.productsAlreadyAssigned}</dd></div>
-                          </dl>
-                        ) : null}
-                        {currentPreflight?.selectedGroups.length ? <p className="mt-3">Resources: {currentPreflight.selectedGroups.map((group) => `${group.label} (${group.resourceCount})`).join(", ")}</p> : null}
-                        {currentPreflight?.warnings.length ? <ul className="mt-2 list-disc space-y-1 pl-4">{currentPreflight.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
-                        {currentPreflight?.manualActions.length ? <ul className="mt-2 list-disc space-y-1 pl-4">{currentPreflight.manualActions.map((action) => <li key={action}>{action}</li>)}</ul> : null}
-                        {currentPreflight?.blockingIssues.length ? <ul className="mt-2 list-disc space-y-1 pl-4">{currentPreflight.blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul> : null}
-                      </div>
+                      <p role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-xs text-red-900 dark:text-red-100">
+                        {preflightState.message}
+                      </p>
                     ) : (
                       <p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
                         Run preflight again before restoring this selection.

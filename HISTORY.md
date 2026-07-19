@@ -2,6 +2,29 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Release the visual preflight comparison
+
+### Prompt
+
+> Perfect you can document, branch, commit, merge and push
+
+### Summary
+
+- Finalized the visual Snapshot → Destination preflight comparison documentation and release changelog.
+- Verified the feature, committed `feature/preflight-comparison`, merged it into `main`, and pushed the updated main branch.
+
+## 2026-07-20 — Add a visual restore preflight comparison
+
+### Prompt
+
+> Let's improve pre-flight: Visual preflight comparison. Show “Snapshot → Destination” differences in a compact table: New, matched, skipped, and conflicting records; existing versus new assignments; store-wide changes; manual actions required.
+
+### Summary
+
+- Replaced the preflight metric cards with a compact, responsive Snapshot → Destination comparison table for category and product totals, creates, matches, destination-only preserved records, and structured conflicts.
+- Added a dedicated existing/new channel-assignment comparison plus concise store-wide/mixed-scope impact and manual-action summaries.
+- Kept warnings and blocking conflicts visually distinct, and extended the server preflight model to calculate preserved destination records and conflicting source records directly instead of inferring them from warning text.
+
 ## 2026-07-20 — Release the restore wizard UX
 
 ### Prompt
