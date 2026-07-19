@@ -10,6 +10,7 @@ import {
 } from "@/lib/db";
 import type { CatalogSnapshotManifestV1 } from "@/lib/catalog-snapshots";
 import {
+  SNAPSHOT_RESTORE_GROUPS,
   parseSnapshotRestoreGroups,
   type CapturedConfigurationResource,
   type SnapshotRestoreGroup,
@@ -68,6 +69,31 @@ export type CatalogRestoreResult = {
   restoredGroups: SnapshotRestoreGroup[];
   destinationEnvironmentName: string;
   destinationChannelName: string;
+};
+
+export type CatalogRestorePreflight = {
+  canRestore: boolean;
+  snapshotName: string;
+  snapshotVersion: number;
+  destinationEnvironmentName: string;
+  destinationChannelName: string;
+  selectedGroups: Array<{
+    id: SnapshotRestoreGroup;
+    label: string;
+    scope: "channel" | "mixed" | "store";
+    resourceCount: number;
+  }>;
+  catalog: {
+    categoriesToCreate: number;
+    categoriesToUpdate: number;
+    productsToCreate: number;
+    productsToMatch: number;
+    channelAssignmentsToAdd: number;
+    productsAlreadyAssigned: number;
+  } | null;
+  warnings: string[];
+  blockingIssues: string[];
+  manualActions: string[];
 };
 
 export type CatalogRestoreManualAction = {
@@ -1018,6 +1044,233 @@ function parseManifest(snapshot: CatalogSnapshotRecord) {
   }
 
   return manifest as CatalogSnapshotManifestV1;
+}
+
+export async function getCatalogRestorePreflight(input: {
+  snapshotId: number;
+  destinationEnvironmentId: number;
+  destinationChannelId: number;
+  restoreGroups: SnapshotRestoreGroup[];
+  userId?: string;
+}): Promise<CatalogRestorePreflight> {
+  const userId = input.userId ?? (await requireAppUser()).id;
+  const snapshot = await getAccessibleCatalogSnapshot(userId, input.snapshotId);
+  if (!snapshot) {
+    throw new CatalogRestoreError(
+      "The selected snapshot is no longer published or is unavailable.",
+    );
+  }
+  const manifest = parseManifest(snapshot);
+  const { environment, channelName } = await resolveDestination(
+    userId,
+    input.destinationEnvironmentId,
+    input.destinationChannelId,
+  );
+  const requestedGroups = parseSnapshotRestoreGroups(input.restoreGroups);
+  const availableGroups = new Set<SnapshotRestoreGroup>([
+    "catalog",
+    ...Object.keys(manifest.configuration ?? {}).flatMap((group) =>
+      parseSnapshotRestoreGroups([group]),
+    ),
+  ]);
+  const blockingIssues: string[] = [];
+  const warnings: string[] = [];
+  const manualActions: string[] = [];
+  if (requestedGroups.length === 0) {
+    blockingIssues.push("Choose at least one snapshot section to restore.");
+  }
+  for (const group of requestedGroups) {
+    if (!availableGroups.has(group)) {
+      blockingIssues.push(
+        `The selected snapshot does not contain the ${group.replaceAll("_", " ")} section.`,
+      );
+    }
+  }
+  const restoreGroups = requestedGroups.filter((group) => availableGroups.has(group));
+  const selectedGroups = restoreGroups.flatMap((id) => {
+    const definition = SNAPSHOT_RESTORE_GROUPS.find((group) => group.id === id);
+    if (!definition) return [];
+    let resourceCount = Object.values(manifest.catalog).reduce(
+      (total, records) => total + (Array.isArray(records) ? records.length : 0),
+      0,
+    );
+    if (id !== "catalog") {
+      const resources = manifest.configuration?.[id]?.resources;
+      resourceCount = resources ? Object.keys(resources).length : 0;
+      for (const resource of Object.values(resources ?? {})) {
+        if (resource.warning) warnings.push(`${resource.label}: ${resource.warning}`);
+      }
+    }
+    return [{
+      id,
+      label: definition.label,
+      scope: definition.scope,
+      resourceCount,
+    }];
+  });
+
+  if (selectedGroups.some((group) => group.scope === "store")) {
+    warnings.push(
+      "One or more selected sections are store-wide and can affect channels other than the destination.",
+    );
+  }
+  if (
+    environment.storeHash === snapshot.sourceStoreHash &&
+    input.destinationChannelId === snapshot.sourceChannelId
+  ) {
+    warnings.push("The destination is the channel from which this snapshot was captured.");
+  }
+  if (restoreGroups.includes("pricing")) {
+    manualActions.push(
+      "Payment-provider visibility must be reviewed manually after currency restoration.",
+    );
+  }
+
+  let catalog: CatalogRestorePreflight["catalog"] = null;
+  if (restoreGroups.includes("catalog")) {
+    const trees = await fetchCollection(
+      environment,
+      `/catalog/trees?channel_id:in=${input.destinationChannelId}`,
+      "destination category trees for restore preflight",
+    );
+    const treeId = trees
+      .map(asRecord)
+      .map((tree) => readPositiveInteger(tree?.id))
+      .find((id): id is number => Boolean(id));
+    const targetCategories = treeId
+      ? (await fetchCollection(
+          environment,
+          `/catalog/trees/categories?tree_id:in=${treeId}`,
+          "destination categories for restore preflight",
+        )).flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
+      : [];
+    const sourceById = new Map<number, SnapshotCategory>();
+    for (const category of manifest.catalog.categories) {
+      const id = readPositiveInteger(category.data.category_id);
+      if (id) sourceById.set(id, category);
+    }
+    const orderedCategories = [...manifest.catalog.categories].sort(
+      (left, right) =>
+        categoryDepth(left, sourceById) - categoryDepth(right, sourceById),
+    );
+    const availableTargets = new Set(targetCategories);
+    const categoryMap = new Map<number, number>();
+    let categoriesToCreate = 0;
+    let categoriesToUpdate = 0;
+    for (const sourceCategory of orderedCategories) {
+      const source = sourceCategory.data;
+      const sourceId = readPositiveInteger(source.category_id);
+      const name = readString(source.name).trim();
+      if (!sourceId || !name) {
+        blockingIssues.push("The snapshot contains an invalid category record.");
+        continue;
+      }
+      const sourceParentId = readPositiveInteger(source.parent_id);
+      const parentId = sourceParentId ? categoryMap.get(sourceParentId) ?? 0 : 0;
+      const sourcePath = normalizePath(source.url);
+      const match = [...availableTargets].find((candidate) => {
+        const candidatePath = normalizePath(candidate.url);
+        return sourcePath
+          ? candidatePath === sourcePath
+          : normalizeText(candidate.name) === normalizeText(name) &&
+              Number(candidate.parent_id) === parentId;
+      });
+      const targetId = readPositiveInteger(match?.category_id);
+      if (match && targetId) {
+        categoriesToUpdate += 1;
+        categoryMap.set(sourceId, targetId);
+        availableTargets.delete(match);
+      } else {
+        categoriesToCreate += 1;
+        categoryMap.set(sourceId, -sourceId);
+      }
+    }
+
+    const targetProducts = (
+      await fetchCollection(
+        environment,
+        "/catalog/products?include=variants",
+        "destination products for restore preflight",
+      )
+    ).flatMap((value) => asRecord(value) ? [asRecord(value)!] : []);
+    const assignments = await fetchCollection(
+      environment,
+      `/catalog/products/channel-assignments?channel_id:in=${input.destinationChannelId}`,
+      "destination channel assignments for restore preflight",
+    );
+    const assignedProductIds = new Set(assignments.flatMap((value) => {
+      const id = readPositiveInteger(asRecord(value)?.product_id);
+      return id ? [id] : [];
+    }));
+    const availableProducts = new Set(targetProducts);
+    const sourceProductIdentities = new Map<string, { id: number | null; name: string }>();
+    let productsToCreate = 0;
+    let productsToMatch = 0;
+    let channelAssignmentsToAdd = 0;
+    let productsAlreadyAssigned = 0;
+    for (const sourceRecord of manifest.catalog.products) {
+      const name = readString(sourceRecord.data.name) || "Unnamed product";
+      const sourceKey = productMatchKey(sourceRecord.data);
+      const identities = [
+        ...[...sourceKey.skus].map((sku) => `sku:${sku}`),
+        ...(sourceKey.slug ? [`slug:${sourceKey.slug}`] : []),
+      ];
+      for (const identity of identities) {
+        const previous = sourceProductIdentities.get(identity);
+        const sourceId = readPositiveInteger(sourceRecord.data.id);
+        if (previous && previous.id !== sourceId) {
+          blockingIssues.push(
+            `Snapshot products “${previous.name}” and “${name}” share ${identity.replace(":", " ")}.`,
+          );
+        } else {
+          sourceProductIdentities.set(identity, { id: sourceId ?? null, name });
+        }
+      }
+      const matches = [...availableProducts].filter((target) => {
+        const targetKey = productMatchKey(target);
+        return [...sourceKey.skus].some((sku) => targetKey.skus.has(sku)) ||
+          Boolean(sourceKey.slug && targetKey.slug === sourceKey.slug);
+      });
+      if (matches.length > 1) {
+        blockingIssues.push(
+          `Product “${name}” matches more than one destination product by SKU or slug.`,
+        );
+        continue;
+      }
+      const target = matches[0];
+      if (!target) {
+        productsToCreate += 1;
+        channelAssignmentsToAdd += 1;
+        continue;
+      }
+      availableProducts.delete(target);
+      productsToMatch += 1;
+      const targetId = readPositiveInteger(target.id);
+      if (targetId && assignedProductIds.has(targetId)) productsAlreadyAssigned += 1;
+      else channelAssignmentsToAdd += 1;
+    }
+    catalog = {
+      categoriesToCreate,
+      categoriesToUpdate,
+      productsToCreate,
+      productsToMatch,
+      channelAssignmentsToAdd,
+      productsAlreadyAssigned,
+    };
+  }
+
+  return {
+    canRestore: blockingIssues.length === 0,
+    snapshotName: snapshot.name,
+    snapshotVersion: snapshot.snapshotVersion,
+    destinationEnvironmentName: environment.name,
+    destinationChannelName: channelName,
+    selectedGroups,
+    catalog,
+    warnings: [...new Set(warnings)],
+    blockingIssues: [...new Set(blockingIssues)],
+    manualActions,
+  };
 }
 
 function capturedData(resource: CapturedConfigurationResource | undefined) {
@@ -2184,6 +2437,7 @@ async function mapExistingCatalogForTranslations(
   manifest: CatalogSnapshotManifestV1,
   categoryMap: Map<number, number>,
   productMap: Map<number, number>,
+  variantMap?: Map<number, number>,
 ) {
   const trees = await fetchCollection(
     environment,
@@ -2275,6 +2529,14 @@ async function mapExistingCatalogForTranslations(
     if (targetId) {
       productMap.set(sourceId, targetId);
       usedTargetProductIds.add(targetId);
+      if (variantMap) {
+        for (const [sourceVariantId, targetVariantId] of mapExistingVariants(
+          sourceRecord,
+          matches[0],
+        )) {
+          variantMap.set(sourceVariantId, targetVariantId);
+        }
+      }
     }
   }
 }
@@ -3249,7 +3511,12 @@ export async function restoreCatalogSnapshot(input: {
     );
     await input.onProgress?.("Verifying channel catalog assignments", 3, 3);
   }
-  if (restoreGroups.includes("localization")) {
+  if (
+    restoreGroups.includes("localization") ||
+    (!restoreGroups.includes("catalog") && restoreGroups.some((group) =>
+      group === "pricing" || group === "b2b"
+    ))
+  ) {
     await input.onProgress?.(
       "Mapping destination products and categories for translations",
     );
@@ -3260,6 +3527,7 @@ export async function restoreCatalogSnapshot(input: {
         manifest,
         categoryState.sourceToTarget,
         productState.sourceToTargetProduct,
+        productState.sourceToTargetVariant,
       );
     } catch (error) {
       productState.warnings.push(

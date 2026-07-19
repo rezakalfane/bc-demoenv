@@ -2,6 +2,53 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Release durable catalog workflows and restore preflight
+
+### Prompt
+
+> you can doc branch commit merge and push
+
+### Summary
+
+- Updated the project documentation and changelog for durable snapshot restore and catalog clear Workflows, restore preflight, pending-state feedback, and validated Workflow diagrams.
+- Created `feature/durable-catalog-workflows`, verified the complete change set, committed it, merged it into `main`, and pushed the updated main branch.
+
+## 2026-07-19 — Document durable Workflow execution diagrams
+
+### Prompt
+
+> Using mermaid cli is it possible to document the 3 workflows with start / end and all steps in DETAILS?
+
+### Summary
+
+- Added Mermaid flowcharts for snapshot capture, snapshot restore, and catalog clear to `DETAILS.md`, including start/end states, loops, every registered step, retry limits, and failure paths.
+- Clarified that restore and clear share one branched Workflow and that cancellation is external run control rather than a `"use step"` function.
+- Rendered all three diagrams successfully with Mermaid CLI 11.16.0 to validate their syntax.
+
+## 2026-07-19 — Show restore preflight pending state
+
+### Prompt
+
+> When clicking on Run restore preflight, disable the button and show a spinner until the results come back
+
+### Summary
+
+- Connected the preflight button to its Server Action pending state, disabling repeat submissions while the request is running.
+- Added an accessible busy state, animated spinner, and **Running preflight…** label until the preflight result returns.
+
+## 2026-07-19 — Add durable restore and clear workflows with restore preflight
+
+### Prompt
+
+> Let's do durable restore and clear workflows and then restore preflight
+
+### Summary
+
+- Replaced request-lifetime `after()` execution for restore and clear with registered Vercel Workflow runs whose IDs, status, progress, results, and cancellation remain persisted in Turso.
+- Added retryable restore-group and clear steps, generic Workflow reconciliation, and durable cancellation so navigation, reloads, deployments, and Function restarts do not restart an operation from the browser.
+- Added a read-only restore preflight that revalidates access and the destination, reports catalog matches/creates and channel assignments, inventories selected configuration resources, surfaces warnings and manual work, and blocks ambiguous SKU/slug matches.
+- Required a current successful preflight before typed confirmation in the UI and repeated the same validation on the server immediately before starting restoration.
+
 ## 2026-07-19 — Document the Turso database schema
 
 ### Prompt

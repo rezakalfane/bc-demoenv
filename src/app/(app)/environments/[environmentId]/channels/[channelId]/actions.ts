@@ -3,8 +3,7 @@
 import { requireAppUser } from "@/lib/auth";
 import { createCatalogOperation } from "@/lib/db";
 import type { ClearCatalogResult } from "@/lib/catalog-restore";
-import { runCatalogOperation } from "@/lib/catalog-operation-runner";
-import { after } from "next/server";
+import { startCatalogOperationWorkflow } from "@/lib/start-catalog-snapshot-workflow";
 
 export type ClearCatalogActionState = {
   status: "idle" | "error" | "success";
@@ -34,10 +33,8 @@ export async function clearCatalog(
   try {
     const user = await requireAppUser();
     const operationId = await createCatalogOperation(user.id, { kind: "clear", environmentId, channelId, payload: { destinationEnvironmentId: environmentId, destinationChannelId: channelId } });
-    after(async () => {
-      await runCatalogOperation(user.id, operationId);
-    });
-    return { status: "success", message: "Clear started in the background.", result: null, operationId };
+    await startCatalogOperationWorkflow(user.id, operationId);
+    return { status: "success", message: "Durable clear workflow started.", result: null, operationId };
   } catch (error) {
     console.error("Unable to start clear catalog operation", error);
     return {

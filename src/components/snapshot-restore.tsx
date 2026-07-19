@@ -4,11 +4,13 @@ import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
+  preflightSnapshotRestore,
   restoreSnapshot,
+  type RestorePreflightActionState,
   type RestoreSnapshotActionState,
 } from "@/app/(app)/snapshots/restore-actions";
 import type { CatalogRestoreDestination } from "@/lib/catalog-restore";
-import { CATALOG_OPERATION_KEY, finishCatalogOperation, startCatalogOperation, useCatalogOperationActive } from "@/components/catalog-operation-progress";
+import { finishCatalogOperation, startCatalogOperation, useCatalogOperationActive } from "@/components/catalog-operation-progress";
 import { RestoreIcon } from "@/components/action-icons";
 import {
   isSnapshotRestoreGroupRestorable,
@@ -19,6 +21,16 @@ import {
 const initialState: RestoreSnapshotActionState = {
   status: "idle",
   message: "",
+  result: null,
+};
+
+const initialPreflightState: RestorePreflightActionState = {
+  status: "idle",
+  message: "",
+  snapshotId: null,
+  destinationEnvironmentId: null,
+  destinationChannelId: null,
+  restoreGroups: [],
   result: null,
 };
 
@@ -46,18 +58,6 @@ function RestoreSubmitButton({ enabled }: { enabled: boolean }) {
   );
 }
 
-function RestoreProgress() {
-  return (
-    <div className="order-last basis-full rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-3" role="status" aria-live="polite">
-      <div className="flex items-center justify-between gap-3 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
-        <span>Restoring catalog</span><span>Working…</span>
-      </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-emerald-950/10 dark:bg-white/10"><div className="h-full w-2/5 animate-pulse rounded-full bg-emerald-500" /></div>
-      <p className="mt-2 text-[11px] text-emerald-900/65 dark:text-emerald-100/65">Categories → products → variants and images → channel assignments</p>
-    </div>
-  );
-}
-
 export function SnapshotRestore({
   snapshot,
   destinations,
@@ -65,7 +65,6 @@ export function SnapshotRestore({
   initialDestinationEnvironmentId,
   initialDestinationChannelId,
   matchSourceDestination = true,
-  stepNames = [],
 }: {
   snapshot: {
     id: number;
@@ -163,9 +162,11 @@ export function SnapshotRestore({
     defaultRestoreGroups,
   );
   const [showActionFeedback, setShowActionFeedback] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const operationStorageKey = CATALOG_OPERATION_KEY;
   const [state, formAction] = useActionState(restoreSnapshot, initialState);
+  const [preflightState, preflightAction, preflightPending] = useActionState(
+    preflightSnapshotRestore,
+    initialPreflightState,
+  );
   const modalRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const selectedEnvironment = destinations.find(
@@ -178,6 +179,19 @@ export function SnapshotRestore({
     selectedEnvironment?.storeHash === activeSnapshot.sourceStoreHash;
   const isSameChannel =
     isSameStore && selectedChannel?.id === activeSnapshot.sourceChannelId;
+  const normalizedRestoreGroups = [...restoreGroups].sort();
+  const preflightMatchesCurrentSelection =
+    preflightState.snapshotId === activeSnapshot.id &&
+    preflightState.destinationEnvironmentId === Number(environmentId) &&
+    preflightState.destinationChannelId === Number(channelId) &&
+    preflightState.restoreGroups.length === normalizedRestoreGroups.length &&
+    [...preflightState.restoreGroups].sort().every(
+      (group, index) => group === normalizedRestoreGroups[index],
+    );
+  const currentPreflight = preflightMatchesCurrentSelection
+    ? preflightState.result
+    : null;
+  const preflightPassed = Boolean(currentPreflight?.canRestore);
 
   function openRestoreModal() {
     setShowActionFeedback(false);
@@ -187,20 +201,12 @@ export function SnapshotRestore({
   }
 
   useEffect(() => {
-    if (window.localStorage.getItem(operationStorageKey)) {
-      const timer = window.setTimeout(() => setIsRunning(true), 0);
-      return () => window.clearTimeout(timer);
-    }
-  }, [operationStorageKey]);
-
-  useEffect(() => {
     if (state.status === "success") {
       if (state.operationId) {
         startCatalogOperation({ kind: "restore", snapshotId: activeSnapshot.id, environmentId: Number(environmentId), channelId: Number(channelId), operationId: state.operationId });
       }
       queueMicrotask(() => {
         setShowActionFeedback(true);
-        setIsRunning(true);
         setIsOpen(false);
       });
       router.refresh();
@@ -208,11 +214,10 @@ export function SnapshotRestore({
       finishCatalogOperation();
       queueMicrotask(() => {
         setShowActionFeedback(true);
-        setIsRunning(false);
         setIsOpen(true);
       });
     }
-  }, [activeSnapshot.id, channelId, environmentId, operationStorageKey, router, state.operationId, state.status]);
+  }, [activeSnapshot.id, channelId, environmentId, router, state.operationId, state.status]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -528,17 +533,95 @@ export function SnapshotRestore({
                     ) : null}
                   </fieldset>
                   <div className="my-4 border-t border-black/8 dark:border-white/8" />
-                  <label htmlFor="restore-confirmation" className="text-sm font-medium">
-                    Type <span className="font-mono">RESTORE</span> to confirm
-                  </label>
-                  <input
-                    id="restore-confirmation"
-                    name="confirmation"
-                    autoComplete="off"
-                    value={confirmation}
-                    onChange={(event) => setConfirmation(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 font-mono text-sm outline-none focus:border-red-500 dark:border-white/12 dark:bg-neutral-900"
-                  />
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Destination preflight</h3>
+                      <p className="mt-1 text-xs leading-5 text-black/45 dark:text-white/45">
+                        Checks catalog matches, selected resources, warnings, and store-wide impact without changing BigCommerce.
+                      </p>
+                    </div>
+                    <button
+                      type="submit"
+                      formAction={preflightAction}
+                      disabled={preflightPending}
+                      aria-busy={preflightPending}
+                      className="inline-flex items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-45 dark:text-emerald-200"
+                    >
+                      {preflightPending ? (
+                        <>
+                          <span
+                            className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+                            aria-hidden="true"
+                          />
+                          Running preflight…
+                        </>
+                      ) : (
+                        "Run restore preflight"
+                      )}
+                    </button>
+                  </div>
+
+                  {preflightMatchesCurrentSelection && preflightState.message ? (
+                    <div className={`mt-3 rounded-xl border p-3 text-xs leading-5 ${
+                      preflightPassed
+                        ? "border-emerald-500/25 bg-emerald-500/8 text-emerald-900 dark:text-emerald-100"
+                        : "border-red-500/25 bg-red-500/8 text-red-900 dark:text-red-100"
+                    }`} role={preflightPassed ? "status" : "alert"}>
+                      <p className="font-semibold">{preflightState.message}</p>
+                      {currentPreflight?.catalog ? (
+                        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+                          <div><dt className="text-black/45 dark:text-white/45">Categories created</dt><dd className="font-semibold">{currentPreflight.catalog.categoriesToCreate}</dd></div>
+                          <div><dt className="text-black/45 dark:text-white/45">Categories matched</dt><dd className="font-semibold">{currentPreflight.catalog.categoriesToUpdate}</dd></div>
+                          <div><dt className="text-black/45 dark:text-white/45">Products created</dt><dd className="font-semibold">{currentPreflight.catalog.productsToCreate}</dd></div>
+                          <div><dt className="text-black/45 dark:text-white/45">Products matched</dt><dd className="font-semibold">{currentPreflight.catalog.productsToMatch}</dd></div>
+                          <div><dt className="text-black/45 dark:text-white/45">Assignments added</dt><dd className="font-semibold">{currentPreflight.catalog.channelAssignmentsToAdd}</dd></div>
+                          <div><dt className="text-black/45 dark:text-white/45">Already assigned</dt><dd className="font-semibold">{currentPreflight.catalog.productsAlreadyAssigned}</dd></div>
+                        </dl>
+                      ) : null}
+                      {currentPreflight?.selectedGroups.length ? (
+                        <p className="mt-2">
+                          Sections: {currentPreflight.selectedGroups.map((group) => `${group.label} (${group.resourceCount})`).join(", ")}
+                        </p>
+                      ) : null}
+                      {currentPreflight?.warnings.length ? (
+                        <ul className="mt-2 list-disc space-y-1 pl-4">
+                          {currentPreflight.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                        </ul>
+                      ) : null}
+                      {currentPreflight?.manualActions.length ? (
+                        <ul className="mt-2 list-disc space-y-1 pl-4">
+                          {currentPreflight.manualActions.map((action) => <li key={action}>{action}</li>)}
+                        </ul>
+                      ) : null}
+                      {currentPreflight?.blockingIssues.length ? (
+                        <ul className="mt-2 list-disc space-y-1 pl-4">
+                          {currentPreflight.blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : preflightState.status !== "idle" ? (
+                    <p className="mt-3 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+                      The restore selection changed. Run preflight again.
+                    </p>
+                  ) : null}
+
+                  {preflightPassed ? (
+                    <div className="mt-4">
+                      <label htmlFor="restore-confirmation" className="text-sm font-medium">
+                        Type <span className="font-mono">RESTORE</span> to confirm
+                      </label>
+                      <input
+                        id="restore-confirmation"
+                        name="confirmation"
+                        autoComplete="off"
+                        value={confirmation}
+                        onChange={(event) => setConfirmation(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 font-mono text-sm outline-none focus:border-red-500 dark:border-white/12 dark:bg-neutral-900"
+                      />
+                    </div>
+                  ) : (
+                    <input type="hidden" name="confirmation" value="" />
+                  )}
                   <div className="mt-5 flex flex-col-reverse gap-3 border-t border-black/8 pt-5 sm:flex-row sm:justify-end dark:border-white/8">
                     <button
                       type="button"
@@ -549,6 +632,7 @@ export function SnapshotRestore({
                     </button>
                     <RestoreSubmitButton
                       enabled={
+                        preflightPassed &&
                         confirmation === "RESTORE" &&
                         restoreGroups.length > 0 &&
                         Boolean(selectedEnvironment && selectedChannel)
