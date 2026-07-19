@@ -565,14 +565,24 @@ async function reconcileTaxConfiguration(
     const sourceId = readPositiveInteger(source?.id);
     const name = readString(source?.name);
     if (!sourceId || !name) continue;
-    const target = sourceId === 1
-      ? targetZones.find((zone) => Number(zone.id) === 1)
+    const isDefaultZone = sourceId === 1 || normalizeText(name) === "default zone";
+    const target = isDefaultZone
+      ? targetZones.find((zone) => Number(zone.id) === 1) ??
+        targetZones.find((zone) => normalizeText(zone.name) === "default zone")
       : targetZones.find((zone) => normalizeText(zone.name) === normalizeText(name));
     let targetId = readPositiveInteger(target?.id);
+    if (targetId) zoneMap.set(sourceId, targetId);
     await bestEffort(`Tax zone ${name}`, async () => {
       const body = { ...source };
       delete body.id;
-      if (sourceId === 1 || normalizeText(name) === "default zone") {
+      if (isDefaultZone) {
+        // BigCommerce's default zone always covers shoppers not matched by another
+        // zone. Its location and customer-group targeting is immutable and is
+        // returned inside shopper_target_settings, but that response field must
+        // not be echoed back in an update request.
+        delete body.shopper_target_settings;
+        delete body.enabled;
+        // Retain compatibility with older captured Tax API response shapes.
         delete body.locations;
         delete body.customer_groups;
         delete body.customer_group_ids;
