@@ -11,6 +11,7 @@ import type { CatalogRestoreDestination } from "@/lib/catalog-restore";
 import { CATALOG_OPERATION_KEY, finishCatalogOperation, startCatalogOperation, useCatalogOperationActive } from "@/components/catalog-operation-progress";
 import { RestoreIcon } from "@/components/action-icons";
 import {
+  isSnapshotRestoreGroupRestorable,
   SNAPSHOT_RESTORE_GROUPS,
   type SnapshotRestoreGroup,
 } from "@/lib/snapshot-configuration";
@@ -125,6 +126,7 @@ export function SnapshotRestore({
     (candidate) => candidate.id.toString() === selectedSnapshotId,
   ) ?? snapshot;
   const availableGroupDefinitions = SNAPSHOT_RESTORE_GROUPS.filter((group) =>
+    isSnapshotRestoreGroupRestorable(group.id) &&
     activeSnapshot.availableRestoreGroups.includes(group.id),
   );
   const readyDestinations = useMemo(
@@ -151,11 +153,16 @@ export function SnapshotRestore({
     initialChannel?.id.toString() ?? "",
   );
   const [confirmation, setConfirmation] = useState("");
+  const defaultRestoreGroups = SNAPSHOT_RESTORE_GROUPS.filter(
+    (group) =>
+      group.defaultChecked &&
+      isSnapshotRestoreGroupRestorable(group.id) &&
+      activeSnapshot.availableRestoreGroups.includes(group.id),
+  ).map((group) => group.id);
   const [restoreGroups, setRestoreGroups] = useState<SnapshotRestoreGroup[]>(
-    SNAPSHOT_RESTORE_GROUPS.filter((group) => group.defaultChecked).map(
-      (group) => group.id,
-    ),
+    defaultRestoreGroups,
   );
+  const [showActionFeedback, setShowActionFeedback] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const operationStorageKey = CATALOG_OPERATION_KEY;
   const [state, formAction] = useActionState(restoreSnapshot, initialState);
@@ -172,6 +179,13 @@ export function SnapshotRestore({
   const isSameChannel =
     isSameStore && selectedChannel?.id === activeSnapshot.sourceChannelId;
 
+  function openRestoreModal() {
+    setShowActionFeedback(false);
+    setConfirmation("");
+    setRestoreGroups(defaultRestoreGroups);
+    setIsOpen(true);
+  }
+
   useEffect(() => {
     if (window.localStorage.getItem(operationStorageKey)) {
       const timer = window.setTimeout(() => setIsRunning(true), 0);
@@ -185,6 +199,7 @@ export function SnapshotRestore({
         startCatalogOperation({ kind: "restore", snapshotId: activeSnapshot.id, environmentId: Number(environmentId), channelId: Number(channelId), operationId: state.operationId });
       }
       queueMicrotask(() => {
+        setShowActionFeedback(true);
         setIsRunning(true);
         setIsOpen(false);
       });
@@ -192,6 +207,7 @@ export function SnapshotRestore({
     } else if (state.status === "error") {
       finishCatalogOperation();
       queueMicrotask(() => {
+        setShowActionFeedback(true);
         setIsRunning(false);
         setIsOpen(true);
       });
@@ -240,7 +256,7 @@ export function SnapshotRestore({
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={openRestoreModal}
         disabled={readyDestinations.length === 0 || isActionInProgress}
         title={
           readyDestinations.length === 0
@@ -317,6 +333,7 @@ export function SnapshotRestore({
                       );
                       setSelectedSnapshotId(nextSnapshotId);
                       setRestoreGroups((current) => current.filter((group) =>
+                        isSnapshotRestoreGroupRestorable(group) &&
                         nextSnapshot?.availableRestoreGroups.includes(group),
                       ));
                       setConfirmation("");
@@ -434,7 +451,7 @@ export function SnapshotRestore({
                 </ul>
               </div>
 
-              {state.status === "success" && state.result ? (
+              {showActionFeedback && state.status === "success" && state.result ? (
                 <div role="status" className="mt-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-4 text-sm text-emerald-900 dark:text-emerald-100">
                   <p className="font-semibold">{state.message}</p>
                   <p className="mt-1 text-xs leading-5 opacity-75">
@@ -443,13 +460,13 @@ export function SnapshotRestore({
                 </div>
               ) : null}
 
-              {state.status === "error" ? (
+              {showActionFeedback && state.status === "error" ? (
                 <div role="alert" className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/8 p-4 text-sm text-red-800 dark:text-red-200">
                   {state.message}
                 </div>
               ) : null}
 
-              {state.status !== "success" ? (
+              {!(showActionFeedback && state.status === "success") ? (
                 <form action={formAction} className="mt-5">
                   <input type="hidden" name="snapshotId" value={activeSnapshot.id} />
                   <input type="hidden" name="destinationEnvironmentId" value={environmentId} />

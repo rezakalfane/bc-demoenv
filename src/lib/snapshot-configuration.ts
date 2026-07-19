@@ -58,7 +58,7 @@ export const SNAPSHOT_RESTORE_GROUPS = [
   {
     id: "localization",
     label: "Localization & presentation",
-    description: "Catalyst channel locales, store locale defaults, and theme configuration metadata.",
+    description: "Catalyst channel locales, the channel default country, and theme configuration metadata.",
     scope: "mixed",
     defaultChecked: false,
   },
@@ -83,8 +83,16 @@ export type CapturedSnapshotConfiguration = Partial<
 >;
 
 const validRestoreGroups = new Set<string>(
-  SNAPSHOT_RESTORE_GROUPS.map((group) => group.id),
+  SNAPSHOT_RESTORE_GROUPS
+    .filter((group) => group.id !== "channel")
+    .map((group) => group.id),
 );
+
+export function isSnapshotRestoreGroupRestorable(
+  group: SnapshotRestoreGroup,
+) {
+  return group !== "channel";
+}
 
 export function parseSnapshotRestoreGroups(value: unknown) {
   const values = Array.isArray(value) ? value : [];

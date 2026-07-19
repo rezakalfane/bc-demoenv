@@ -19,12 +19,48 @@ export type CatalogHistoryEntry = {
   createdAt: string;
   updatedAt: string;
   details: string[];
+  manualActions: CatalogHistoryManualAction[];
   error: string | null;
+};
+
+export type CatalogHistoryManualAction = {
+  label: string;
+  description: string;
+  href: string;
 };
 
 function parseRecord(value: string | null) {
   if (!value) return {} as Record<string, unknown>;
   try { return JSON.parse(value) as Record<string, unknown>; } catch { return {}; }
+}
+
+function parseManualActions(value: unknown): CatalogHistoryManualAction[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const action = typeof entry === "object" && entry !== null
+      ? entry as Record<string, unknown>
+      : null;
+    if (
+      !action ||
+      typeof action.label !== "string" ||
+      typeof action.description !== "string" ||
+      typeof action.href !== "string"
+    ) return [];
+    try {
+      const url = new URL(action.href);
+      if (
+        url.protocol !== "https:" ||
+        !/^store-[a-z0-9]+\.mybigcommerce\.com$/i.test(url.hostname)
+      ) return [];
+    } catch {
+      return [];
+    }
+    return [{
+      label: action.label,
+      description: action.description,
+      href: action.href,
+    }];
+  });
 }
 
 function operationEntry(
@@ -35,6 +71,7 @@ function operationEntry(
   const result = parseRecord(operation.resultJson);
   const titles = { snapshot: "Snapshot captured", restore: "Snapshot restored", clear: "Catalog cleared" } as const;
   const details: string[] = [];
+  const manualActions = parseManualActions(result.manualActions);
   const snapshotName = snapshot?.name || (typeof result.snapshotName === "string" ? result.snapshotName : "");
   const snapshotVersion = snapshot?.snapshotVersion || Number(result.snapshotVersion) || null;
   if (snapshotName) {
@@ -61,7 +98,7 @@ function operationEntry(
     }
   }
   if (operation.currentStep && operation.status !== "completed") details.push(operation.currentStep);
-  return { id: `operation-${operation.id}`, title: titles[operation.kind], status: operation.status, createdAt: operation.createdAt, updatedAt: operation.updatedAt, details, error: operation.error };
+  return { id: `operation-${operation.id}`, title: titles[operation.kind], status: operation.status, createdAt: operation.createdAt, updatedAt: operation.updatedAt, details, manualActions, error: operation.error };
 }
 
 export async function getChannelCatalogHistory(environmentId: number, channelId: number) {
@@ -94,6 +131,7 @@ export async function getSnapshotCatalogHistory(snapshotId: number) {
     createdAt: version.createdAt,
     updatedAt: version.updatedAt,
     details: [`${version.sourceEnvironmentName} · ${version.sourceChannelName}`, `${version.categoryCount} categories · ${version.productCount} products · ${version.variantCount} variants`],
+    manualActions: [],
     error: null,
   }));
   const eventEntries: CatalogHistoryEntry[] = deletionEvents.map((event) => {
@@ -121,6 +159,7 @@ export async function getSnapshotCatalogHistory(snapshotId: number) {
       createdAt: event.createdAt,
       updatedAt: event.createdAt,
       details,
+      manualActions: [],
       error: null,
     };
   });

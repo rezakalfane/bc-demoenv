@@ -1318,12 +1318,18 @@ async function loadSnapshotConfiguration(
   );
 
   await onProgress?.("Capturing locales, translations, and presentation metadata", 95, 100);
-  const [storeLocale, channelLocales, inventorySettings, locations, scripts] = await Promise.all([
+  const [globalStoreLocale, channelStoreLocale, channelLocales, inventorySettings, locations, scripts] = await Promise.all([
     captureOptionalJson(
       environment,
       "/v3/settings/store/locale",
-      "store locale settings",
+      "global store locale settings",
       "store",
+    ),
+    captureOptionalJson(
+      environment,
+      `/v3/settings/store/locale?channel_id=${channelId}`,
+      "channel locale settings",
+      "channel",
     ),
     captureOptionalGraphql(
       environment,
@@ -1350,6 +1356,27 @@ async function loadSnapshotConfiguration(
       "channel",
     ),
   ]);
+  const globalLocaleData = asRecord(unwrapData(globalStoreLocale));
+  const channelLocaleData = asRecord(unwrapData(channelStoreLocale));
+  const storeCountry =
+    readString(channelLocaleData?.store_country) ||
+    readString(globalLocaleData?.store_country);
+  const defaultShopperLanguage =
+    readString(channelLocaleData?.default_shopper_language) ||
+    readString(globalLocaleData?.default_shopper_language);
+  const storeLocale = capturedResource(
+    "channel locale defaults",
+    "channel",
+    {
+      ...(storeCountry ? { store_country: storeCountry } : {}),
+      ...(defaultShopperLanguage
+        ? { default_shopper_language: defaultShopperLanguage }
+        : {}),
+    },
+    channelStoreLocale.warning && globalStoreLocale.warning
+      ? channelStoreLocale.warning
+      : undefined,
+  );
   const localePayload = asRecord(channelLocales.data);
   const localeStore = asRecord(asRecord(localePayload?.data)?.store);
   const localeEdges = asRecord(localeStore?.locales)?.edges;
