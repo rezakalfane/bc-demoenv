@@ -2,6 +2,46 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Preserve destination contact email
+
+### Prompt
+
+> Don't sync the email from the Contact information
+
+### Summary
+
+- Removed `store_email` from the writable Storefront profile allowlist so snapshot restoration cannot replace the destination channel's contact email.
+- Retained email capture for settings inspection while continuing to restore the contact display name, address, and phone.
+
+## 2026-07-19 — Handle empty customer groups and image-logo uploads
+
+### Prompt
+
+> Warning: customer groups: Unexpected end of JSON input
+> Warning: Logo settings: BigCommerce rejected logo settings: Invalid Input. Fields missing in the input.
+
+### Summary
+
+- Made optional BigCommerce capture parse successful empty response bodies as `null` instead of throwing an end-of-JSON error, and normalized an empty customer-groups response to an empty collection.
+- Suppressed the known empty-response warning when restoring already-created immutable snapshots that captured it before the parser fix.
+- Stopped sending image-logo state through the text-logo Settings endpoint, which rejects image-only payloads as missing fields.
+- Retained non-empty textual logo restoration through the JSON Settings API and image logo/favicon restoration through their dedicated multipart upload endpoints.
+
+## 2026-07-19 — Capture and restore effective storefront settings
+
+### Prompt
+
+> You can override all these storefront settings
+
+### Summary
+
+- Added a dedicated opt-in Storefront settings snapshot group, separate from inspect-only channel, site, route, domain, and integration configuration.
+- Captured the effective source-channel values for contact information, logo/favicon, SEO, robots.txt, product/category display, catalog preferences, inventory rules, search, status messages, and customer privacy by resolving channel overrides against inherited global settings.
+- Restored those values as explicit destination-channel overrides with writable field allowlists, customer-group ID remapping by name, BigCommerce-CDN asset validation, and best-effort logo/favicon uploads.
+- Excluded generated prelaunch passwords, global-only product-filtering state, invalid empty textual logos, and non-writable launch/prelaunch channel state.
+- Removed customer privacy from the general experience capture for new snapshots so selecting both Storefront settings and Checkout experience cannot overwrite the effective privacy restore with inherited null values; older snapshots remain compatible.
+- Verified every JSON settings endpoint, customer privacy, and favicon upload against `rezakalfane` channel `1881648`; all writable requests returned HTTP 200.
+
 ## 2026-07-19 — Sanitize default tax-zone restoration
 
 ### Prompt
