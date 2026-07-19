@@ -2,6 +2,30 @@
 
 This file records every commit and merge in reverse chronological order. Entries are based on Git history; uncommitted working-tree changes are not represented as commits.
 
+## 2026-07-20
+
+### Merge — Integrate durable catalog workflows and restore preflight
+
+- **Date:** 2026-07-20
+- **Source:** `feature/durable-catalog-workflows`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated durable restore and clear execution, destination restore preflight, pending-state feedback, and validated Workflow diagrams after TypeScript, lint, whitespace, Workflow compiler, and optimized production-build verification.
+
+### Commit — Add durable restore and clear workflows with preflight
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/durable-catalog-workflows`
+- **Type:** Feature commit
+
+- Replaced request-lifetime restore and clear processing with registered Vercel Workflow runs, persisted run IDs, retryable steps, status reconciliation, and durable cancellation.
+- Added read-only destination preflight for resource availability, catalog matching, creates, assignments, warnings, store-wide effects, manual actions, and ambiguous SKU/slug blockers.
+- Required a current successful preflight before typed restore confirmation and repeated validation server-side immediately before starting the Workflow.
+- Disabled the preflight action while pending and added accessible spinner feedback.
+- Added Mermaid diagrams covering all snapshot, restore, and clear Workflow steps, loops, retry limits, and terminal paths, validated with Mermaid CLI 11.16.0.
+- Updated README, implementation details, and reverse-chronological prompt History.
+
 ## 2026-07-19
 
 ### Commit — Separate implementation details and document the database schema

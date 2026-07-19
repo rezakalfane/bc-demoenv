@@ -182,9 +182,79 @@ Currency restore creates or enables missing currencies globally in the destinati
 
 BigCommerce currently restricts payment-profile channel associations to its authenticated Control Panel service rather than the public store-token APIs used by background restore jobs. A pricing restore therefore records a manual action in channel and snapshot History for the restored currencies, with a direct link to **Payments → Manage Channel Visibility**. Use that action to assign the intended gateway configuration—such as Test Payment Provider—to the destination channel without copying or persisting Control Panel session credentials.
 
-## Durable capture processing
+## Durable catalog processing
 
 Large snapshot captures are initialized once, checkpointed in Turso, and processed in retryable 30-product Workflow steps before an atomic finalization transaction creates the immutable snapshot version. Closing the browser, navigating away, an individual Function timeout, or a deployment does not discard completed batches. A capture with no server heartbeat for ten minutes is marked failed instead of remaining permanently active, and its name becomes available for another attempt.
+
+Restore and clear operations also start registered Vercel Workflow runs instead of relying on a browser request or a Next.js `after()` callback. Their Workflow run IDs are stored with the tenant-owned operation row in Turso, allowing the API to reconcile run state after navigation, reload, deployment, or a Function restart. Restore checkpoints the selected catalog/configuration groups as retryable steps; clear safely re-reads the remaining channel assignments and categories when a step is retried. Cancellation stops the Workflow run and updates the same operation row used by the channel, environment, dashboard, snapshot, and History views.
+
+### Snapshot capture Workflow
+
+```mermaid
+flowchart TD
+    start([Start snapshot capture]) --> initialize["initializeSnapshotStep<br/>Validate operation and persist capture state<br/>maxRetries: 2"]
+    initialize --> remaining{"Products remaining?"}
+    remaining -- Yes --> batch["captureProductBatchStep<br/>Capture next 30 products and checkpoint<br/>maxRetries: 4"]
+    batch --> remaining
+    remaining -- No --> finalize["finalizeSnapshotStep<br/>Create immutable version atomically<br/>maxRetries: 2"]
+    finalize --> success([Snapshot captured])
+
+    initialize -. Error .-> fail["failSnapshotStep<br/>Persist failure and release active name<br/>maxRetries: 2"]
+    batch -. Error after retries .-> fail
+    finalize -. Error .-> fail
+    fail --> failed([Failed])
+
+    classDef terminal fill:#064e3b,color:#ecfdf5,stroke:#10b981,stroke-width:2px;
+    classDef failure fill:#450a0a,color:#fef2f2,stroke:#ef4444,stroke-width:2px;
+    class start,success terminal;
+    class fail,failed failure;
+```
+
+### Snapshot restore Workflow
+
+```mermaid
+flowchart TD
+    start([Start snapshot restore]) --> initialize["initializeCatalogOperationStep<br/>Validate payload and selected groups<br/>maxRetries: 2"]
+    initialize --> more{"Next selected restore group?"}
+    more -- Yes --> group["restoreCatalogGroupStep<br/>Restore one catalog/configuration group<br/>maxRetries: 3"]
+    group --> more
+    more -- No --> complete["completeRestoreOperationStep<br/>Combine results, warnings, and manual actions<br/>maxRetries: 2"]
+    complete --> success([Restore completed])
+
+    initialize -. Error .-> fail["failCatalogOperationStep<br/>Persist terminal failure unless cancelled<br/>maxRetries: 2"]
+    group -. Error after retries .-> fail
+    complete -. Error .-> fail
+    fail --> failed([Failed])
+
+    classDef terminal fill:#064e3b,color:#ecfdf5,stroke:#10b981,stroke-width:2px;
+    classDef failure fill:#450a0a,color:#fef2f2,stroke:#ef4444,stroke-width:2px;
+    class start,success terminal;
+    class fail,failed failure;
+```
+
+### Clear catalog Workflow
+
+```mermaid
+flowchart TD
+    start([Start catalog clear]) --> initialize["initializeCatalogOperationStep<br/>Validate payload and mark running<br/>maxRetries: 2"]
+    initialize --> clear["clearCatalogStep<br/>Unassign channel products, remove categories,<br/>then verify BigCommerce state<br/>maxRetries: 3"]
+    clear --> complete["completeClearOperationStep<br/>Persist counts and completed status<br/>maxRetries: 2"]
+    complete --> success([Catalog cleared])
+
+    initialize -. Error .-> fail["failCatalogOperationStep<br/>Persist terminal failure unless cancelled<br/>maxRetries: 2"]
+    clear -. Error after retries .-> fail
+    complete -. Error .-> fail
+    fail --> failed([Failed])
+
+    classDef terminal fill:#064e3b,color:#ecfdf5,stroke:#10b981,stroke-width:2px;
+    classDef failure fill:#450a0a,color:#fef2f2,stroke:#ef4444,stroke-width:2px;
+    class start,success terminal;
+    class fail,failed failure;
+```
+
+The restore and clear paths are two branches of `catalogOperationWorkflow` and therefore share their initialization and failure steps. Cancellation is initiated through the catalog-operation API by cancelling the registered run and persisting `cancelled`; it is run control rather than a `"use step"` function, so it is not shown as a step node above.
+
+Restore requires a read-only preflight for the exact snapshot version, destination environment/channel, and selected restore groups. It revalidates snapshot access and destination ownership, resolves existing category paths and product SKU/slug matches, counts new records and channel assignments, surfaces captured-resource warnings and store-wide effects, identifies manual payment-visibility work, and blocks ambiguous product matches. Any selection change invalidates the displayed result, and the server reruns the same preflight immediately before creating the durable restore operation.
 
 ## Catalog restoration behavior
 
