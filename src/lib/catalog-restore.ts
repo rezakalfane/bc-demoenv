@@ -140,7 +140,12 @@ function chunk<T>(items: T[], size: number) {
   return chunks;
 }
 
-function extractApiMessage(payload: unknown) {
+function extractApiMessage(payload: unknown): string {
+  if (Array.isArray(payload)) {
+    return payload
+      .map((entry) => extractApiMessage(entry))
+      .find(Boolean) ?? "";
+  }
   const record = asRecord(payload);
   const errors = asRecord(record?.errors);
   const errorDetails = errors
@@ -417,8 +422,25 @@ const SHIPPING_ZONE_FIELDS = [
   "name", "type", "enabled", "free_shipping", "handling_fees", "locations",
 ] as const;
 const SHIPPING_METHOD_FIELDS = [
-  "name", "type", "enabled", "handling_fees", "is_fallback", "settings",
+  "name", "type", "enabled", "handling_fees", "settings",
 ] as const;
+
+function shippingZoneInput(source: JsonRecord, includeType: boolean) {
+  const body = pick(source, SHIPPING_ZONE_FIELDS);
+  if (!includeType) delete body.type;
+  if (normalizeText(source.type) === "global") {
+    delete body.locations;
+  } else if (Array.isArray(source.locations)) {
+    body.locations = source.locations.flatMap((value) => {
+      const location = asRecord(value);
+      if (!location) return [];
+      const writable = { ...location };
+      delete writable.id;
+      return [writable];
+    });
+  }
+  return body;
+}
 
 async function reconcileShippingConfiguration(
   environment: ConnectedEnvironment,
@@ -427,6 +449,9 @@ async function reconcileShippingConfiguration(
 ) {
   const sourceZones = capturedData(resources.shippingZones);
   if (!Array.isArray(sourceZones)) return;
+  const allStorefrontChannelIds = (await listChannels(environment)).map(
+    (channel) => channel.id,
+  );
   const targetPayload = await apiRequestV2(environment, "/shipping/zones", {
     resource: "destination shipping zones",
   });
@@ -440,21 +465,27 @@ async function reconcileShippingConfiguration(
     const sourceId = readPositiveInteger(source?.id);
     const name = readString(source?.name);
     if (!sourceId || !name) continue;
-    const target = targetZones.find(
-      (candidate) => normalizeText(candidate.name) === normalizeText(name),
+    const target = targetZones.find((candidate) =>
+      normalizeText(source?.type) === "global"
+        ? normalizeText(candidate.type) === "global"
+        : normalizeText(candidate.name) === normalizeText(name),
     );
     let targetId = readPositiveInteger(target?.id);
     await bestEffort(`Shipping zone ${name}`, async () => {
-      const payload = await apiRequestV2(
-        environment,
-        targetId ? `/shipping/zones/${targetId}` : "/shipping/zones",
-        {
-          method: targetId ? "PUT" : "POST",
-          body: pick(source!, SHIPPING_ZONE_FIELDS),
-          resource: `shipping zone ${name}`,
-        },
-      );
-      targetId ??= readPositiveInteger(asRecord(payload)?.id);
+      const isExistingGlobalZone = Boolean(targetId) &&
+        normalizeText(source?.type) === "global";
+      if (!isExistingGlobalZone) {
+        const payload = await apiRequestV2(
+          environment,
+          targetId ? `/shipping/zones/${targetId}` : "/shipping/zones",
+          {
+            method: targetId ? "PUT" : "POST",
+            body: shippingZoneInput(source!, !targetId),
+            resource: `shipping zone ${name}`,
+          },
+        );
+        targetId ??= readPositiveInteger(asRecord(payload)?.id);
+      }
       if (!targetId) return;
       const targetMethodsPayload = await apiRequestV2(
         environment,
@@ -483,7 +514,12 @@ async function reconcileShippingConfiguration(
             : `/shipping/zones/${targetId}/methods`,
           {
             method: targetMethodId ? "PUT" : "POST",
-            body: pick(method, SHIPPING_METHOD_FIELDS),
+            body: {
+              ...pick(method, SHIPPING_METHOD_FIELDS),
+              ...(allStorefrontChannelIds.length > 0
+                ? { channel_ids: allStorefrontChannelIds }
+                : {}),
+            },
             resource: `shipping method ${methodName}`,
           },
         );
@@ -517,6 +553,11 @@ async function reconcileTaxConfiguration(
     await bestEffort(`Tax zone ${name}`, async () => {
       const body = { ...source };
       delete body.id;
+      if (sourceId === 1 || normalizeText(name) === "default zone") {
+        delete body.locations;
+        delete body.customer_groups;
+        delete body.customer_group_ids;
+      }
       const payload = await apiRequest(environment, "/tax/zones", {
         method: targetId ? "PUT" : "POST",
         body: [{ ...(targetId ? { id: targetId } : {}), ...body }],
@@ -579,6 +620,105 @@ async function reconcileTaxConfiguration(
     );
   }
   return zoneMap;
+}
+
+const CURRENCY_CREATE_FIELDS = [
+  "currency_code", "currency_exchange_rate", "token_location", "token",
+  "decimal_token", "thousands_token", "decimal_places", "name", "country_iso2",
+  "auto_update", "enabled", "is_transactional",
+] as const;
+const PRICE_LIST_RECORD_FIELDS = [
+  "currency", "price", "sale_price", "retail_price", "map_price",
+  "bulk_pricing_tiers",
+] as const;
+
+async function prepareCurrencyAssignments(
+  environment: ConnectedEnvironment,
+  resources: Record<string, CapturedConfigurationResource>,
+  assignments: JsonRecord,
+  warnings: string[],
+) {
+  const requested = Array.isArray(assignments.enabled_currencies)
+    ? assignments.enabled_currencies.flatMap((value) => {
+        const code = readString(value).trim().toUpperCase();
+        return code ? [code] : [];
+      })
+    : [];
+  const defaultCurrency = readString(assignments.default_currency).trim().toUpperCase();
+  const requestedCodes = [...new Set([...requested, defaultCurrency].filter(Boolean))];
+  if (requestedCodes.length === 0) return assignments;
+
+  const destinationPayload = await apiRequestV2(environment, "/currencies", {
+    resource: "destination store currencies",
+  });
+  const destinationCurrencies = Array.isArray(destinationPayload)
+    ? destinationPayload.flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
+    : [];
+  const sourcePayload = capturedData(resources.storeCurrencies);
+  const sourceCurrencies = Array.isArray(sourcePayload)
+    ? sourcePayload.flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
+    : [];
+
+  for (const code of requestedCodes) {
+    const destination = destinationCurrencies.find(
+      (currency) => readString(currency.currency_code).toUpperCase() === code,
+    );
+    try {
+      if (destination) {
+        if (!destination.enabled) {
+          const id = readPositiveInteger(destination.id);
+          if (!id) throw new CatalogRestoreError(`Currency ${code} has no destination ID.`);
+          await apiRequestV2(environment, `/currencies/${id}`, {
+            method: "PUT",
+            body: { enabled: true },
+            resource: `currency ${code}`,
+          });
+          destination.enabled = true;
+        }
+        continue;
+      }
+
+      const source = sourceCurrencies.find(
+        (currency) => readString(currency.currency_code).toUpperCase() === code,
+      );
+      if (!source || source.is_transactional !== false) {
+        throw new CatalogRestoreError(
+          `Currency ${code} must first be added to the destination store in Settings > Currencies. BigCommerce does not allow transactional currencies to be created by API.`,
+        );
+      }
+      const body = { ...pick(source, CURRENCY_CREATE_FIELDS), enabled: true };
+      const created = asRecord(await apiRequestV2(environment, "/currencies", {
+        method: "POST",
+        body,
+        resource: `display currency ${code}`,
+      }));
+      if (created) destinationCurrencies.push(created);
+    } catch (error) {
+      warnings.push(
+        `Currency ${code}: ${error instanceof Error ? error.message : "Could not enable currency."}`,
+      );
+    }
+  }
+
+  const enabledCodes = new Set(
+    destinationCurrencies.flatMap((currency) =>
+      currency.enabled ? [readString(currency.currency_code).toUpperCase()] : [],
+    ),
+  );
+  const supported = requested.filter((code) => enabledCodes.has(code));
+  const unsupported = requested.filter((code) => !enabledCodes.has(code));
+  if (unsupported.length > 0) {
+    warnings.push(
+      `Currency assignments skipped unavailable destination currencies: ${unsupported.join(", ")}.`,
+    );
+  }
+  if (defaultCurrency && !enabledCodes.has(defaultCurrency)) {
+    warnings.push(
+      `Currency assignments were not changed because the snapshot default currency ${defaultCurrency} is unavailable in the destination store.`,
+    );
+    return null;
+  }
+  return { ...assignments, enabled_currencies: supported };
 }
 
 function readDataArray(payload: unknown, resource: string) {
@@ -1071,6 +1211,68 @@ async function reconcileB2BConfiguration(
   warnings.push("Creating B2B Companies or users can cause BigCommerce to send account or welcome email to newly created administrator and buyer addresses.");
 }
 
+async function restoreCatalogTranslations(
+  environment: ConnectedEnvironment,
+  destinationChannelId: number,
+  resource: CapturedConfigurationResource | undefined,
+  resourceType: "PRODUCTS" | "CATEGORIES",
+  idMap: Map<number, number>,
+  warnings: string[],
+  bestEffort: (label: string, work: () => Promise<unknown>) => Promise<void>,
+) {
+  const locales = asRecord(capturedData(resource));
+  if (!locales) return;
+  let unmapped = 0;
+  for (const [localeKey, capturedValue] of Object.entries(locales)) {
+    const captured = asRecord(capturedValue);
+    const data = asRecord(captured?.data) ?? captured;
+    const localeCode = readString(data?.localeCode) || localeKey;
+    const edges = data?.edges;
+    if (!localeCode || !Array.isArray(edges)) continue;
+    const entities = edges.flatMap((edge) => {
+      const node = asRecord(asRecord(edge)?.node);
+      const sourceResourceId = readString(node?.resourceId);
+      const sourceId = readPositiveInteger(sourceResourceId.split("/").at(-1));
+      const targetId = sourceId ? idMap.get(sourceId) : undefined;
+      const fields = Array.isArray(node?.fields)
+        ? node.fields.flatMap((value) => {
+            const field = asRecord(value);
+            const fieldName = readString(field?.fieldName);
+            return fieldName && typeof field?.translation === "string"
+              ? [{ fieldName, value: field.translation }]
+              : [];
+          })
+        : [];
+      if (!targetId || fields.length === 0) {
+        if (sourceId && !targetId) unmapped += 1;
+        return [];
+      }
+      const singular = resourceType === "PRODUCTS" ? "product" : "category";
+      return [{ resourceId: `bc/store/${singular}/${targetId}`, fields }];
+    });
+    for (const batch of chunk(entities, 50)) {
+      const entityLiteral = batch.map((entity) =>
+        `{ resourceId: ${JSON.stringify(entity.resourceId)}, fields: [${entity.fields.map((field) =>
+          `{ fieldName: ${JSON.stringify(field.fieldName)}, value: ${JSON.stringify(field.value)} }`,
+        ).join(", ")}] }`,
+      ).join(", ");
+      await bestEffort(`${resourceType.toLowerCase()} translations for ${localeCode}`, () =>
+        graphqlRequest(
+          environment,
+          `mutation RestoreTranslations { translation { updateTranslations(input: { resourceType: ${resourceType}, channelId: ${JSON.stringify(`bc/store/channel/${destinationChannelId}`)}, localeId: ${JSON.stringify(`bc/store/locale/${localeCode}`)}, entities: [${entityLiteral}] }) { errors { ... on Error { message } } } } }`,
+          {},
+          `${resourceType.toLowerCase()} translations for ${localeCode}`,
+        ),
+      );
+    }
+  }
+  if (unmapped > 0) {
+    warnings.push(
+      `${unmapped} ${resourceType.toLowerCase()} translation record${unmapped === 1 ? "" : "s"} could not be applied because its catalog resource was not mapped in the destination.`,
+    );
+  }
+}
+
 async function restoreConfiguration(
   environment: ConnectedEnvironment,
   destinationChannelId: number,
@@ -1078,6 +1280,8 @@ async function restoreConfiguration(
   groups: SnapshotRestoreGroup[],
   warnings: string[],
   sourceToTargetProduct: Map<number, number>,
+  sourceToTargetVariant: Map<number, number>,
+  sourceToTargetCategory: Map<number, number>,
   onProgress?: (currentStep: string, stepIndex?: number, totalSteps?: number) => Promise<void>,
 ) {
   const configuration = manifest.configuration;
@@ -1110,8 +1314,13 @@ async function restoreConfiguration(
       warnings.push(`${group}: this snapshot version does not contain this configuration group.`);
       continue;
     }
-    for (const resource of Object.values(resources)) {
-      if (resource.warning) warnings.push(`${resource.label}: ${resource.warning}`);
+    for (const [resourceKey, resource] of Object.entries(resources)) {
+      const expectedMissingTheme =
+        resourceKey === "activeTheme" &&
+        normalizeText(manifest.catalog.channel.platform) !== "bigcommerce";
+      if (resource.warning && !expectedMissingTheme) {
+        warnings.push(`${resource.label}: ${resource.warning}`);
+      }
     }
 
     if (group === "channel") {
@@ -1196,7 +1405,15 @@ async function restoreConfiguration(
     }
 
     if (group === "pricing") {
-      const currencies = writableObject(capturedData(resources.currencyAssignments));
+      const capturedCurrencies = writableObject(capturedData(resources.currencyAssignments));
+      const currencies = capturedCurrencies
+        ? await prepareCurrencyAssignments(
+            environment,
+            resources,
+            capturedCurrencies,
+            warnings,
+          )
+        : null;
       if (currencies) {
         await bestEffort("Currency assignments", () =>
           apiRequest(environment, `/channels/${destinationChannelId}/currency-assignments`, {
@@ -1260,8 +1477,47 @@ async function restoreConfiguration(
           );
         }
       }
-      if (capturedData(resources.priceListRecords)) {
-        warnings.push("Price-list records were captured, but records whose variant IDs differ in the destination were not copied. Price-list definitions and channel assignments were restored by name.");
+      const recordsByPriceList = asRecord(capturedData(resources.priceListRecords));
+      if (recordsByPriceList) {
+        let unmappedRecords = 0;
+        for (const [sourcePriceListKey, values] of Object.entries(recordsByPriceList)) {
+          const sourcePriceListId = readPositiveInteger(sourcePriceListKey);
+          const targetPriceListId = sourcePriceListId
+            ? priceListIdMap.get(sourcePriceListId) ??
+              (environment.storeHash === manifest.source.storeHash ? sourcePriceListId : undefined)
+            : undefined;
+          if (!targetPriceListId || !Array.isArray(values)) continue;
+          const records = values.flatMap((value) => {
+            const source = asRecord(value);
+            const sourceVariantId = readPositiveInteger(source?.variant_id);
+            const targetVariantId = sourceVariantId
+              ? sourceToTargetVariant.get(sourceVariantId) ??
+                (environment.storeHash === manifest.source.storeHash ? sourceVariantId : undefined)
+              : undefined;
+            if (!source || !targetVariantId) {
+              unmappedRecords += 1;
+              return [];
+            }
+            return [{
+              variant_id: targetVariantId,
+              ...pick(source, PRICE_LIST_RECORD_FIELDS),
+            }];
+          });
+          for (const batch of chunk(records, 250)) {
+            await bestEffort(`Price-list ${targetPriceListId} records`, () =>
+              apiRequest(environment, `/pricelists/${targetPriceListId}/records`, {
+                method: "PUT",
+                body: batch,
+                resource: `price-list ${targetPriceListId} records`,
+              }),
+            );
+          }
+        }
+        if (unmappedRecords > 0) {
+          warnings.push(
+            `${unmappedRecords} price-list record${unmappedRecords === 1 ? "" : "s"} could not be restored because the source variant had no SKU/base-variant match in the destination.`,
+          );
+        }
       }
       continue;
     }
@@ -1285,6 +1541,16 @@ async function restoreConfiguration(
       const zoneMap = await reconcileTaxConfiguration(environment, resources, bestEffort);
       const settings = writableObject(capturedData(resources.taxSettings));
       if (settings) {
+        const priceDisplaySettings = asRecord(settings.price_display_settings);
+        if (priceDisplaySettings && "show_inclusive_in_control_panel" in priceDisplaySettings) {
+          const legacyValue = priceDisplaySettings.show_inclusive_in_control_panel;
+          delete priceDisplaySettings.show_inclusive_in_control_panel;
+          if (!("control_panel_price_display_strategy" in priceDisplaySettings)) {
+            priceDisplaySettings.control_panel_price_display_strategy = legacyValue
+              ? "INCLUSIVE"
+              : "EXCLUSIVE";
+          }
+        }
         for (const key of ["guest_shopper_tax_zone_id", "store_tax_zone_id"]) {
           const sourceId = readPositiveInteger(settings[key]);
           if (sourceId && zoneMap.has(sourceId)) settings[key] = zoneMap.get(sourceId);
@@ -1368,9 +1634,24 @@ async function restoreConfiguration(
           });
         }
       }
-      if (capturedData(resources.productTranslations) || capturedData(resources.categoryTranslations)) {
-        warnings.push("Catalog translations were captured for audit, but were not applied because translated resource IDs must be remapped after catalog reconciliation.");
-      }
+      await restoreCatalogTranslations(
+        environment,
+        destinationChannelId,
+        resources.productTranslations,
+        "PRODUCTS",
+        sourceToTargetProduct,
+        warnings,
+        bestEffort,
+      );
+      await restoreCatalogTranslations(
+        environment,
+        destinationChannelId,
+        resources.categoryTranslations,
+        "CATEGORIES",
+        sourceToTargetCategory,
+        warnings,
+        bestEffort,
+      );
       if (capturedData(resources.activeTheme)) {
         const activeTheme = asRecord(capturedData(resources.activeTheme));
         const configurations = capturedData(resources.themeConfiguration);
@@ -2138,6 +2419,35 @@ async function rebuildVariants(
       );
     }
   }
+  return variantIdMap;
+}
+
+function mapExistingVariants(sourceRecord: SnapshotProduct, target: JsonRecord) {
+  const result = new Map<number, number>();
+  const sourceVariants = Array.isArray(sourceRecord.data.variants)
+    ? sourceRecord.data.variants.flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
+    : [];
+  const targetVariants = Array.isArray(target.variants)
+    ? target.variants.flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
+    : [];
+  const targetBySku = new Map(
+    targetVariants.flatMap((variant) => {
+      const sku = normalizeText(variant.sku);
+      return sku ? [[sku, variant] as const] : [];
+    }),
+  );
+  for (const source of sourceVariants) {
+    const sourceId = readPositiveInteger(source.id);
+    const targetVariant = targetBySku.get(normalizeText(source.sku));
+    const targetId = readPositiveInteger(targetVariant?.id);
+    if (sourceId && targetId) result.set(sourceId, targetId);
+  }
+  const sourceBaseId = readPositiveInteger(sourceRecord.data.base_variant_id);
+  const targetBaseId = readPositiveInteger(target.base_variant_id);
+  if (sourceBaseId && targetBaseId && !result.has(sourceBaseId)) {
+    result.set(sourceBaseId, targetBaseId);
+  }
+  return result;
 }
 
 async function reconcileProducts(
@@ -2170,6 +2480,7 @@ async function reconcileProducts(
   );
   const availableTargets = new Set(targetProducts);
   const sourceToTargetProduct = new Map<number, number>();
+  const sourceToTargetVariant = new Map<number, number>();
   const newlyCreatedSourceIds = new Set<number>();
   const restoredProductIds: number[] = [];
   let created = 0;
@@ -2268,6 +2579,9 @@ async function reconcileProducts(
     // them with this channel and the snapshot categories; their attributes,
     // variants, images, modifiers, and metadata remain unchanged.
     if (!newlyCreatedSourceIds.has(sourceId)) {
+      for (const [sourceVariantId, targetVariantId] of mapExistingVariants(sourceRecord, target)) {
+        sourceToTargetVariant.set(sourceVariantId, targetVariantId);
+      }
       await onProgress?.(
         `Assigned “${name}” to ${categories.length} snapshot categories; channel assignment queued`,
         progressIndex++,
@@ -2292,7 +2606,10 @@ async function reconcileProducts(
       Array.isArray(source.images) ? source.images : [],
     );
     await replaceProductChildren(environment, productId, target, source);
-    await rebuildVariants(environment, productId, target, sourceRecord);
+    const variantMap = await rebuildVariants(environment, productId, target, sourceRecord);
+    for (const [sourceVariantId, targetVariantId] of variantMap) {
+      sourceToTargetVariant.set(sourceVariantId, targetVariantId);
+    }
 
     await syncMetafields(
       environment,
@@ -2315,15 +2632,24 @@ async function reconcileProducts(
     const sourceId = readPositiveInteger(sourceRecord.data.id);
     if (!sourceId || !newlyCreatedSourceIds.has(sourceId)) continue;
     const targetId = sourceId ? sourceToTargetProduct.get(sourceId) : undefined;
-    if (!targetId || !Array.isArray(sourceRecord.data.related_products)) continue;
+    if (!targetId) continue;
 
-    const relatedProducts = sourceRecord.data.related_products.flatMap((value) => {
+    const sourceRelatedProducts = Array.isArray(sourceRecord.data.related_products)
+      ? sourceRecord.data.related_products
+      : [];
+    const automaticRelatedProducts =
+      sourceRelatedProducts.length === 0 ||
+      sourceRelatedProducts.some((value) => Number(value) === -1);
+    const mappedRelatedProducts = sourceRelatedProducts.flatMap((value) => {
       const relatedSourceId = readPositiveInteger(value);
       const relatedTargetId = relatedSourceId
         ? sourceToTargetProduct.get(relatedSourceId)
         : undefined;
       return relatedTargetId ? [relatedTargetId] : [];
     });
+    const relatedProducts = automaticRelatedProducts || mappedRelatedProducts.length === 0
+      ? [-1]
+      : mappedRelatedProducts;
 
     try {
       await apiRequest(environment, `/catalog/products/${targetId}`, {
@@ -2365,6 +2691,7 @@ async function reconcileProducts(
     assignmentsRemoved: 0,
     warnings,
     sourceToTargetProduct,
+    sourceToTargetVariant,
   };
 }
 
@@ -2389,8 +2716,17 @@ export async function restoreCatalogSnapshot(input: {
     input.destinationEnvironmentId,
     input.destinationChannelId,
   );
-  const restoreGroups = parseSnapshotRestoreGroups(
+  const requestedRestoreGroups = parseSnapshotRestoreGroups(
     input.restoreGroups?.length ? input.restoreGroups : ["catalog"],
+  );
+  const availableRestoreGroups = new Set<SnapshotRestoreGroup>([
+    "catalog",
+    ...Object.keys(manifest.configuration ?? {}).flatMap((group) =>
+      parseSnapshotRestoreGroups([group]),
+    ),
+  ]);
+  const restoreGroups = requestedRestoreGroups.filter((group) =>
+    availableRestoreGroups.has(group),
   );
   if (restoreGroups.length === 0) {
     throw new CatalogRestoreError("Choose at least one snapshot section to restore.");
@@ -2406,6 +2742,7 @@ export async function restoreCatalogSnapshot(input: {
     assignmentsRemoved: 0,
     warnings: [] as string[],
     sourceToTargetProduct: new Map<number, number>(),
+    sourceToTargetVariant: new Map<number, number>(),
   };
   if (restoreGroups.includes("catalog")) {
     await input.onProgress?.("Creating and updating categories", 1, 3);
@@ -2432,6 +2769,8 @@ export async function restoreCatalogSnapshot(input: {
     restoreGroups,
     productState.warnings,
     productState.sourceToTargetProduct,
+    productState.sourceToTargetVariant,
+    categoryState.sourceToTarget,
     input.onProgress,
   );
   return {

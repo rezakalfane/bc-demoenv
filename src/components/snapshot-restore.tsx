@@ -26,6 +26,11 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   timeStyle: "short",
 });
 
+const snapshotNameCollator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
+
 function RestoreSubmitButton({ enabled }: { enabled: boolean }) {
   const { pending } = useFormStatus();
 
@@ -76,6 +81,7 @@ export function SnapshotRestore({
     imageCount: number;
     metafieldCount: number;
     createdAt: string;
+    availableRestoreGroups: SnapshotRestoreGroup[];
   };
   destinations: CatalogRestoreDestination[];
   snapshotOptions?: Array<{
@@ -92,6 +98,8 @@ export function SnapshotRestore({
     variantCount: number;
     imageCount: number;
     createdAt: string;
+    publishedAt: string | null;
+    availableRestoreGroups: SnapshotRestoreGroup[];
   }>;
   initialDestinationEnvironmentId?: number;
   initialDestinationChannelId?: number;
@@ -105,11 +113,20 @@ export function SnapshotRestore({
       ? { environmentId: initialDestinationEnvironmentId, channelId: initialDestinationChannelId }
       : { snapshotId: snapshot.id },
   );
-  const selectableSnapshots = snapshotOptions.length > 0 ? snapshotOptions : [snapshot];
+  const orderedSnapshotOptions = [...snapshotOptions].sort((left, right) => {
+    const nameOrder = snapshotNameCollator.compare(left.name, right.name);
+    return nameOrder || right.snapshotVersion - left.snapshotVersion || right.id - left.id;
+  });
+  const selectableSnapshots = orderedSnapshotOptions.length > 0
+    ? orderedSnapshotOptions
+    : [snapshot];
   const [selectedSnapshotId, setSelectedSnapshotId] = useState(snapshot.id.toString());
   const activeSnapshot = selectableSnapshots.find(
     (candidate) => candidate.id.toString() === selectedSnapshotId,
   ) ?? snapshot;
+  const availableGroupDefinitions = SNAPSHOT_RESTORE_GROUPS.filter((group) =>
+    activeSnapshot.availableRestoreGroups.includes(group.id),
+  );
   const readyDestinations = useMemo(
     () => destinations.filter((destination) => destination.channels.length > 0),
     [destinations],
@@ -294,14 +311,21 @@ export function SnapshotRestore({
                     id="restore-snapshot-version"
                     value={selectedSnapshotId}
                     onChange={(event) => {
-                      setSelectedSnapshotId(event.target.value);
+                      const nextSnapshotId = event.target.value;
+                      const nextSnapshot = selectableSnapshots.find(
+                        (candidate) => candidate.id.toString() === nextSnapshotId,
+                      );
+                      setSelectedSnapshotId(nextSnapshotId);
+                      setRestoreGroups((current) => current.filter((group) =>
+                        nextSnapshot?.availableRestoreGroups.includes(group),
+                      ));
                       setConfirmation("");
                     }}
                     className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
                   >
-                    {snapshotOptions.map((option) => (
+                    {orderedSnapshotOptions.map((option) => (
                       <option key={option.id} value={option.id}>
-                        {option.name} · Version {option.snapshotVersion} · {option.sourceChannelName}
+                        {option.publishedAt ? "★ " : ""}{option.name} · Version {option.snapshotVersion}{option.publishedAt ? " · Published" : ""} · {option.sourceChannelName}
                       </option>
                     ))}
                   </select>
@@ -433,10 +457,10 @@ export function SnapshotRestore({
                   <fieldset>
                     <legend className="text-sm font-semibold">Choose what to restore</legend>
                     <p className="mt-1 text-xs leading-5 text-black/45 dark:text-white/45">
-                      Every section is captured when the API token permits it. Catalog is selected by default; configuration is opt-in.
+                      Only sections present in this snapshot version are shown. Catalog is selected by default; configuration is opt-in.
                     </p>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {SNAPSHOT_RESTORE_GROUPS.map((group) => {
+                      {availableGroupDefinitions.map((group) => {
                         const checked = restoreGroups.includes(group.id);
                         const isStoreWide = group.scope === "store";
                         return (

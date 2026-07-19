@@ -2,6 +2,10 @@ import "server-only";
 
 import { createClient, type Client } from "@libsql/client";
 import { decryptSecret, encryptSecret } from "@/lib/secret-encryption";
+import {
+  SNAPSHOT_RESTORE_GROUPS,
+  type SnapshotRestoreGroup,
+} from "@/lib/snapshot-configuration";
 
 export type Note = {
   id: number;
@@ -64,6 +68,10 @@ export type CatalogSnapshotRecord = CatalogSnapshotSummary & {
   payloadJson: string;
 };
 
+export type CatalogSnapshotRestoreOption = CatalogSnapshotSummary & {
+  availableRestoreGroups: SnapshotRestoreGroup[];
+};
+
 export type CatalogSnapshotSeriesSummary = CatalogSnapshotSummary & {
   versionCount: number;
   publishedSnapshotId: number | null;
@@ -73,7 +81,7 @@ export type CatalogSnapshotSeriesSummary = CatalogSnapshotSummary & {
 
 export type CatalogSnapshotEvent = {
   id: number;
-  eventType: "version_deleted" | "version_published" | "version_unpublished";
+  eventType: "snapshot_renamed" | "version_deleted" | "version_published" | "version_unpublished";
   snapshotName: string;
   snapshotId: number;
   snapshotVersion: number;
@@ -795,11 +803,18 @@ const catalogSnapshotColumns = `
 
 export async function getCatalogSnapshots(
   userId: string,
-): Promise<CatalogSnapshotSummary[]> {
+): Promise<CatalogSnapshotRestoreOption[]> {
   await ensureSchema();
+  const configurationGroups = SNAPSHOT_RESTORE_GROUPS.filter(
+    (group) => group.id !== "catalog",
+  );
+  const availabilityColumns = configurationGroups.map(
+    (group) => `CASE WHEN json_valid(payload_json) AND json_type(payload_json, '$.configuration.${group.id}') = 'object' THEN 1 ELSE 0 END AS has_${group.id}`,
+  ).join(",\n        ");
   const result = await getClient().execute({
     sql: `
-      SELECT ${catalogSnapshotColumns}
+      SELECT ${catalogSnapshotColumns},
+        ${availabilityColumns}
       FROM catalog_snapshots
       WHERE user_id = ? OR published_at IS NOT NULL
       ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, id DESC
@@ -807,7 +822,15 @@ export async function getCatalogSnapshots(
     args: [userId, userId],
   });
 
-  return result.rows.map((row) => toCatalogSnapshotSummary(row));
+  return result.rows.map((row) => ({
+    ...toCatalogSnapshotSummary(row),
+    availableRestoreGroups: [
+      "catalog" as const,
+      ...configurationGroups.flatMap((group) =>
+        Number(row[`has_${group.id}`]) === 1 ? [group.id] : [],
+      ),
+    ],
+  }));
 }
 
 export async function getCatalogSnapshotSummariesByIds(
@@ -997,6 +1020,100 @@ export async function getCatalogSnapshotVersionsByName(
   });
 
   return result.rows.map((row) => toCatalogSnapshotSummary(row));
+}
+
+export async function renameCatalogSnapshotSeries(
+  userId: string,
+  snapshotId: number,
+  requestedName: string,
+) {
+  await ensureSchema();
+  const name = normalizeCatalogSnapshotName(requestedName);
+  if (name.length < 1 || name.length > 80) {
+    return { error: "Snapshot names must contain between 1 and 80 characters." } as const;
+  }
+
+  const transaction = await getClient().transaction("write");
+  try {
+    const snapshotResult = await transaction.execute({
+      sql: `SELECT ${catalogSnapshotColumns} FROM catalog_snapshots WHERE user_id = ? AND id = ? LIMIT 1`,
+      args: [userId, snapshotId],
+    });
+    const row = snapshotResult.rows[0];
+    if (!row) {
+      await transaction.rollback();
+      return { error: "Snapshot not found." } as const;
+    }
+
+    const snapshot = toCatalogSnapshotSummary(row);
+    const previousName = snapshot.name;
+    const previousKey = getCatalogSnapshotCaptureKey(previousName);
+    const nextKey = getCatalogSnapshotCaptureKey(name);
+
+    const activeResult = await transaction.execute({
+      sql: `
+        SELECT 1
+        FROM catalog_operations
+        WHERE user_id = ? AND kind = 'snapshot'
+          AND status IN ('queued', 'running') AND operation_key = ?
+        LIMIT 1
+      `,
+      args: [userId, previousKey],
+    });
+    if (activeResult.rows[0]) {
+      await transaction.rollback();
+      return { error: "Wait for the active snapshot capture to finish before renaming it." } as const;
+    }
+
+    if (previousKey !== nextKey) {
+      const conflictResult = await transaction.execute({
+        sql: "SELECT 1 FROM catalog_snapshots WHERE user_id = ? AND name = ? COLLATE NOCASE LIMIT 1",
+        args: [userId, name],
+      });
+      if (conflictResult.rows[0]) {
+        await transaction.rollback();
+        return { error: "A snapshot with this name already exists." } as const;
+      }
+    }
+
+    if (previousName === name) {
+      await transaction.commit();
+      return {
+        error: null,
+        name,
+        snapshotIds: [snapshot.id],
+        published: Boolean(snapshot.publishedAt),
+      } as const;
+    }
+
+    const versionsResult = await transaction.execute({
+      sql: `SELECT id, published_at FROM catalog_snapshots WHERE user_id = ? AND name = ? COLLATE NOCASE`,
+      args: [userId, previousName],
+    });
+    const snapshotIds = versionsResult.rows.map((version) => Number(version.id));
+    const published = versionsResult.rows.some((version) => version.published_at != null);
+
+    await transaction.execute({
+      sql: `UPDATE catalog_snapshots SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND name = ? COLLATE NOCASE`,
+      args: [name, userId, previousName],
+    });
+    await transaction.execute({
+      sql: `UPDATE catalog_snapshot_events SET snapshot_name = ? WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE`,
+      args: [name, userId, previousName],
+    });
+    await transaction.execute({
+      sql: `
+        INSERT INTO catalog_snapshot_events (
+          user_id, event_type, snapshot_name, snapshot_id, snapshot_version, payload_json
+        ) VALUES (?, 'snapshot_renamed', ?, ?, ?, ?)
+      `,
+      args: [userId, name, snapshot.id, snapshot.snapshotVersion, JSON.stringify({ previousName, name })],
+    });
+    await transaction.commit();
+    return { error: null, name, snapshotIds, published } as const;
+  } finally {
+    transaction.close();
+  }
 }
 
 export async function getLatestCatalogSnapshotByName(

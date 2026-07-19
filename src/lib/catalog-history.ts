@@ -99,21 +99,28 @@ export async function getSnapshotCatalogHistory(snapshotId: number) {
   const eventEntries: CatalogHistoryEntry[] = deletionEvents.map((event) => {
     const payload = parseRecord(event.payloadJson);
     const eventTitle = {
+      snapshot_renamed: "Snapshot renamed",
       version_deleted: `Snapshot version ${event.snapshotVersion} deleted`,
       version_published: `Snapshot version ${event.snapshotVersion} published`,
       version_unpublished: `Snapshot version ${event.snapshotVersion} unpublished`,
     }[event.eventType];
+    const details = event.eventType === "snapshot_renamed"
+      ? [
+          `Renamed from ${String(payload.previousName ?? "Unknown")} to ${String(payload.name ?? event.snapshotName)}`,
+          `Snapshot ID ${event.snapshotId}`,
+        ]
+      : [
+          `Snapshot: ${event.snapshotName} · version ${event.snapshotVersion} · ID ${event.snapshotId}`,
+          [payload.sourceEnvironmentName, payload.sourceChannelName].filter(Boolean).join(" · "),
+          `${Number(payload.categoryCount ?? 0)} categories · ${Number(payload.productCount ?? 0)} products · ${Number(payload.variantCount ?? 0)} variants`,
+        ].filter(Boolean);
     return {
       id: `snapshot-event-${event.id}`,
       title: eventTitle,
       status: "completed",
       createdAt: event.createdAt,
       updatedAt: event.createdAt,
-      details: [
-        `Snapshot: ${event.snapshotName} · version ${event.snapshotVersion} · ID ${event.snapshotId}`,
-        [payload.sourceEnvironmentName, payload.sourceChannelName].filter(Boolean).join(" · "),
-        `${Number(payload.categoryCount ?? 0)} categories · ${Number(payload.productCount ?? 0)} products · ${Number(payload.variantCount ?? 0)} variants`,
-      ].filter(Boolean),
+      details,
       error: null,
     };
   });
