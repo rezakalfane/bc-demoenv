@@ -32,6 +32,10 @@ export function HistoryIcon() {
   return <svg {...iconProps}><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>;
 }
 
+export function InspectIcon() {
+  return <svg {...iconProps}><path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5" /><circle cx="17" cy="16" r="2.5" /><path d="m19 18 2 2" /></svg>;
+}
+
 export function TrashIcon() {
   return <svg {...iconProps}><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>;
 }

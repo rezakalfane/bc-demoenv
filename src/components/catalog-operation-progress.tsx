@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 export const CATALOG_OPERATION_KEY = "bc-demoenv:catalog-operation";
 export type CatalogOperationKind = "snapshot" | "restore" | "clear";
-export type CatalogOperation = { kind: CatalogOperationKind; environmentId?: number; channelId?: number; snapshotId?: number; steps?: string[]; operationId?: number };
+export type CatalogOperation = { kind: CatalogOperationKind; environmentId?: number; channelId?: number; snapshotId?: number; steps?: string[]; operationId?: number; originPath?: string };
 
 export function readCatalogOperation(): CatalogOperation | null {
   if (typeof window === "undefined") return null;
@@ -60,13 +60,18 @@ export function useCatalogOperationActive({
 
 export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, environmentId, channelId, snapshotId, initialOperation, redirectOnCancelTo }: { redirectToCreatedSnapshot?: boolean; environmentId?: number; channelId?: number; snapshotId?: number; initialOperation?: CatalogOperation; redirectOnCancelTo?: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [operation, setOperation] = useState<CatalogOperation | null>(initialOperation ?? null);
   const [stepIndex, setStepIndex] = useState(0);
   const [remote, setRemote] = useState<{ status: string; currentStep: string; stepIndex: number; totalSteps: number; snapshotId: number | null; error: string | null } | null>(null);
 
   useEffect(() => {
     const sync = () => setOperation(readCatalogOperation());
-    if (initialOperation) {
+    const existing = readCatalogOperation();
+    if (
+      initialOperation &&
+      (!existing || existing.operationId !== initialOperation.operationId)
+    ) {
       startCatalogOperation(initialOperation);
       sync();
     } else {
@@ -92,7 +97,19 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
       const next = await response.json() as { status: string; currentStep: string; stepIndex: number; totalSteps: number; snapshotId: number | null; error: string | null };
       setRemote(next);
       if (next.status === "completed") {
-        if (redirectToCreatedSnapshot && operation.kind === "snapshot" && next.snapshotId) {
+        const isAtCaptureOrigin = operation.originPath
+          ? pathname === operation.originPath
+          : snapshotId !== undefined
+            ? operation.snapshotId === snapshotId
+            : environmentId !== undefined && channelId !== undefined &&
+              operation.environmentId === environmentId &&
+              operation.channelId === channelId;
+        if (
+          redirectToCreatedSnapshot &&
+          isAtCaptureOrigin &&
+          operation.kind === "snapshot" &&
+          next.snapshotId
+        ) {
           finishCatalogOperation();
           router.push(`/snapshots/${next.snapshotId}`);
           return;
@@ -108,7 +125,7 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
     void poll();
     const timer = window.setInterval(() => { void poll(); router.refresh(); }, 3000);
     return () => window.clearInterval(timer);
-  }, [operation, redirectOnCancelTo, redirectToCreatedSnapshot, router]);
+  }, [channelId, environmentId, operation, pathname, redirectOnCancelTo, redirectToCreatedSnapshot, router, snapshotId]);
 
   const isForThisSurface = !operation || (
     (environmentId === undefined || operation.environmentId === environmentId) &&

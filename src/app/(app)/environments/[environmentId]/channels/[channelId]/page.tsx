@@ -157,7 +157,11 @@ export default async function ChannelPage({
 
         <div className="mt-4 flex flex-wrap">
           <ChannelCatalogLiveState environmentId={catalog.environment.id} channelId={parsedChannelId} />
-          <CatalogOperationProgress environmentId={catalog.environment.id} channelId={catalog.channel?.id ?? parsedChannelId} />
+          <CatalogOperationProgress
+            redirectToCreatedSnapshot
+            environmentId={catalog.environment.id}
+            channelId={catalog.channel?.id ?? parsedChannelId}
+          />
         </div>
 
         {catalog.error ? (

@@ -6,6 +6,7 @@ import { SnapshotRestore } from "@/components/snapshot-restore";
 import { SnapshotVersionHistory } from "@/components/snapshot-version-history";
 import { SnapshotDelete } from "@/components/snapshot-delete";
 import { SnapshotCreateVersion } from "@/components/snapshot-create-version";
+import { SnapshotSettingsInspector } from "@/components/snapshot-settings-inspector";
 import { CatalogHistory } from "@/components/catalog-history";
 import { CatalogActivityBadge, CatalogOperationProgress } from "@/components/catalog-operation-progress";
 import {
@@ -75,6 +76,15 @@ export default async function SnapshotPage({
       return false;
     }
   }) : undefined;
+  let activeCaptureOriginPath: string | undefined;
+  if (activeCapture) {
+    try {
+      const payload = JSON.parse(activeCapture.payloadJson) as { originPath?: unknown };
+      activeCaptureOriginPath = typeof payload.originPath === "string"
+        ? payload.originPath
+        : undefined;
+    } catch {}
+  }
   const publishedVersion = snapshot.versions.find((version) => version.publishedAt);
 
   const selectedCategory = Number.isSafeInteger(parsedCategoryId)
@@ -164,6 +174,10 @@ export default async function SnapshotPage({
                     ...snapshot.products.map((product) => `Restoring product ${product.name}`),
                   ]}
                 />
+                <SnapshotSettingsInspector
+                  snapshotId={snapshot.summary.id}
+                  snapshotName={snapshot.summary.name}
+                />
                 <SnapshotVersionHistory
                   name={snapshot.summary.name}
                   currentSnapshotId={snapshot.summary.id}
@@ -180,15 +194,21 @@ export default async function SnapshotPage({
                 />
                 </>
               ) : (
-                <SnapshotRestore
-                  snapshot={snapshot.summary}
-                  destinations={restoreDestinations}
-                  matchSourceDestination={false}
-                  stepNames={[
-                    ...snapshot.categories.map((category) => `Restoring category ${category.name}`),
-                    ...snapshot.products.map((product) => `Restoring product ${product.name}`),
-                  ]}
-                />
+                <>
+                  <SnapshotRestore
+                    snapshot={snapshot.summary}
+                    destinations={restoreDestinations}
+                    matchSourceDestination={false}
+                    stepNames={[
+                      ...snapshot.categories.map((category) => `Restoring category ${category.name}`),
+                      ...snapshot.products.map((product) => `Restoring product ${product.name}`),
+                    ]}
+                  />
+                  <SnapshotSettingsInspector
+                    snapshotId={snapshot.summary.id}
+                    snapshotName={snapshot.summary.name}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -204,6 +224,7 @@ export default async function SnapshotPage({
               environmentId: activeCapture.environmentId ?? undefined,
               channelId: activeCapture.channelId ?? undefined,
               snapshotId: snapshot.summary.id,
+              originPath: activeCaptureOriginPath,
             } : undefined}
             redirectOnCancelTo="/snapshots"
           />

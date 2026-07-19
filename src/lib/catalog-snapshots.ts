@@ -2,6 +2,11 @@ import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
+import type {
+  CapturedConfigurationGroup,
+  CapturedConfigurationResource,
+  CapturedSnapshotConfiguration,
+} from "@/lib/snapshot-configuration";
 import {
   addCatalogSnapshot,
   completeCatalogSnapshotCapture,
@@ -21,6 +26,7 @@ import {
 } from "@/lib/db";
 
 const API_BASE_URL = "https://api.bigcommerce.com/stores";
+const B2B_API_BASE_URL = "https://api-b2b.bigcommerce.com/api/v3/io";
 const REQUEST_TIMEOUT_MS = 12_000;
 const PAGE_SIZE = 250;
 const CAPTURE_CONCURRENCY = 5;
@@ -116,6 +122,7 @@ export type CatalogSnapshotManifestV1 = {
     taxClasses: unknown[];
     products: SnapshotProductRecord[];
   };
+  configuration?: CapturedSnapshotConfiguration;
   preview: {
     currency: string;
     categories: CatalogCategory[];
@@ -146,6 +153,16 @@ function asRecord(value: unknown): JsonRecord | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as JsonRecord)
     : null;
+}
+
+function pickFields(record: JsonRecord, keys: readonly string[]) {
+  return Object.fromEntries(
+    keys.flatMap((key) =>
+      record[key] === undefined || record[key] === null
+        ? []
+        : [[key, record[key]]],
+    ),
+  );
 }
 
 function readString(value: unknown) {
@@ -303,6 +320,81 @@ async function fetchV3Collection(
   }
 
   return items;
+}
+
+function readB2BDataArray(payload: unknown, resource: string) {
+  const data = asRecord(payload)?.data;
+  if (Array.isArray(data)) return data;
+  if (asRecord(data)) return Object.values(asRecord(data)!);
+  throw new SnapshotCaptureError(
+    `BigCommerce B2B Edition returned an unexpected ${resource} response.`,
+  );
+}
+
+async function fetchB2BJson(
+  environment: ConnectedEnvironment,
+  path: string,
+  resource: string,
+) {
+  return queueStoreRequest(environment.storeHash, async () => {
+    let response!: Response;
+    for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt += 1) {
+      response = await fetch(`${B2B_API_BASE_URL}${path}`, {
+        headers: {
+          Accept: "application/json",
+          "X-Auth-Token": environment.accessToken,
+          "X-Store-Hash": environment.storeHash,
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (response.status !== 429 || attempt === RATE_LIMIT_RETRIES) break;
+      const retryAfter = Number(response.headers.get("retry-after"));
+      await wait(
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter * 1000, 30_000)
+          : Math.min(1000 * 2 ** attempt, 20_000),
+      );
+    }
+    if (!response.ok) {
+      const message = response.status === 403
+        ? `The token cannot read ${resource}. Enable the B2B Edition read-only scope.`
+        : response.status === 404
+          ? `B2B Edition did not expose ${resource} for this store.`
+          : getApiErrorMessage(response.status, resource);
+      throw new SnapshotCaptureError(message);
+    }
+    return (await response.json()) as unknown;
+  });
+}
+
+async function fetchB2BCollection(
+  environment: ConnectedEnvironment,
+  path: string,
+  resource: string,
+) {
+  const items: unknown[] = [];
+  let offset = 0;
+  while (true) {
+    const separator = path.includes("?") ? "&" : "?";
+    const payload = await fetchB2BJson(
+      environment,
+      `${path}${separator}limit=${PAGE_SIZE}&offset=${offset}`,
+      resource,
+    );
+    const page = readB2BDataArray(payload, resource);
+    items.push(...page);
+    const pagination = asRecord(asRecord(asRecord(payload)?.meta)?.pagination);
+    const totalCount = Number(pagination?.totalCount);
+    if (
+      page.length === 0 ||
+      page.length < PAGE_SIZE ||
+      (Number.isFinite(totalCount) && items.length >= totalCount)
+    ) {
+      return items;
+    }
+    offset += page.length;
+  }
 }
 
 async function mapInBatches<T, R>(
@@ -657,6 +749,652 @@ async function loadSupportingData(environment: ConnectedEnvironment) {
   };
 }
 
+function capturedResource(
+  label: string,
+  scope: CapturedConfigurationResource["scope"],
+  data: unknown,
+  warning?: string,
+): CapturedConfigurationResource {
+  return { label, scope, data, ...(warning ? { warning } : {}) };
+}
+
+async function captureOptionalJson(
+  environment: ConnectedEnvironment,
+  path: string,
+  label: string,
+  scope: CapturedConfigurationResource["scope"],
+) {
+  try {
+    return capturedResource(label, scope, await fetchJson(environment, path, label));
+  } catch (error) {
+    return capturedResource(
+      label,
+      scope,
+      null,
+      error instanceof Error ? error.message : `Unable to capture ${label}.`,
+    );
+  }
+}
+
+async function captureOptionalCollection(
+  environment: ConnectedEnvironment,
+  path: string,
+  label: string,
+  scope: CapturedConfigurationResource["scope"],
+) {
+  try {
+    return capturedResource(
+      label,
+      scope,
+      await fetchV3Collection(environment, path, label),
+    );
+  } catch (error) {
+    return capturedResource(
+      label,
+      scope,
+      [],
+      error instanceof Error ? error.message : `Unable to capture ${label}.`,
+    );
+  }
+}
+
+async function captureOptionalB2BCollection(
+  environment: ConnectedEnvironment,
+  path: string,
+  label: string,
+) {
+  try {
+    return capturedResource(
+      label,
+      "store",
+      await fetchB2BCollection(environment, path, label),
+    );
+  } catch (error) {
+    return capturedResource(
+      label,
+      "store",
+      [],
+      error instanceof Error ? error.message : `Unable to capture ${label}.`,
+    );
+  }
+}
+
+async function captureB2BDetails(
+  environment: ConnectedEnvironment,
+  values: unknown[],
+  idKeys: string[],
+  path: (id: number) => string,
+  label: string,
+) {
+  const failures: string[] = [];
+  const details = await mapInBatches(values, async (value) => {
+    const record = asRecord(value);
+    const id = idKeys.reduce<number | null>(
+      (found, key) => found ?? readPositiveInteger(record?.[key]),
+      null,
+    );
+    if (!id) return value;
+    try {
+      const payload = await fetchB2BJson(environment, path(id), `${label} ${id}`);
+      return asRecord(payload)?.data ?? value;
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : `${label} ${id} failed.`);
+      return value;
+    }
+  });
+  return capturedResource(
+    label,
+    "store",
+    details,
+    failures.length > 0
+      ? `${failures.length} ${label.toLowerCase()} could not be expanded; their list records were retained.`
+      : undefined,
+  );
+}
+
+async function captureB2BConfiguration(
+  environment: ConnectedEnvironment,
+): Promise<CapturedConfigurationGroup> {
+  const [permissions, roleSummaries, companies, users, addresses, quotes, orders,
+    invoices, payments, salesReps, companyExtraFields, userExtraFields,
+    addressExtraFields, orderExtraFields, quoteExtraFields] = await Promise.all([
+    captureOptionalB2BCollection(environment, "/companies/permissions", "B2B Company permissions"),
+    captureOptionalB2BCollection(environment, "/companies/roles", "B2B Company roles"),
+    captureOptionalB2BCollection(environment, "/companies?isIncludeExtraFields=1", "B2B Companies"),
+    captureOptionalB2BCollection(environment, "/users?isIncludeExtraFields=1", "B2B Company users"),
+    captureOptionalB2BCollection(environment, "/addresses", "B2B Company addresses"),
+    captureOptionalB2BCollection(environment, "/rfq", "B2B quotes"),
+    captureOptionalB2BCollection(environment, "/orders?showExtra=true", "B2B order records"),
+    captureOptionalB2BCollection(environment, "/invoices", "B2B invoices"),
+    captureOptionalB2BCollection(environment, "/payments", "B2B payments"),
+    captureOptionalB2BCollection(environment, "/sales-reps", "B2B sales representatives"),
+    captureOptionalB2BCollection(environment, "/companies/extra-fields", "B2B Company extra-field definitions"),
+    captureOptionalB2BCollection(environment, "/users/extra-fields", "B2B user extra-field definitions"),
+    captureOptionalB2BCollection(environment, "/addresses/extra-fields", "B2B address extra-field definitions"),
+    captureOptionalB2BCollection(environment, "/orders/extra-fields", "B2B order extra-field definitions"),
+    captureOptionalB2BCollection(environment, "/rfq/extra-fields", "B2B quote extra-field definitions"),
+  ]);
+
+  const companyValues = Array.isArray(companies.data) ? companies.data : [];
+  const userValues = Array.isArray(users.data) ? users.data : [];
+  const roleValues = Array.isArray(roleSummaries.data) ? roleSummaries.data : [];
+  const quoteValues = Array.isArray(quotes.data) ? quotes.data : [];
+  const roles = roleSummaries.warning
+    ? roleSummaries
+    : await captureB2BDetails(
+        environment,
+        roleValues,
+        ["id", "roleId"],
+        (id) => `/companies/roles/${id}`,
+        "B2B Company roles",
+      );
+  const companyDetails = companies.warning
+    ? companies
+    : await captureB2BDetails(
+        environment,
+        companyValues,
+        ["companyId", "id"],
+        (id) => `/companies/${id}`,
+        "B2B Company details",
+      );
+  const userDetails = users.warning
+    ? users
+    : await captureB2BDetails(
+        environment,
+        userValues,
+        ["id", "userId"],
+        (id) => `/users/${id}`,
+        "B2B Company user details",
+      );
+  const quoteDetails = quotes.warning
+    ? quotes
+    : await captureB2BDetails(
+        environment,
+        quoteValues,
+        ["quoteId", "id"],
+        (id) => `/rfq/${id}`,
+        "B2B quote details",
+      );
+  const detailWarnings: string[] = [];
+  const orderValues = Array.isArray(orders.data) ? orders.data : [];
+  const orderDetails = orders.warning
+    ? orders
+    : capturedResource(
+        "B2B order details and products",
+        "store",
+        await mapInBatches(orderValues, async (value) => {
+          const order = asRecord(value);
+          const id = readPositiveInteger(order?.bcOrderId ?? order?.orderId);
+          if (!id) return value;
+          try {
+            const [details, products] = await Promise.all([
+              fetchB2BJson(environment, `/orders/${id}`, `B2B order ${id}`),
+              fetchB2BJson(environment, `/orders/${id}/products`, `products for B2B order ${id}`),
+            ]);
+            return {
+              ...order,
+              details: asRecord(details)?.data ?? details,
+              products: asRecord(products)?.data ?? products,
+            };
+          } catch (error) {
+            detailWarnings.push(error instanceof Error ? error.message : `B2B order ${id} failed.`);
+            return value;
+          }
+        }),
+        detailWarnings.length > 0
+          ? `${detailWarnings.length} B2B orders could not be fully expanded; their list records were retained.`
+          : undefined,
+      );
+
+  const hierarchies = capturedResource(
+    "B2B Company hierarchies",
+    "store",
+    companyValues.flatMap((value) => {
+      const company = asRecord(value);
+      const companyId = readPositiveInteger(company?.companyId ?? company?.id);
+      const parent = asRecord(company?.parentCompany);
+      const parentCompanyId = readPositiveInteger(
+        parent?.companyId ?? parent?.id ?? company?.parentCompanyId,
+      );
+      return companyId && parentCompanyId ? [{ companyId, parentCompanyId }] : [];
+    }),
+  );
+
+  const shoppingLists: unknown[] = [];
+  const shoppingWarnings: string[] = [];
+  for (const user of userValues) {
+    const userId = readPositiveInteger(asRecord(user)?.id ?? asRecord(user)?.userId);
+    if (!userId) continue;
+    try {
+      const lists = await fetchB2BCollection(
+        environment,
+        `/shopping-list?userId=${userId}`,
+        `shopping lists for B2B user ${userId}`,
+      );
+      shoppingLists.push(...lists);
+    } catch (error) {
+      shoppingWarnings.push(error instanceof Error ? error.message : `Shopping lists for user ${userId} failed.`);
+    }
+  }
+  const uniqueShoppingLists = [...new Map(shoppingLists.map((value) => {
+    const record = asRecord(value);
+    return [String(record?.id ?? record?.shoppingListId ?? JSON.stringify(value)), value];
+  })).values()];
+  const shoppingListDetails = await mapInBatches(uniqueShoppingLists, async (value) => {
+    const id = readPositiveInteger(asRecord(value)?.id ?? asRecord(value)?.shoppingListId);
+    if (!id) return value;
+    try {
+      const payload = await fetchB2BJson(
+        environment,
+        `/shopping-list/${id}`,
+        `shopping list ${id}`,
+      );
+      return asRecord(payload)?.data ?? value;
+    } catch (error) {
+      shoppingWarnings.push(error instanceof Error ? error.message : `Shopping list ${id} failed.`);
+      return value;
+    }
+  });
+
+  const attachments: unknown[] = [];
+  const attachmentWarnings: string[] = [];
+  for (const company of companyValues) {
+    const companyId = readPositiveInteger(asRecord(company)?.companyId ?? asRecord(company)?.id);
+    if (!companyId) continue;
+    try {
+      const values = await fetchB2BCollection(
+        environment,
+        `/companies/${companyId}/attachments`,
+        `attachments for B2B Company ${companyId}`,
+      );
+      attachments.push(...values.flatMap((value) => {
+        const attachment = asRecord(value);
+        return attachment ? [{ companyId, ...attachment }] : [];
+      }));
+    } catch (error) {
+      attachmentWarnings.push(error instanceof Error ? error.message : `Attachments for Company ${companyId} failed.`);
+    }
+  }
+
+  return {
+    resources: {
+      permissions,
+      roles,
+      companies,
+      companyDetails,
+      users,
+      userDetails,
+      addresses,
+      hierarchies,
+      quotes: quoteDetails,
+      orders: orderDetails,
+      invoices,
+      payments,
+      shoppingLists: capturedResource(
+        "B2B shopping lists",
+        "store",
+        shoppingListDetails,
+        shoppingWarnings.length > 0
+          ? `${shoppingWarnings.length} user shopping-list collections could not be captured.`
+          : undefined,
+      ),
+      attachments: capturedResource(
+        "B2B Company attachment metadata",
+        "store",
+        attachments,
+        attachmentWarnings.length > 0
+          ? `${attachmentWarnings.length} Company attachment collections could not be captured.`
+          : undefined,
+      ),
+      salesReps,
+      companyExtraFields,
+      userExtraFields,
+      addressExtraFields,
+      orderExtraFields,
+      quoteExtraFields,
+    },
+  };
+}
+
+async function captureOptionalGraphql(
+  environment: ConnectedEnvironment,
+  query: string,
+  variables: Record<string, unknown>,
+  label: string,
+) {
+  try {
+    const response = await queueStoreRequest(environment.storeHash, () =>
+      fetch(
+        `${API_BASE_URL}/${encodeURIComponent(environment.storeHash)}/graphql`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-Auth-Token": environment.accessToken,
+          },
+          body: JSON.stringify({ query, variables }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
+      ),
+    );
+    const payload = (await response.json()) as unknown;
+    const errors = asRecord(payload)?.errors;
+    if (!response.ok || (Array.isArray(errors) && errors.length > 0)) {
+      throw new SnapshotCaptureError(`BigCommerce did not return ${label}.`);
+    }
+    return capturedResource(label, "channel", payload);
+  } catch (error) {
+    return capturedResource(
+      label,
+      "channel",
+      null,
+      error instanceof Error ? error.message : `Unable to capture ${label}.`,
+    );
+  }
+}
+
+async function captureTranslationCollection(
+  environment: ConnectedEnvironment,
+  channelId: number,
+  localeCode: string,
+  resourceType: "PRODUCTS" | "CATEGORIES",
+) {
+  const label = `${resourceType === "PRODUCTS" ? "product" : "category"} translations for ${localeCode}`;
+  const edges: unknown[] = [];
+  let after: string | null = null;
+  while (true) {
+    const page = await captureOptionalGraphql(
+      environment,
+      `query SnapshotTranslations($channelId: ID!, $localeId: ID!, $after: String) { store { translations(filters: { resourceType: ${resourceType}, channelId: $channelId, localeId: $localeId } first: 50 after: $after) { edges { node { resourceId fields { fieldName original translation } } cursor } pageInfo { hasNextPage endCursor } } } }`,
+      {
+        channelId: `bc/store/channel/${channelId}`,
+        localeId: `bc/store/locale/${localeCode}`,
+        after,
+      },
+      label,
+    );
+    if (page.warning) return page;
+    const store = asRecord(asRecord(asRecord(page.data)?.data)?.store);
+    const translations = asRecord(store?.translations);
+    const pageEdges = translations?.edges;
+    if (Array.isArray(pageEdges)) edges.push(...pageEdges);
+    const pageInfo = asRecord(translations?.pageInfo);
+    const endCursor = readString(pageInfo?.endCursor);
+    if (!pageInfo?.hasNextPage || !endCursor) break;
+    after = endCursor;
+  }
+  return capturedResource(label, "channel", { localeCode, edges });
+}
+
+function unwrapData(value: CapturedConfigurationResource) {
+  return asRecord(value.data)?.data ?? value.data;
+}
+
+async function loadSnapshotConfiguration(
+  environment: ConnectedEnvironment,
+  channelId: number,
+  onProgress?: SnapshotProgress,
+): Promise<CapturedSnapshotConfiguration> {
+  await onProgress?.("Capturing channel and storefront configuration", 89, 100);
+  const [channelMetafields, site, activeTheme] = await Promise.all([
+    captureOptionalCollection(
+      environment,
+      `/v3/channels/${channelId}/metafields`,
+      "channel metafields",
+      "channel",
+    ),
+    captureOptionalJson(
+      environment,
+      `/v3/channels/${channelId}/site`,
+      "channel site",
+      "site",
+    ),
+    captureOptionalJson(
+      environment,
+      `/v3/channels/${channelId}/active-theme`,
+      "active theme",
+      "channel",
+    ),
+  ]);
+  const siteId = readPositiveInteger(asRecord(unwrapData(site))?.id);
+  const activeThemeData = asRecord(unwrapData(activeTheme));
+  const activeThemeUuid = readString(activeThemeData?.active_theme_uuid);
+  const [siteRoutes, themeConfiguration] = await Promise.all([
+    siteId
+      ? captureOptionalCollection(
+          environment,
+          `/v3/sites/${siteId}/routes`,
+          "site routes",
+          "site",
+        )
+      : Promise.resolve(capturedResource("site routes", "site", [])),
+    activeThemeUuid
+      ? captureOptionalCollection(
+          environment,
+          `/v3/themes/${encodeURIComponent(activeThemeUuid)}/configurations?channel_id:in=${channelId}`,
+          "theme configuration",
+          "channel",
+        )
+      : Promise.resolve(capturedResource("theme configuration", "channel", [])),
+  ]);
+
+  await onProgress?.("Capturing checkout and customer experience settings", 90, 100);
+  const experienceEntries = await Promise.all([
+    ["checkout", `/v3/checkouts/settings/channels/${channelId}`, "checkout settings"],
+    ["cart", `/v3/carts/settings/channels/${channelId}`, "cart settings"],
+    ["customer", `/v3/customers/settings/channels/${channelId}`, "customer settings"],
+    ["order", `/v3/orders/settings/channels/${channelId}`, "order settings"],
+    ["abandonedCart", `/v3/abandoned-carts/settings/channels/${channelId}`, "abandoned-cart settings"],
+  ].map(async ([key, path, label]) => [
+    key,
+    await captureOptionalJson(environment, path, label, "channel"),
+  ] as const));
+
+  await onProgress?.("Capturing currency and price-list configuration", 91, 100);
+  const [currencyAssignments, priceListAssignments] = await Promise.all([
+    captureOptionalJson(
+      environment,
+      `/v3/channels/${channelId}/currency-assignments`,
+      "currency assignments",
+      "channel",
+    ),
+    captureOptionalCollection(
+      environment,
+      `/v3/pricelists/assignments?channel_id=${channelId}`,
+      "price-list assignments",
+      "channel",
+    ),
+  ]);
+  const assignments = Array.isArray(priceListAssignments.data)
+    ? priceListAssignments.data
+    : [];
+  const priceListIds = [...new Set(assignments.flatMap((value) => {
+    const id = readPositiveInteger(asRecord(value)?.price_list_id);
+    return id ? [id] : [];
+  }))];
+  const priceLists: unknown[] = [];
+  const priceListRecords: Record<string, unknown[]> = {};
+  for (const priceListId of priceListIds) {
+    const definition = await captureOptionalJson(
+      environment,
+      `/v3/pricelists/${priceListId}`,
+      `price list ${priceListId}`,
+      "store",
+    );
+    if (!definition.warning) priceLists.push(unwrapData(definition));
+    const records = await captureOptionalCollection(
+      environment,
+      `/v3/pricelists/${priceListId}/records`,
+      `price-list ${priceListId} records`,
+      "store",
+    );
+    priceListRecords[String(priceListId)] = Array.isArray(records.data)
+      ? records.data
+      : [];
+  }
+
+  await onProgress?.("Capturing shipping configuration", 92, 100);
+  const [channelShipping, shippingZones] = await Promise.all([
+    captureOptionalJson(
+      environment,
+      `/v3/shipping/settings/channels/${channelId}`,
+      "channel shipping settings",
+      "channel",
+    ),
+    captureOptionalJson(
+      environment,
+      "/v2/shipping/zones",
+      "shipping zones",
+      "store",
+    ),
+  ]);
+  const zoneValues = Array.isArray(shippingZones.data) ? shippingZones.data : [];
+  const shippingMethods: Record<string, unknown> = {};
+  for (const zone of zoneValues) {
+    const zoneId = readPositiveInteger(asRecord(zone)?.id);
+    if (!zoneId) continue;
+    const methods = await captureOptionalJson(
+      environment,
+      `/v2/shipping/zones/${zoneId}/methods`,
+      `shipping methods for zone ${zoneId}`,
+      "store",
+    );
+    shippingMethods[String(zoneId)] = methods.data;
+  }
+
+  await onProgress?.("Capturing tax configuration", 93, 100);
+  const [taxSettings, taxZones, taxRates] = await Promise.all([
+    captureOptionalJson(environment, "/v3/tax/settings", "tax settings", "store"),
+    captureOptionalCollection(environment, "/v3/tax/zones", "tax zones", "store"),
+    captureOptionalCollection(environment, "/v3/tax/rates", "tax rates", "store"),
+  ]);
+
+  await onProgress?.("Capturing B2B Edition Companies, users, roles, and business records", 94, 100);
+  const b2b = await captureB2BConfiguration(environment);
+
+  await onProgress?.("Capturing locales, translations, and presentation metadata", 95, 100);
+  const [storeLocale, channelLocales, inventorySettings, locations, scripts] = await Promise.all([
+    captureOptionalJson(
+      environment,
+      "/v3/settings/store/locale",
+      "store locale settings",
+      "store",
+    ),
+    captureOptionalGraphql(
+      environment,
+      `query ChannelLocales($channelId: ID!) { store { locales(input: { channelId: $channelId }) { edges { node { code status isDefault } } } } }`,
+      { channelId: `bc/store/channel/${channelId}` },
+      "channel locales",
+    ),
+    captureOptionalJson(
+      environment,
+      "/v3/settings/inventory",
+      "inventory settings",
+      "store",
+    ),
+    captureOptionalCollection(
+      environment,
+      "/v3/locations",
+      "inventory locations",
+      "store",
+    ),
+    captureOptionalCollection(
+      environment,
+      `/v3/content/scripts?channel_id=${channelId}`,
+      "channel scripts",
+      "channel",
+    ),
+  ]);
+  const localePayload = asRecord(channelLocales.data);
+  const localeStore = asRecord(asRecord(localePayload?.data)?.store);
+  const localeEdges = asRecord(localeStore?.locales)?.edges;
+  const localeCodes = Array.isArray(localeEdges)
+    ? localeEdges.flatMap((edge) => {
+        const code = readString(asRecord(asRecord(edge)?.node)?.code);
+        return code ? [code] : [];
+      })
+    : [];
+  const translations: Record<string, { products: unknown; categories: unknown }> = {};
+  for (const localeCode of localeCodes) {
+    const [products, categories] = await Promise.all([
+      captureTranslationCollection(
+        environment,
+        channelId,
+        localeCode,
+        "PRODUCTS",
+      ),
+      captureTranslationCollection(
+        environment,
+        channelId,
+        localeCode,
+        "CATEGORIES",
+      ),
+    ]);
+    translations[localeCode] = { products, categories };
+  }
+
+  const group = (
+    resources: CapturedConfigurationGroup["resources"],
+  ): CapturedConfigurationGroup => ({ resources });
+  const scriptMetadata = {
+    ...scripts,
+    data: Array.isArray(scripts.data)
+      ? scripts.data.flatMap((value) => {
+          const script = asRecord(value);
+          return script
+            ? [pickFields(script, [
+                "id", "name", "description", "src", "kind", "location",
+                "visibility", "consent_category", "enabled", "auto_uninstall",
+              ])]
+            : [];
+        })
+      : [],
+  };
+
+  return {
+    channel: group({ channelMetafields, site, siteRoutes, activeTheme }),
+    experience: group(Object.fromEntries(experienceEntries)),
+    pricing: group({
+      currencyAssignments,
+      priceListAssignments,
+      priceLists: capturedResource("assigned price lists", "store", priceLists),
+      priceListRecords: capturedResource("assigned price-list records", "store", priceListRecords),
+    }),
+    shipping: group({
+      channelShipping,
+      shippingZones,
+      shippingMethods: capturedResource("shipping methods", "store", shippingMethods),
+    }),
+    tax: group({
+      taxSettings,
+      taxZones,
+      taxRates,
+      taxClasses: capturedResource("tax classes", "store", []),
+    }),
+    inventory: group({ inventorySettings, locations }),
+    b2b,
+    localization: group({
+      storeLocale,
+      channelLocales,
+      productTranslations: capturedResource(
+        "product translations",
+        "channel",
+        Object.fromEntries(Object.entries(translations).map(([locale, value]) => [locale, value.products])),
+      ),
+      categoryTranslations: capturedResource(
+        "category translations",
+        "channel",
+        Object.fromEntries(Object.entries(translations).map(([locale, value]) => [locale, value.categories])),
+      ),
+      activeTheme,
+      themeConfiguration,
+      scripts: scriptMetadata,
+    }),
+  };
+}
+
 function countProductChildren(products: SnapshotProductRecord[]) {
   let variantCount = 0;
   let imageCount = 0;
@@ -737,8 +1475,20 @@ export async function createCatalogSnapshot(input: {
       input.channelId,
       input.onProgress,
     );
-    await input.onProgress?.("Capturing brands, tax classes, and store currency", 90, 100);
+    await input.onProgress?.("Capturing brands, tax classes, and store currency", 88, 100);
     const supportingData = await loadSupportingData(connectedEnvironment);
+    const configuration = await loadSnapshotConfiguration(
+      connectedEnvironment,
+      input.channelId,
+      input.onProgress,
+    );
+    if (configuration.tax) {
+      configuration.tax.resources.taxClasses = capturedResource(
+        "tax classes",
+        "store",
+        supportingData.taxClasses,
+      );
+    }
     const previewCategories = categoryData.categoryTree.flatMap((value) => {
       const category = parsePreviewCategory(value);
       return category ? [category] : [];
@@ -772,6 +1522,7 @@ export async function createCatalogSnapshot(input: {
         taxClasses: supportingData.taxClasses,
         products,
       },
+      configuration,
       preview: {
         currency: supportingData.store.currency,
         categories: previewCategories,
@@ -921,6 +1672,18 @@ export async function initializeWorkflowCatalogSnapshot(
   );
   await progress("Capturing brands, tax classes, and store currency", 30);
   const supportingData = await loadSupportingData(connectedEnvironment);
+  const configuration = await loadSnapshotConfiguration(
+    connectedEnvironment,
+    channelId,
+    progress,
+  );
+  if (configuration.tax) {
+    configuration.tax.resources.taxClasses = capturedResource(
+      "tax classes",
+      "store",
+      supportingData.taxClasses,
+    );
+  }
   const state = await initializeCatalogSnapshotCaptureState({
     operationId,
     userId,
@@ -929,7 +1692,7 @@ export async function initializeWorkflowCatalogSnapshot(
     channelId,
     channelJson: JSON.stringify(channel),
     categoryDataJson: JSON.stringify(categoryData),
-    supportingDataJson: JSON.stringify(supportingData),
+    supportingDataJson: JSON.stringify({ ...supportingData, configuration }),
     productIdsJson: JSON.stringify(productIds),
     totalProducts: productIds.length,
   });
@@ -1064,7 +1827,7 @@ export async function finalizeWorkflowCatalogSnapshot(
   >;
   const supportingData = JSON.parse(state.supportingDataJson) as Awaited<
     ReturnType<typeof loadSupportingData>
-  >;
+  > & { configuration?: CapturedSnapshotConfiguration };
   const products = (
     await getCatalogSnapshotCaptureProducts(operationId)
   ).map((payloadJson) => JSON.parse(payloadJson) as SnapshotProductRecord);
@@ -1102,6 +1865,7 @@ export async function finalizeWorkflowCatalogSnapshot(
       taxClasses: supportingData.taxClasses,
       products,
     },
+    configuration: supportingData.configuration,
     preview: {
       currency: supportingData.store.currency,
       categories: previewCategories,

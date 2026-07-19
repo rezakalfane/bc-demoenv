@@ -8,6 +8,7 @@ import {
   clearCatalogChannel,
   restoreCatalogSnapshot,
 } from "@/lib/catalog-restore";
+import { parseSnapshotRestoreGroups } from "@/lib/snapshot-configuration";
 
 export async function runCatalogOperation(userId: string, operationId: number) {
   const operation = await getCatalogOperation(userId, operationId);
@@ -51,6 +52,7 @@ export async function runCatalogOperation(userId: string, operationId: number) {
         snapshotId: Number(payload.snapshotId),
         destinationEnvironmentId: Number(payload.destinationEnvironmentId),
         destinationChannelId: Number(payload.destinationChannelId),
+        restoreGroups: parseSnapshotRestoreGroups(payload.restoreGroups),
         userId,
         onProgress: progress,
       });

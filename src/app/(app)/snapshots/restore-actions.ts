@@ -5,6 +5,7 @@ import { createCatalogOperation, getAccessibleCatalogSnapshot } from "@/lib/db";
 import type { CatalogRestoreResult } from "@/lib/catalog-restore";
 import { runCatalogOperation } from "@/lib/catalog-operation-runner";
 import { after } from "next/server";
+import { parseSnapshotRestoreGroups } from "@/lib/snapshot-configuration";
 
 export type RestoreSnapshotActionState = {
   status: "idle" | "error" | "success";
@@ -27,6 +28,9 @@ export async function restoreSnapshot(
   );
   const destinationChannelId = Number(formData.get("destinationChannelId"));
   const confirmation = formData.get("confirmation")?.toString() ?? "";
+  const restoreGroups = parseSnapshotRestoreGroups(
+    formData.getAll("restoreGroups").map(String),
+  );
 
   if (!Number.isSafeInteger(snapshotId) || snapshotId < 1) {
     return errorState("The snapshot is invalid.");
@@ -49,6 +53,9 @@ export async function restoreSnapshot(
   if (confirmation !== "RESTORE") {
     return errorState("Type RESTORE to confirm the catalog replacement.");
   }
+  if (restoreGroups.length === 0) {
+    return errorState("Choose at least one snapshot section to restore.");
+  }
 
   try {
     const user = await requireAppUser();
@@ -56,7 +63,7 @@ export async function restoreSnapshot(
     if (!snapshot) {
       return errorState("The snapshot is no longer published or is unavailable.");
     }
-    const operationId = await createCatalogOperation(user.id, { kind: "restore", snapshotId, environmentId: destinationEnvironmentId, channelId: destinationChannelId, payload: { snapshotId, destinationEnvironmentId, destinationChannelId } });
+    const operationId = await createCatalogOperation(user.id, { kind: "restore", snapshotId, environmentId: destinationEnvironmentId, channelId: destinationChannelId, payload: { snapshotId, destinationEnvironmentId, destinationChannelId, restoreGroups } });
     after(async () => {
       await runCatalogOperation(user.id, operationId);
     });
