@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate the visual restore preflight comparison
+
+- **Date:** 2026-07-20
+- **Source:** `feature/preflight-comparison`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the structured Snapshot → Destination comparison for catalog records, channel assignments, store-wide effects, warnings, conflicts, and manual actions after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add the visual restore preflight comparison
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/preflight-comparison`
+- **Type:** Feature commit
+
+- Replaced the preflight metric cards with a responsive comparison table for snapshot totals, new and matched records, destination-only preserved records, and conflicts.
+- Added existing/new channel-assignment counts, mixed and store-wide resource impact, required manual actions, warnings, and blockers.
+- Extended the server preflight model with structured preserved-record and conflicting-record counts instead of inferring them from message text.
+- Updated README, implementation details, and reverse-chronological prompt History.
+
 ### Merge — Integrate the guided restore wizard
 
 - **Date:** 2026-07-20

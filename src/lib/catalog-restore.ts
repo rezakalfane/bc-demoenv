@@ -84,10 +84,16 @@ export type CatalogRestorePreflight = {
     resourceCount: number;
   }>;
   catalog: {
+    categoriesInSnapshot: number;
     categoriesToCreate: number;
     categoriesToUpdate: number;
+    destinationCategoriesPreserved: number;
+    categoriesConflicting: number;
+    productsInSnapshot: number;
     productsToCreate: number;
     productsToMatch: number;
+    destinationProductsPreserved: number;
+    productsConflicting: number;
     channelAssignmentsToAdd: number;
     productsAlreadyAssigned: number;
   } | null;
@@ -1157,11 +1163,13 @@ export async function getCatalogRestorePreflight(input: {
     const categoryMap = new Map<number, number>();
     let categoriesToCreate = 0;
     let categoriesToUpdate = 0;
+    let categoriesConflicting = 0;
     for (const sourceCategory of orderedCategories) {
       const source = sourceCategory.data;
       const sourceId = readPositiveInteger(source.category_id);
       const name = readString(source.name).trim();
       if (!sourceId || !name) {
+        categoriesConflicting += 1;
         blockingIssues.push("The snapshot contains an invalid category record.");
         continue;
       }
@@ -1203,12 +1211,17 @@ export async function getCatalogRestorePreflight(input: {
       return id ? [id] : [];
     }));
     const availableProducts = new Set(targetProducts);
-    const sourceProductIdentities = new Map<string, { id: number | null; name: string }>();
+    const sourceProductIdentities = new Map<
+      string,
+      { id: number | null; name: string; index: number }
+    >();
+    const conflictingProductIndexes = new Set<number>();
+    const matchedAssignedProductIds = new Set<number>();
     let productsToCreate = 0;
     let productsToMatch = 0;
     let channelAssignmentsToAdd = 0;
     let productsAlreadyAssigned = 0;
-    for (const sourceRecord of manifest.catalog.products) {
+    for (const [sourceIndex, sourceRecord] of manifest.catalog.products.entries()) {
       const name = readString(sourceRecord.data.name) || "Unnamed product";
       const sourceKey = productMatchKey(sourceRecord.data);
       const identities = [
@@ -1219,11 +1232,17 @@ export async function getCatalogRestorePreflight(input: {
         const previous = sourceProductIdentities.get(identity);
         const sourceId = readPositiveInteger(sourceRecord.data.id);
         if (previous && previous.id !== sourceId) {
+          conflictingProductIndexes.add(previous.index);
+          conflictingProductIndexes.add(sourceIndex);
           blockingIssues.push(
             `Snapshot products “${previous.name}” and “${name}” share ${identity.replace(":", " ")}.`,
           );
         } else {
-          sourceProductIdentities.set(identity, { id: sourceId ?? null, name });
+          sourceProductIdentities.set(identity, {
+            id: sourceId ?? null,
+            name,
+            index: sourceIndex,
+          });
         }
       }
       const matches = [...availableProducts].filter((target) => {
@@ -1232,6 +1251,7 @@ export async function getCatalogRestorePreflight(input: {
           Boolean(sourceKey.slug && targetKey.slug === sourceKey.slug);
       });
       if (matches.length > 1) {
+        conflictingProductIndexes.add(sourceIndex);
         blockingIssues.push(
           `Product “${name}” matches more than one destination product by SKU or slug.`,
         );
@@ -1246,14 +1266,27 @@ export async function getCatalogRestorePreflight(input: {
       availableProducts.delete(target);
       productsToMatch += 1;
       const targetId = readPositiveInteger(target.id);
-      if (targetId && assignedProductIds.has(targetId)) productsAlreadyAssigned += 1;
-      else channelAssignmentsToAdd += 1;
+      if (targetId && assignedProductIds.has(targetId)) {
+        productsAlreadyAssigned += 1;
+        matchedAssignedProductIds.add(targetId);
+      } else {
+        channelAssignmentsToAdd += 1;
+      }
     }
     catalog = {
+      categoriesInSnapshot: manifest.catalog.categories.length,
       categoriesToCreate,
       categoriesToUpdate,
+      destinationCategoriesPreserved: availableTargets.size,
+      categoriesConflicting,
+      productsInSnapshot: manifest.catalog.products.length,
       productsToCreate,
       productsToMatch,
+      destinationProductsPreserved: Math.max(
+        0,
+        assignedProductIds.size - matchedAssignedProductIds.size,
+      ),
+      productsConflicting: conflictingProductIndexes.size,
       channelAssignmentsToAdd,
       productsAlreadyAssigned,
     };
