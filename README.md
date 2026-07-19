@@ -1,4 +1,4 @@
-# BigCommerce Demo Env
+# BigCommerce Demo Environments Manager
 
 A deployable Next.js 16 application with the App Router, Tailwind CSS 4, Turso/libSQL, and Clerk passwordless authentication. After signing in, users get a shared application sidebar with a live BigCommerce Dashboard plus private Snapshots, Notes, and Settings pages. Every database query is scoped to the authenticated Clerk user.
 
