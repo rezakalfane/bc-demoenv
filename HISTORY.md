@@ -2,6 +2,29 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Release global completion notifications
+
+### Prompt
+
+> Perfect you can branch, commit, merge and push
+
+### Summary
+
+- Finalized documentation and release records for global completion, failure, and manual-action notifications.
+- Created `feature/completion-notifications`, verified and committed the implementation, merged it into `main`, and pushed the updated main branch.
+
+## 2026-07-20 — Add global background-operation notifications
+
+### Prompt
+
+> let's implement 5. Completion notifications. Show an in-app notification when a background operation completes, fails, or needs manual action—even if the user navigated elsewhere. Include a direct link back to the affected channel or snapshot.
+
+### Summary
+
+- Added a tenant-scoped recent-operation feed that reconciles active durable Workflow runs and exposes completion, failure, affected-resource, and manual-action summary data.
+- Mounted a global notification stack in the authenticated layout so snapshot capture, restore, and clear results remain observable after navigating away from their originating page.
+- Added per-user terminal-event deduplication, visibility-aware polling, success/failure/manual-action presentation, dismiss controls, and direct links to the affected snapshot or channel.
+
 ## 2026-07-20 — Release the visual preflight comparison
 
 ### Prompt
