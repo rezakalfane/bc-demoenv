@@ -4,6 +4,16 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Commit — Add application overview screenshot to documentation
+
+- **Date:** 2026-07-19
+- **Branch:** `main`
+- **Type:** Documentation commit
+
+- Added a full-resolution BigCommerce Demo Environment Manager screenshot under `docs/images`.
+- Displayed the screenshot near the top of the README to provide an immediate visual overview of the application.
+- Recorded the documentation request in prompt History.
+
 ### Merge — Integrate the Workflow sandbox hotfix into `main`
 
 - **Date:** 2026-07-19

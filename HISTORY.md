@@ -2,6 +2,17 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Add application screenshot to documentation
+
+### Prompt
+
+> commit documentation update
+
+### Summary
+
+- Added the supplied full-resolution application overview screenshot to `docs/images`.
+- Embedded the screenshot near the top of the README and recorded the documentation-only commit in the changelog.
+
 ## 2026-07-19 — Fix snapshot Workflow startup failure
 
 ### Prompts
