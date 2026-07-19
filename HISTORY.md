@@ -2,6 +2,101 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Map and restore translations independently
+
+### Prompt
+
+> Warning: 102 products translation records could not be applied because its catalog resource was not mapped in the destination.
+>
+> Warning: 52 categories translation records could not be applied because its catalog resource was not mapped in the destination. Product and categories traductions have bbeen loaded. Fix the import in rezakalfane
+
+### Summary
+
+- Identified that a Localization-only restore had empty source-to-destination ID maps, causing every captured translation record to be skipped before the BigCommerce mutation.
+- Added a read-only destination catalog reconciliation pass that maps products by SKU or slug and categories by URL path or hierarchy.
+- Made translation restoration independent from selecting Catalog, while reusing and supplementing mappings from Catalog restoration when both sections are selected.
+- Preserved warnings for genuinely ambiguous or missing destination resources instead of applying translations to an uncertain match.
+- Verified all 51 products and 26 categories from version 6 map uniquely to `rezakalfane` channel `1881648`; the snapshot contains 50 Spanish product translations and 26 Spanish category translations.
+- Attempted the live replay, which BigCommerce rejected before writing any translation because the currently saved destination token lacks permission for `updateTranslations`; documented the required Content modify (`store_content`) scope and retained the original History warnings until replay succeeds.
+- Improved GraphQL restore warnings to include BigCommerce's actual permission or validation message, and stopped counting untranslated audit rows as unmapped translation records.
+
+## 2026-07-19 — Skip redundant default-locale updates
+
+### Prompt
+
+> Got Warning: Channel locales: BigCommerce rejected default locale en. maybe because it was already default
+
+### Summary
+
+- Confirmed the restore was sending an unnecessary default-locale mutation even when the destination channel already used the captured locale.
+- Made locale restoration idempotent by reading the destination's current default and skipping the mutation when it already matches.
+- Retained default-locale updates when a newly added or existing destination locale genuinely needs to become the default.
+
+## 2026-07-19 — Restore channel country and missing locales
+
+### Prompt
+
+> When restoring localization, push default country to channel, add missing locales to destination channel
+
+### Summary
+
+- Captured the source channel's effective default country, falling back to the global store country when the channel inherits it.
+- Restored the country through the channel-scoped Store Locale endpoint instead of changing the destination store globally.
+- Loaded the destination channel's current locale list, added only captured locales that were missing, preserved unrelated locales, and enforced BigCommerce's five-locale limit.
+- Applied the captured default locale after missing locales were reconciled.
+- Verified the channel-country request and destination-locale query shapes against the authorized `rezakalfane` environment.
+
+## 2026-07-19 — Reset the restore modal after starting an operation
+
+### Prompt
+
+> After a snapshot has been restored, if I click on Restore again, I don't see all the options, dropdown, restore confirm and button... I have to refresh the page!
+
+### Summary
+
+- Cleared stale server-action feedback whenever the Restore Snapshot modal is opened for a new operation.
+- Restored the snapshot/version selector, destination controls, categorized options, confirmation input, and submit button without requiring a page reload.
+- Reset the typed confirmation and restore selections to the safe defaults for the active snapshot on every new modal session.
+
+## 2026-07-19 — Make Channel & storefront settings inspect-only
+
+### Prompt
+
+> Remove Channel and Storefront when restoring a snapshot, this can mess up the destination configuration for Makeswift and URL
+
+### Summary
+
+- Removed Channel & storefront from the snapshot restore modal while retaining its captured data in Inspect settings.
+- Rejected the channel restore group during server-side form and operation parsing so stale clients cannot submit it.
+- Added a second guard in configuration restoration to prevent destination channel properties, metafields, sites, or routes from being applied even if an internal caller bypasses request parsing.
+- Documented that Makeswift integration, URLs, routes, domains, and checkout ownership remain destination-managed.
+
+## 2026-07-19 — Log payment-configuration visibility as a manual restore action
+
+### Prompt
+
+> have the restore log a manual action linking to Payments → Manage Channel Visibility.
+
+### Summary
+
+- Added a structured manual action to completed Pricing & currencies restores when the snapshot contains currency assignments.
+- Logged the restored currency codes and destination channel, with guidance to assign the intended payment configuration such as Test Payment Provider.
+- Rendered a validated, clickable Control Panel link in channel and snapshot History without storing or reusing Control Panel cookies or XSRF credentials.
+
+## 2026-07-19 — Restore missing store currencies and channel visibility
+
+### Prompt
+
+> Now let's fix adding currency if needed (global to store), add channel visibility, associate currencies to channel being restored. Use rezakalfane env to test things until it works
+
+### Summary
+
+- Verified against `rezakalfane` that BigCommerce accepts creation of missing transactional currencies through the V2 store Currency API.
+- Created EUR globally from the VitaChem source definition, then associated EUR visibility and default currency only with the Allen Edmonds FR-CA destination channel.
+- Accounted for BigCommerce automatically exposing a newly created global currency to inheriting channels by capturing and restoring every non-destination channel's previous assignment.
+- Preserved support for captured store-currency definitions and added a default-currency reconstruction path for older snapshots.
+- Confirmed the final live state: USD remains the store default, EUR exists globally, Allen Edmonds FR-CA is EUR-only/default EUR, and the three unrelated live channels remain USD-only/default USD.
+
 ## 2026-07-19 — Scope restored shipping methods to the destination channel
 
 ### Prompt

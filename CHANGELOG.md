@@ -4,6 +4,30 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate safe configuration and localization restoration
+
+- **Date:** 2026-07-19
+- **Source:** `fix/restore-portability-localization`
+- **Target:** `main`
+- **Type:** Non-fast-forward bug-fix merge
+
+Integrated destination-safe configuration restoration, durable manual-action history, channel-scoped locale defaults, and independent catalog-translation mapping after live BigCommerce request validation, TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Harden configuration and localization restoration
+
+- **Date:** 2026-07-19
+- **Branch:** `fix/restore-portability-localization`
+- **Type:** Bug-fix commit
+
+- Created or enabled missing destination currencies while preserving unrelated channels' existing currency visibility and assigning the captured currencies only to the restored channel.
+- Logged a safe manual Payments channel-visibility action instead of attempting private Control Panel payment-profile APIs.
+- Made captured Channel & storefront data inspect-only to protect destination Makeswift, routing, domains, URLs, and checkout ownership.
+- Reset stale successful Restore modal state whenever a new restore session opens.
+- Captured the effective source channel country, restored it only to the destination channel, added missing locales without deleting existing ones, and skipped redundant default-locale updates.
+- Mapped product translations by SKU/slug and category translations by path/hierarchy independently from Catalog restoration, fixed GraphQL payload parsing, and surfaced detailed permission errors.
+- Verified the destination mapping for all 51 products and 26 categories in the affected `rezakalfane` restore; the live translation replay remains gated by the destination API token's Content modify (`store_content`) permission.
+- Updated README operational guidance and reverse-chronological prompt History.
+
 ### Merge — Integrate destination-scoped shipping assignments
 
 - **Date:** 2026-07-19

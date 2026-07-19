@@ -62,9 +62,16 @@ export type CatalogRestoreResult = {
   productsUpdated: number;
   productAssignmentsRemoved: number;
   warnings: string[];
+  manualActions: CatalogRestoreManualAction[];
   restoredGroups: SnapshotRestoreGroup[];
   destinationEnvironmentName: string;
   destinationChannelName: string;
+};
+
+export type CatalogRestoreManualAction = {
+  label: string;
+  description: string;
+  href: string;
 };
 
 export type ClearCatalogResult = {
@@ -379,7 +386,13 @@ async function graphqlRequest(
     (Array.isArray(errors) && errors.length > 0) ||
     mutationErrors.length > 0
   ) {
-    throw new CatalogRestoreError(`BigCommerce rejected ${resource}.`);
+    const detail = extractApiMessage([
+      ...(Array.isArray(errors) ? errors : []),
+      ...mutationErrors,
+    ]);
+    throw new CatalogRestoreError(
+      `BigCommerce rejected ${resource}${detail ? `: ${detail}` : ""}.`,
+    );
   }
   return payload;
 }
@@ -640,8 +653,10 @@ const PRICE_LIST_RECORD_FIELDS = [
 
 async function prepareCurrencyAssignments(
   environment: ConnectedEnvironment,
+  destinationChannelId: number,
   resources: Record<string, CapturedConfigurationResource>,
   assignments: JsonRecord,
+  snapshotStore: CatalogSnapshotManifestV1["store"],
   warnings: string[],
 ) {
   const requested = Array.isArray(assignments.enabled_currencies)
@@ -664,6 +679,33 @@ async function prepareCurrencyAssignments(
   const sourceCurrencies = Array.isArray(sourcePayload)
     ? sourcePayload.flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
     : [];
+  const needsStoreMutation = requestedCodes.some((code) => {
+    const destination = destinationCurrencies.find(
+      (currency) => readString(currency.currency_code).toUpperCase() === code,
+    );
+    return !destination || !destination.enabled;
+  });
+  const preservedChannelAssignments = new Map<number, JsonRecord>();
+
+  if (needsStoreMutation) {
+    for (const channel of await listChannels(environment)) {
+      if (channel.id === destinationChannelId) continue;
+      const payload = await apiRequest(
+        environment,
+        `/channels/${channel.id}/currency-assignments`,
+        { resource: `currency assignments for ${channel.name}` },
+      );
+      const preserved = writableObject(asRecord(payload)?.data);
+      if (!preserved) {
+        throw new CatalogRestoreError(
+          `BigCommerce returned unexpected currency assignments for ${channel.name}.`,
+        );
+      }
+      preservedChannelAssignments.set(channel.id, preserved);
+    }
+  }
+
+  let storeVisibilityChanged = false;
 
   for (const code of requestedCodes) {
     const destination = destinationCurrencies.find(
@@ -680,29 +722,67 @@ async function prepareCurrencyAssignments(
             resource: `currency ${code}`,
           });
           destination.enabled = true;
+          storeVisibilityChanged = true;
         }
         continue;
       }
 
-      const source = sourceCurrencies.find(
+      const capturedSource = sourceCurrencies.find(
         (currency) => readString(currency.currency_code).toUpperCase() === code,
       );
-      if (!source || source.is_transactional !== false) {
+      const source = capturedSource ?? (
+        code === snapshotStore.currency.toUpperCase()
+          ? {
+              currency_code: code,
+              currency_exchange_rate: "1.0000000000",
+              token_location: snapshotStore.currencySymbolLocation || "left",
+              token: snapshotStore.currencySymbol || code,
+              decimal_token: ".",
+              thousands_token: ",",
+              decimal_places: snapshotStore.decimalPlaces,
+              name: code,
+              auto_update: false,
+              is_transactional: true,
+            }
+          : null
+      );
+      if (!source) {
         throw new CatalogRestoreError(
-          `Currency ${code} must first be added to the destination store in Settings > Currencies. BigCommerce does not allow transactional currencies to be created by API.`,
+          `Currency ${code} is missing from the snapshot's captured store-currency definitions. Create a new snapshot version or add the currency in the destination store first.`,
         );
       }
       const body = { ...pick(source, CURRENCY_CREATE_FIELDS), enabled: true };
       const created = asRecord(await apiRequestV2(environment, "/currencies", {
         method: "POST",
         body,
-        resource: `display currency ${code}`,
+        resource: `store currency ${code}`,
       }));
       if (created) destinationCurrencies.push(created);
+      storeVisibilityChanged = true;
     } catch (error) {
       warnings.push(
         `Currency ${code}: ${error instanceof Error ? error.message : "Could not enable currency."}`,
       );
+    }
+  }
+
+  if (storeVisibilityChanged) {
+    for (const [channelId, preserved] of preservedChannelAssignments) {
+      try {
+        await apiRequest(
+          environment,
+          `/channels/${channelId}/currency-assignments`,
+          {
+            method: "PUT",
+            body: preserved,
+            resource: `preserved currency assignments for channel ${channelId}`,
+          },
+        );
+      } catch (error) {
+        warnings.push(
+          `Channel ${channelId} currency visibility: ${error instanceof Error ? error.message : "Could not preserve the existing channel assignment."}`,
+        );
+      }
     }
   }
 
@@ -1250,7 +1330,7 @@ async function restoreCatalogTranslations(
           })
         : [];
       if (!targetId || fields.length === 0) {
-        if (sourceId && !targetId) unmapped += 1;
+        if (fields.length > 0 && sourceId && !targetId) unmapped += 1;
         return [];
       }
       const singular = resourceType === "PRODUCTS" ? "product" : "category";
@@ -1292,7 +1372,8 @@ async function restoreConfiguration(
 ) {
   const configuration = manifest.configuration;
   const selected = groups.filter(
-    (group): group is Exclude<SnapshotRestoreGroup, "catalog"> => group !== "catalog",
+    (group): group is Exclude<SnapshotRestoreGroup, "catalog" | "channel"> =>
+      group !== "catalog" && group !== "channel",
   );
   let step = 0;
   const total = Math.max(selected.length, 1);
@@ -1329,64 +1410,6 @@ async function restoreConfiguration(
       }
     }
 
-    if (group === "channel") {
-      const metafields = capturedData(resources.channelMetafields);
-      if (Array.isArray(metafields)) {
-        await bestEffort("Channel metafields", () =>
-          syncMetafields(
-            environment,
-            `/channels/${destinationChannelId}/metafields`,
-            metafields,
-            "channel metafields",
-          ),
-        );
-      }
-      const sourceChannel = manifest.catalog.channel;
-      const channelPatch = pick(sourceChannel, ["is_visible"]);
-      if (Object.keys(channelPatch).length > 0) {
-        await bestEffort("Channel properties", () =>
-          apiRequest(environment, `/channels/${destinationChannelId}`, {
-            method: "PUT",
-            body: channelPatch,
-            resource: "channel properties",
-          }),
-        );
-      }
-      const sourceRoutes = capturedData(resources.siteRoutes);
-      if (Array.isArray(sourceRoutes) && sourceRoutes.length > 0) {
-        await bestEffort("Site routes", async () => {
-          const destinationSitePayload = await apiRequest(
-            environment,
-            `/channels/${destinationChannelId}/site`,
-            { resource: "destination channel site" },
-          );
-          const destinationSiteId = readPositiveInteger(
-            asRecord(asRecord(destinationSitePayload)?.data)?.id,
-          );
-          if (!destinationSiteId) {
-            throw new CatalogRestoreError("The destination channel has no site for route restoration.");
-          }
-          const routes = sourceRoutes.flatMap((value) => {
-            const route = writableObject(value);
-            if (!route) return [];
-            delete route.url;
-            return [{ ...route, site_id: destinationSiteId }];
-          });
-          if (routes.length > 0) {
-            await apiRequest(environment, `/sites/${destinationSiteId}/routes`, {
-              method: "PUT",
-              body: routes,
-              resource: "site routes",
-            });
-          }
-        });
-      }
-      if (capturedData(resources.site)) {
-        warnings.push("The source site, domain, and checkout URL were captured for reference but were not copied; destination DNS and SSL ownership remain unchanged.");
-      }
-      continue;
-    }
-
     if (group === "experience") {
       const endpoints: Record<string, string> = {
         checkout: `/checkouts/settings/channels/${destinationChannelId}`,
@@ -1413,10 +1436,12 @@ async function restoreConfiguration(
     if (group === "pricing") {
       const capturedCurrencies = writableObject(capturedData(resources.currencyAssignments));
       const currencies = capturedCurrencies
-        ? await prepareCurrencyAssignments(
+          ? await prepareCurrencyAssignments(
             environment,
+            destinationChannelId,
             resources,
             capturedCurrencies,
+            manifest.store,
             warnings,
           )
         : null;
@@ -1611,39 +1636,95 @@ async function restoreConfiguration(
 
     if (group === "localization") {
       const storeLocale = writableObject(capturedData(resources.storeLocale));
-      if (storeLocale) {
-        await bestEffort("Store locale settings", () =>
-          apiRequest(environment, "/settings/store/locale", {
-            method: "PUT",
-            body: storeLocale,
-            resource: "store locale settings",
-          }),
+      const storeCountry = readString(storeLocale?.store_country);
+      if (storeCountry) {
+        await bestEffort("Channel default country", () =>
+          apiRequest(
+            environment,
+            `/settings/store/locale?channel_id=${destinationChannelId}`,
+            {
+              method: "PUT",
+              body: { store_country: storeCountry },
+              resource: "channel default country",
+            },
+          ),
         );
       }
       const localePayload = asRecord(capturedData(resources.channelLocales));
-      const localeEdges = asRecord(asRecord(asRecord(localePayload?.data)?.store)?.locales)?.edges;
+      const localeRoot = asRecord(localePayload?.data) ?? localePayload;
+      const localeEdges = asRecord(asRecord(localeRoot?.store)?.locales)?.edges;
       if (Array.isArray(localeEdges)) {
-        for (const edge of localeEdges) {
-          const locale = asRecord(asRecord(edge)?.node);
-          const code = readString(locale?.code);
-          const status = readString(locale?.status);
-          if (!code || !status) continue;
-          const normalizedStatus = status.toUpperCase() === "ACTIVE" ? "ACTIVE" : "INACTIVE";
-          await bestEffort(`Locale ${code}`, async () => {
-            const variables = {
-              channelId: `bc/store/channel/${destinationChannelId}`,
+        await bestEffort("Channel locales", async () => {
+          const channelId = `bc/store/channel/${destinationChannelId}`;
+          const destinationPayload = await graphqlRequest(
+            environment,
+            `query DestinationLocales($channelId: ID!) { store { locales(input: { channelId: $channelId }) { edges { node { code status isDefault } } } } }`,
+            { channelId },
+            "destination channel locales",
+          );
+          const destinationEdges = asRecord(
+            asRecord(asRecord(asRecord(destinationPayload)?.data)?.store)?.locales,
+          )?.edges;
+          const destinationLocales = Array.isArray(destinationEdges)
+            ? destinationEdges.flatMap((edge) => {
+                const locale = asRecord(asRecord(edge)?.node);
+                const code = readString(locale?.code);
+                return code
+                  ? [{ code: code.toLowerCase(), isDefault: Boolean(locale?.isDefault) }]
+                  : [];
+              })
+            : [];
+          const destinationCodes = new Set(
+            destinationLocales.map((locale) => locale.code),
+          );
+          const destinationDefaultCode = destinationLocales.find(
+            (locale) => locale.isDefault,
+          )?.code;
+          const sourceLocales = localeEdges.flatMap((edge) => {
+            const locale = asRecord(asRecord(edge)?.node);
+            const code = readString(locale?.code);
+            return code ? [{
               code,
-            };
-            try {
-              await graphqlRequest(environment, `mutation RestoreLocale($channelId: ID!, $code: String!) { locale { updateLocale(input: { channelId: $channelId, code: $code, status: ${normalizedStatus}, isDefault: ${Boolean(locale?.isDefault)} }) { locale { code } errors { ... on Error { message } } } } }`, variables, `locale ${code}`);
-            } catch {
-              await graphqlRequest(environment, `mutation AddLocale($channelId: ID!, $code: String!) { locale { addLocale(input: { channelId: $channelId, code: $code, status: ${normalizedStatus} }) { locale { code } errors { ... on Error { message } } } } }`, variables, `locale ${code}`);
-              if (Boolean(locale?.isDefault)) {
-                await graphqlRequest(environment, `mutation MakeLocaleDefault($channelId: ID!, $code: String!) { locale { updateLocale(input: { channelId: $channelId, code: $code, status: ${normalizedStatus}, isDefault: true }) { locale { code } errors { ... on Error { message } } } } }`, variables, `locale ${code}`);
-              }
-            }
+              status: readString(locale?.status).toUpperCase() === "ACTIVE"
+                ? "ACTIVE"
+                : "INACTIVE",
+              isDefault: Boolean(locale?.isDefault),
+            }] : [];
           });
-        }
+
+          for (const locale of sourceLocales) {
+            if (destinationCodes.has(locale.code.toLowerCase())) continue;
+            if (destinationCodes.size >= 5) {
+              warnings.push(
+                `Locale ${locale.code} was not added because BigCommerce allows at most five locales per channel.`,
+              );
+              continue;
+            }
+            await graphqlRequest(
+              environment,
+              `mutation AddLocale($channelId: ID!, $code: String!) { locale { addLocale(input: { channelId: $channelId, code: $code, status: ${locale.status} }) { locale { code } errors { ... on Error { message } } } } }`,
+              { channelId, code: locale.code },
+              `locale ${locale.code}`,
+            );
+            destinationCodes.add(locale.code.toLowerCase());
+          }
+
+          const defaultLocale = sourceLocales.find((locale) => locale.isDefault);
+          const defaultLocaleCode = defaultLocale?.code.toLowerCase();
+          if (
+            defaultLocale &&
+            defaultLocaleCode &&
+            destinationCodes.has(defaultLocaleCode) &&
+            destinationDefaultCode !== defaultLocaleCode
+          ) {
+            await graphqlRequest(
+              environment,
+              `mutation MakeLocaleDefault($channelId: ID!, $code: String!) { locale { updateLocale(input: { channelId: $channelId, code: $code, status: ACTIVE, isDefault: true }) { locale { code } errors { ... on Error { message } } } } }`,
+              { channelId, code: defaultLocale.code },
+              `default locale ${defaultLocale.code}`,
+            );
+          }
+        });
       }
       await restoreCatalogTranslations(
         environment,
@@ -1802,6 +1883,107 @@ type CategoryRestoreState = {
   created: number;
   updated: number;
 };
+
+async function mapExistingCatalogForTranslations(
+  environment: ConnectedEnvironment,
+  channelId: number,
+  manifest: CatalogSnapshotManifestV1,
+  categoryMap: Map<number, number>,
+  productMap: Map<number, number>,
+) {
+  const trees = await fetchCollection(
+    environment,
+    `/catalog/trees?channel_id:in=${channelId}`,
+    "destination category trees for translations",
+  );
+  const treeId = trees
+    .map(asRecord)
+    .map((tree) => readPositiveInteger(tree?.id))
+    .find((id): id is number => Boolean(id));
+
+  if (treeId) {
+    const targetCategories = (
+      await fetchCollection(
+        environment,
+        `/catalog/trees/categories?tree_id:in=${treeId}`,
+        "destination categories for translations",
+      )
+    ).flatMap((value) => {
+      const record = asRecord(value);
+      return record ? [record] : [];
+    });
+    const sourceById = new Map<number, SnapshotCategory>();
+    for (const category of manifest.catalog.categories) {
+      const sourceId = readPositiveInteger(category.data.category_id);
+      if (sourceId) sourceById.set(sourceId, category);
+    }
+    const usedTargetIds = new Set(categoryMap.values());
+    const orderedCategories = [...manifest.catalog.categories].sort(
+      (left, right) =>
+        categoryDepth(left, sourceById) - categoryDepth(right, sourceById),
+    );
+
+    for (const sourceCategory of orderedCategories) {
+      const sourceId = readPositiveInteger(sourceCategory.data.category_id);
+      if (!sourceId || categoryMap.has(sourceId)) continue;
+      const sourcePath = normalizePath(sourceCategory.data.url);
+      const sourceParentId = readPositiveInteger(sourceCategory.data.parent_id);
+      const targetParentId = sourceParentId
+        ? categoryMap.get(sourceParentId) ?? 0
+        : 0;
+      const matches = targetCategories.filter((candidate) => {
+        const candidateId = readPositiveInteger(candidate.category_id);
+        if (!candidateId || usedTargetIds.has(candidateId)) return false;
+        const candidatePath = normalizePath(candidate.url);
+        return sourcePath
+          ? candidatePath === sourcePath
+          : normalizeText(candidate.name) === normalizeText(sourceCategory.data.name) &&
+              Number(candidate.parent_id) === targetParentId;
+      });
+      const targetId = matches.length === 1
+        ? readPositiveInteger(matches[0].category_id)
+        : null;
+      if (targetId) {
+        categoryMap.set(sourceId, targetId);
+        usedTargetIds.add(targetId);
+      }
+    }
+  }
+
+  const targetProducts = (
+    await fetchCollection(
+      environment,
+      "/catalog/products?include=variants",
+      "destination products for translations",
+    )
+  ).flatMap((value) => {
+    const record = asRecord(value);
+    return record ? [record] : [];
+  });
+  const usedTargetProductIds = new Set(productMap.values());
+
+  for (const sourceRecord of manifest.catalog.products) {
+    const sourceId = readPositiveInteger(sourceRecord.data.id);
+    if (!sourceId || productMap.has(sourceId)) continue;
+    const sourceKey = productMatchKey(sourceRecord.data);
+    const matches = targetProducts.filter((target) => {
+      const targetId = readPositiveInteger(target.id);
+      if (!targetId || usedTargetProductIds.has(targetId)) return false;
+      const targetKey = productMatchKey(target);
+      return (
+        [...sourceKey.skus].some((sku) => targetKey.skus.has(sku)) ||
+        Boolean(sourceKey.slug && targetKey.slug === sourceKey.slug)
+      );
+    });
+    const targetId = matches.length === 1
+      ? readPositiveInteger(matches[0].id)
+      : null;
+    if (targetId) {
+      productMap.set(sourceId, targetId);
+      usedTargetProductIds.add(targetId);
+    }
+  }
+}
 
 async function reconcileCategories(
   environment: ConnectedEnvironment,
@@ -2773,6 +2955,24 @@ export async function restoreCatalogSnapshot(input: {
     );
     await input.onProgress?.("Verifying channel catalog assignments", 3, 3);
   }
+  if (restoreGroups.includes("localization")) {
+    await input.onProgress?.(
+      "Mapping destination products and categories for translations",
+    );
+    try {
+      await mapExistingCatalogForTranslations(
+        environment,
+        input.destinationChannelId,
+        manifest,
+        categoryState.sourceToTarget,
+        productState.sourceToTargetProduct,
+      );
+    } catch (error) {
+      productState.warnings.push(
+        `Translation catalog mapping: ${error instanceof Error ? error.message : "The destination catalog could not be mapped."}`,
+      );
+    }
+  }
   await restoreConfiguration(
     environment,
     input.destinationChannelId,
@@ -2784,6 +2984,33 @@ export async function restoreCatalogSnapshot(input: {
     categoryState.sourceToTarget,
     input.onProgress,
   );
+  const manualActions: CatalogRestoreManualAction[] = [];
+  if (restoreGroups.includes("pricing")) {
+    const currencyAssignments = writableObject(capturedData(
+      manifest.configuration?.pricing?.resources.currencyAssignments,
+    ));
+    const currencyCodes = currencyAssignments
+      ? [...new Set([
+          ...(Array.isArray(currencyAssignments.enabled_currencies)
+            ? currencyAssignments.enabled_currencies
+            : []),
+          currencyAssignments.default_currency,
+        ].flatMap((value) => {
+          const code = readString(value).trim().toUpperCase();
+          return code ? [code] : [];
+        }))]
+      : [];
+    if (currencyCodes.length > 0) {
+      const currencyLabel = currencyCodes.join(", ");
+      const description = `Assign the intended ${currencyLabel} payment configuration (for example, Test Payment Provider) to ${channelName} under Payments → Manage Channel Visibility.`;
+      productState.warnings.push(`Manual action required: ${description}`);
+      manualActions.push({
+        label: "Open Payments → Manage Channel Visibility",
+        description,
+        href: `https://store-${environment.storeHash}.mybigcommerce.com/manage/settings/payment`,
+      });
+    }
+  }
   return {
     snapshotName: snapshot.name,
     snapshotVersion: snapshot.snapshotVersion,
@@ -2794,6 +3021,7 @@ export async function restoreCatalogSnapshot(input: {
     productsUpdated: productState.updated,
     productAssignmentsRemoved: productState.assignmentsRemoved,
     warnings: productState.warnings,
+    manualActions,
     restoredGroups: restoreGroups,
     destinationEnvironmentName: environment.name,
     destinationChannelName: channelName,

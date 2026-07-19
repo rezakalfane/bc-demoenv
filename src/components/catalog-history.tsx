@@ -33,6 +33,10 @@ export function CatalogHistory({ title, entries }: { title: string; entries: Cat
           {entries.length === 0 ? <p className="rounded-2xl border border-dashed border-black/15 p-8 text-center text-sm text-black/45 dark:border-white/15 dark:text-white/45">No catalog activity has been recorded yet.</p> : entries.map((entry) => <article key={entry.id} className="rounded-2xl border border-black/10 p-4 dark:border-white/10">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{entry.title}</h3><time dateTime={entry.createdAt} className="mt-1 block text-xs text-black/40 dark:text-white/40">{formatter.format(new Date(entry.createdAt))}</time></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${entry.status === "completed" ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300" : entry.status === "failed" ? "bg-red-500/12 text-red-700 dark:text-red-300" : "bg-amber-500/12 text-amber-700 dark:text-amber-300"}`}>{entry.status}</span></div>
             {entry.details.length ? <ul className="mt-3 space-y-1 text-xs leading-5 text-black/55 dark:text-white/55">{entry.details.map((detail) => <li key={detail}>{detail}</li>)}</ul> : null}
+            {entry.manualActions.length ? <div className="mt-3 space-y-2">{entry.manualActions.map((action) => <div key={`${action.href}-${action.label}`} className="rounded-xl border border-blue-500/25 bg-blue-500/8 p-3">
+              <p className="text-xs leading-5 text-blue-950/70 dark:text-blue-100/70">{action.description}</p>
+              <a href={action.href} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center rounded-md border border-blue-500/30 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-500/10 dark:text-blue-300">{action.label} ↗</a>
+            </div>)}</div> : null}
             {entry.error ? <p className="mt-3 rounded-xl bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300">{entry.error}</p> : null}
           </article>)}
         </div>
