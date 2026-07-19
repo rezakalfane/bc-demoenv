@@ -82,6 +82,7 @@ export function SnapshotCreateVersion({
         channelId: result.channelId,
         snapshotId: viewedSnapshotId,
         operationId: result.operationId,
+        originPath: `/snapshots/${viewedSnapshotId}`,
       });
       setIsOpen(false);
       router.refresh();

@@ -10,6 +10,10 @@ import {
 import type { CatalogRestoreDestination } from "@/lib/catalog-restore";
 import { CATALOG_OPERATION_KEY, finishCatalogOperation, startCatalogOperation, useCatalogOperationActive } from "@/components/catalog-operation-progress";
 import { RestoreIcon } from "@/components/action-icons";
+import {
+  SNAPSHOT_RESTORE_GROUPS,
+  type SnapshotRestoreGroup,
+} from "@/lib/snapshot-configuration";
 
 const initialState: RestoreSnapshotActionState = {
   status: "idle",
@@ -130,6 +134,11 @@ export function SnapshotRestore({
     initialChannel?.id.toString() ?? "",
   );
   const [confirmation, setConfirmation] = useState("");
+  const [restoreGroups, setRestoreGroups] = useState<SnapshotRestoreGroup[]>(
+    SNAPSHOT_RESTORE_GROUPS.filter((group) => group.defaultChecked).map(
+      (group) => group.id,
+    ),
+  );
   const [isRunning, setIsRunning] = useState(false);
   const operationStorageKey = CATALOG_OPERATION_KEY;
   const [state, formAction] = useActionState(restoreSnapshot, initialState);
@@ -421,6 +430,63 @@ export function SnapshotRestore({
                   <input type="hidden" name="snapshotId" value={activeSnapshot.id} />
                   <input type="hidden" name="destinationEnvironmentId" value={environmentId} />
                   <input type="hidden" name="destinationChannelId" value={channelId} />
+                  <fieldset>
+                    <legend className="text-sm font-semibold">Choose what to restore</legend>
+                    <p className="mt-1 text-xs leading-5 text-black/45 dark:text-white/45">
+                      Every section is captured when the API token permits it. Catalog is selected by default; configuration is opt-in.
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {SNAPSHOT_RESTORE_GROUPS.map((group) => {
+                        const checked = restoreGroups.includes(group.id);
+                        const isStoreWide = group.scope === "store";
+                        return (
+                          <label
+                            key={group.id}
+                            className={`flex cursor-pointer gap-3 rounded-xl border p-3 transition ${
+                              checked
+                                ? "border-emerald-500/45 bg-emerald-500/8"
+                                : "border-black/10 bg-black/2 hover:border-emerald-500/25 dark:border-white/10 dark:bg-white/3"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              name="restoreGroups"
+                              value={group.id}
+                              checked={checked}
+                              onChange={(event) => {
+                                setRestoreGroups((current) =>
+                                  event.target.checked
+                                    ? [...new Set([...current, group.id])]
+                                    : current.filter((value) => value !== group.id),
+                                );
+                                setConfirmation("");
+                              }}
+                              className="mt-0.5 size-4 accent-emerald-600"
+                            />
+                            <span className="min-w-0">
+                              <span className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+                                {group.label}
+                                {isStoreWide ? (
+                                  <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                                    Store-wide
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="mt-1 block text-[11px] leading-4 text-black/45 dark:text-white/45">
+                                {group.description}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {restoreGroups.some((group) => group === "shipping" || group === "tax" || group === "inventory" || group === "b2b") ? (
+                      <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] leading-4 text-amber-900 dark:text-amber-100">
+                        Shipping, tax, inventory, and B2B data are shared by the destination store. Portable settings and B2B demo records are restored additively; mapping-sensitive or read-only records remain captured with warnings. Creating B2B Companies or users may trigger BigCommerce account or welcome email.
+                      </p>
+                    ) : null}
+                  </fieldset>
+                  <div className="my-4 border-t border-black/8 dark:border-white/8" />
                   <label htmlFor="restore-confirmation" className="text-sm font-medium">
                     Type <span className="font-mono">RESTORE</span> to confirm
                   </label>
@@ -443,6 +509,7 @@ export function SnapshotRestore({
                     <RestoreSubmitButton
                       enabled={
                         confirmation === "RESTORE" &&
+                        restoreGroups.length > 0 &&
                         Boolean(selectedEnvironment && selectedChannel)
                       }
                     />

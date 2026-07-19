@@ -314,7 +314,13 @@ export function SnapshotForm({
 
   useEffect(() => {
     if (state.status === "success" && state.operationId) {
-      startCatalogOperation({ kind: "snapshot", environmentId, channelId, operationId: state.operationId });
+      startCatalogOperation({
+        kind: "snapshot",
+        environmentId,
+        channelId,
+        operationId: state.operationId,
+        originPath: `/environments/${environmentId}/channels/${channelId}`,
+      });
       queueMicrotask(() => setIsOpen(false));
       router.refresh();
     }

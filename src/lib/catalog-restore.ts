@@ -9,8 +9,14 @@ import {
   type CatalogSnapshotRecord,
 } from "@/lib/db";
 import type { CatalogSnapshotManifestV1 } from "@/lib/catalog-snapshots";
+import {
+  parseSnapshotRestoreGroups,
+  type CapturedConfigurationResource,
+  type SnapshotRestoreGroup,
+} from "@/lib/snapshot-configuration";
 
 const API_BASE_URL = "https://api.bigcommerce.com/stores";
+const B2B_API_BASE_URL = "https://api-b2b.bigcommerce.com/api/v3/io";
 const REQUEST_TIMEOUT_MS = 30_000;
 const PAGE_SIZE = 250;
 const PRODUCT_INCLUDES = [
@@ -56,6 +62,7 @@ export type CatalogRestoreResult = {
   productsUpdated: number;
   productAssignmentsRemoved: number;
   warnings: string[];
+  restoredGroups: SnapshotRestoreGroup[];
   destinationEnvironmentName: string;
   destinationChannelName: string;
 };
@@ -231,6 +238,349 @@ async function apiRequest(
   return payload;
 }
 
+async function b2bApiRequest(
+  environment: ConnectedEnvironment,
+  path: string,
+  options: { method?: string; body?: unknown; resource: string },
+) {
+  let response!: Response;
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt += 1) {
+    try {
+      response = await fetch(`${B2B_API_BASE_URL}${path}`, {
+        method: options.method ?? "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-Auth-Token": environment.accessToken,
+          "X-Store-Hash": environment.storeHash,
+        },
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw new CatalogRestoreError(
+        error instanceof Error && error.name === "TimeoutError"
+          ? `BigCommerce B2B Edition timed out while restoring ${options.resource}.`
+          : `Unable to reach BigCommerce B2B Edition while restoring ${options.resource}.`,
+      );
+    }
+    if (response.status !== 429 || attempt === RATE_LIMIT_RETRIES) break;
+    const retryAfter = Number(response.headers.get("retry-after"));
+    await wait(
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1000, 15_000)
+        : Math.min(750 * 2 ** attempt, 12_000),
+    );
+  }
+  const text = response.status === 204 ? "" : await response.text();
+  let payload: unknown = null;
+  try {
+    payload = text ? JSON.parse(text) as unknown : null;
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    const detail = extractApiMessage(payload);
+    const message = response.status === 403
+      ? "The destination token needs B2B Edition modify access."
+      : response.status === 404
+        ? `B2B Edition did not expose ${options.resource} for the destination store.`
+        : response.status === 429
+          ? "BigCommerce B2B Edition rate limiting persisted after automatic retries."
+          : detail
+            ? `BigCommerce B2B Edition rejected ${options.resource}: ${detail}`
+            : `BigCommerce B2B Edition rejected ${options.resource}.`;
+    throw new CatalogRestoreError(message);
+  }
+  return payload;
+}
+
+function readB2BDataArray(payload: unknown, resource: string) {
+  const data = asRecord(payload)?.data;
+  if (Array.isArray(data)) return data;
+  if (asRecord(data)) return Object.values(asRecord(data)!);
+  throw new CatalogRestoreError(
+    `BigCommerce B2B Edition returned an unexpected ${resource} response.`,
+  );
+}
+
+async function fetchB2BCollection(
+  environment: ConnectedEnvironment,
+  path: string,
+  resource: string,
+) {
+  const items: unknown[] = [];
+  let offset = 0;
+  while (true) {
+    const separator = path.includes("?") ? "&" : "?";
+    const payload = await b2bApiRequest(
+      environment,
+      `${path}${separator}limit=${PAGE_SIZE}&offset=${offset}`,
+      { resource },
+    );
+    const page = readB2BDataArray(payload, resource);
+    items.push(...page);
+    const pagination = asRecord(asRecord(asRecord(payload)?.meta)?.pagination);
+    const totalCount = Number(pagination?.totalCount);
+    if (
+      page.length === 0 ||
+      page.length < PAGE_SIZE ||
+      (Number.isFinite(totalCount) && items.length >= totalCount)
+    ) return items;
+    offset += page.length;
+  }
+}
+
+async function graphqlRequest(
+  environment: ConnectedEnvironment,
+  query: string,
+  variables: Record<string, unknown>,
+  resource: string,
+) {
+  const response = await fetch(
+    `${API_BASE_URL}/${encodeURIComponent(environment.storeHash)}/graphql`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Auth-Token": environment.accessToken,
+      },
+      body: JSON.stringify({ query, variables }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+  );
+  const payload = (await response.json()) as unknown;
+  const errors = asRecord(payload)?.errors;
+  const mutationErrors: unknown[] = [];
+  const collectErrors = (value: unknown, depth = 0) => {
+    if (depth > 8 || value == null) return;
+    if (Array.isArray(value)) {
+      for (const entry of value) collectErrors(entry, depth + 1);
+      return;
+    }
+    const record = asRecord(value);
+    if (!record) return;
+    for (const [key, entry] of Object.entries(record)) {
+      if (key === "errors" && Array.isArray(entry)) mutationErrors.push(...entry);
+      else collectErrors(entry, depth + 1);
+    }
+  };
+  collectErrors(payload);
+  if (
+    !response.ok ||
+    (Array.isArray(errors) && errors.length > 0) ||
+    mutationErrors.length > 0
+  ) {
+    throw new CatalogRestoreError(`BigCommerce rejected ${resource}.`);
+  }
+  return payload;
+}
+
+async function apiRequestV2(
+  environment: ConnectedEnvironment,
+  path: string,
+  options: { method?: string; body?: unknown; resource: string },
+) {
+  const response = await fetch(
+    `${API_BASE_URL}/${encodeURIComponent(environment.storeHash)}/v2${path}`,
+    {
+      method: options.method ?? "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Auth-Token": environment.accessToken,
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+  );
+  const text = response.status === 204 ? "" : await response.text();
+  let payload: unknown = null;
+  try {
+    payload = text ? JSON.parse(text) as unknown : null;
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    throw new CatalogRestoreError(
+      apiErrorMessage(response.status, options.resource, extractApiMessage(payload)),
+    );
+  }
+  return payload;
+}
+
+const SHIPPING_ZONE_FIELDS = [
+  "name", "type", "enabled", "free_shipping", "handling_fees", "locations",
+] as const;
+const SHIPPING_METHOD_FIELDS = [
+  "name", "type", "enabled", "handling_fees", "is_fallback", "settings",
+] as const;
+
+async function reconcileShippingConfiguration(
+  environment: ConnectedEnvironment,
+  resources: Record<string, CapturedConfigurationResource>,
+  bestEffort: (label: string, work: () => Promise<unknown>) => Promise<void>,
+) {
+  const sourceZones = capturedData(resources.shippingZones);
+  if (!Array.isArray(sourceZones)) return;
+  const targetPayload = await apiRequestV2(environment, "/shipping/zones", {
+    resource: "destination shipping zones",
+  });
+  const targetZones = Array.isArray(targetPayload)
+    ? targetPayload.flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
+    : [];
+  const methodsByZone = asRecord(capturedData(resources.shippingMethods)) ?? {};
+
+  for (const value of sourceZones) {
+    const source = asRecord(value);
+    const sourceId = readPositiveInteger(source?.id);
+    const name = readString(source?.name);
+    if (!sourceId || !name) continue;
+    const target = targetZones.find(
+      (candidate) => normalizeText(candidate.name) === normalizeText(name),
+    );
+    let targetId = readPositiveInteger(target?.id);
+    await bestEffort(`Shipping zone ${name}`, async () => {
+      const payload = await apiRequestV2(
+        environment,
+        targetId ? `/shipping/zones/${targetId}` : "/shipping/zones",
+        {
+          method: targetId ? "PUT" : "POST",
+          body: pick(source!, SHIPPING_ZONE_FIELDS),
+          resource: `shipping zone ${name}`,
+        },
+      );
+      targetId ??= readPositiveInteger(asRecord(payload)?.id);
+      if (!targetId) return;
+      const targetMethodsPayload = await apiRequestV2(
+        environment,
+        `/shipping/zones/${targetId}/methods`,
+        { resource: `shipping methods for ${name}` },
+      );
+      const targetMethods = Array.isArray(targetMethodsPayload)
+        ? targetMethodsPayload.flatMap((entry) => asRecord(entry) ? [asRecord(entry)!] : [])
+        : [];
+      const sourceMethods = methodsByZone[String(sourceId)];
+      if (!Array.isArray(sourceMethods)) return;
+      for (const methodValue of sourceMethods) {
+        const method = asRecord(methodValue);
+        const methodName = readString(method?.name);
+        if (!method || !methodName) continue;
+        const targetMethod = targetMethods.find(
+          (candidate) =>
+            normalizeText(candidate.name) === normalizeText(methodName) &&
+            normalizeText(candidate.type) === normalizeText(method.type),
+        );
+        const targetMethodId = readPositiveInteger(targetMethod?.id);
+        await apiRequestV2(
+          environment,
+          targetMethodId
+            ? `/shipping/zones/${targetId}/methods/${targetMethodId}`
+            : `/shipping/zones/${targetId}/methods`,
+          {
+            method: targetMethodId ? "PUT" : "POST",
+            body: pick(method, SHIPPING_METHOD_FIELDS),
+            resource: `shipping method ${methodName}`,
+          },
+        );
+      }
+    });
+  }
+}
+
+async function reconcileTaxConfiguration(
+  environment: ConnectedEnvironment,
+  resources: Record<string, CapturedConfigurationResource>,
+  bestEffort: (label: string, work: () => Promise<unknown>) => Promise<void>,
+) {
+  const sourceZones = capturedData(resources.taxZones);
+  const sourceRates = capturedData(resources.taxRates);
+  if (!Array.isArray(sourceZones)) return new Map<number, number>();
+  const targetZones = (
+    await fetchCollection(environment, "/tax/zones", "destination tax zones")
+  ).flatMap((value) => asRecord(value) ? [asRecord(value)!] : []);
+  const zoneMap = new Map<number, number>();
+
+  for (const value of sourceZones) {
+    const source = asRecord(value);
+    const sourceId = readPositiveInteger(source?.id);
+    const name = readString(source?.name);
+    if (!sourceId || !name) continue;
+    const target = sourceId === 1
+      ? targetZones.find((zone) => Number(zone.id) === 1)
+      : targetZones.find((zone) => normalizeText(zone.name) === normalizeText(name));
+    let targetId = readPositiveInteger(target?.id);
+    await bestEffort(`Tax zone ${name}`, async () => {
+      const body = { ...source };
+      delete body.id;
+      const payload = await apiRequest(environment, "/tax/zones", {
+        method: targetId ? "PUT" : "POST",
+        body: [{ ...(targetId ? { id: targetId } : {}), ...body }],
+        resource: `tax zone ${name}`,
+      });
+      if (!targetId) {
+        const created = readDataArray(payload, `tax zone ${name}`)[0];
+        targetId = readPositiveInteger(asRecord(created)?.id);
+      }
+      if (targetId) zoneMap.set(sourceId, targetId);
+    });
+  }
+
+  if (!Array.isArray(sourceRates)) return zoneMap;
+  const targetRates = (
+    await fetchCollection(environment, "/tax/rates", "destination tax rates")
+  ).flatMap((value) => asRecord(value) ? [asRecord(value)!] : []);
+  const sourceTaxClasses = Array.isArray(capturedData(resources.taxClasses))
+    ? (capturedData(resources.taxClasses) as unknown[]).flatMap((value) => asRecord(value) ? [asRecord(value)!] : [])
+    : [];
+  const targetTaxClasses = await resolveTaxClassMap(environment);
+
+  for (const value of sourceRates) {
+    const source = asRecord(value);
+    const sourceZoneId = readPositiveInteger(source?.tax_zone_id);
+    const targetZoneId = sourceZoneId ? zoneMap.get(sourceZoneId) : undefined;
+    const name = readString(source?.name);
+    if (!source || !targetZoneId || !name) continue;
+    const target = targetRates.find(
+      (rate) => Number(rate.tax_zone_id) === targetZoneId && normalizeText(rate.name) === normalizeText(name),
+    );
+    const targetId = readPositiveInteger(target?.id);
+    const classRates = Array.isArray(source.class_rates)
+      ? source.class_rates.flatMap((entry) => {
+          const classRate = asRecord(entry);
+          const sourceClass = sourceTaxClasses.find(
+            (taxClass) => Number(taxClass.id) === Number(classRate?.tax_class_id),
+          );
+          const targetClass = targetTaxClasses.find(
+            (taxClass) => normalizeText(taxClass.name) === normalizeText(sourceClass?.name),
+          );
+          const taxClassId = readPositiveInteger(targetClass?.id) ??
+            (Number(classRate?.tax_class_id) === 0 ? 0 : null);
+          return taxClassId === null
+            ? []
+            : [{ tax_class_id: taxClassId, rate: Number(classRate?.rate) || 0 }];
+        })
+      : [];
+    await bestEffort(`Tax rate ${name}`, () =>
+      apiRequest(environment, "/tax/rates", {
+        method: targetId ? "PUT" : "POST",
+        body: [{
+          ...(targetId ? { id: targetId } : {}),
+          ...pick(source, ["name", "enabled", "priority"]),
+          tax_zone_id: targetZoneId,
+          class_rates: classRates,
+        }],
+        resource: `tax rate ${name}`,
+      }),
+    );
+  }
+  return zoneMap;
+}
+
 function readDataArray(payload: unknown, resource: string) {
   const data = asRecord(payload)?.data;
 
@@ -362,6 +712,693 @@ function parseManifest(snapshot: CatalogSnapshotRecord) {
   }
 
   return manifest as CatalogSnapshotManifestV1;
+}
+
+function capturedData(resource: CapturedConfigurationResource | undefined) {
+  if (!resource || resource.warning || resource.data == null) return null;
+  const record = asRecord(resource.data);
+  return record && "data" in record ? record.data : resource.data;
+}
+
+function writableObject(value: unknown) {
+  const record = asRecord(value);
+  if (!record) return null;
+  const result = { ...record };
+  for (const key of [
+    "id", "uuid", "channel_id", "site_id", "date_created", "date_modified",
+    "created_at", "updated_at", "createdAt", "updatedAt", "meta",
+  ]) {
+    delete result[key];
+  }
+  return result;
+}
+
+const B2B_COMPANY_FIELDS = [
+  "companyName", "companyEmail", "companyPhone", "addressLine1", "addressLine2",
+  "city", "state", "country", "zipCode", "uuid", "extraFields",
+] as const;
+const B2B_USER_FIELDS = [
+  "email", "firstName", "lastName", "phoneNumber", "uuid", "extraFields",
+] as const;
+const B2B_ADDRESS_FIELDS = [
+  "addressLine1", "addressLine2", "city", "stateCode", "stateName", "countryCode",
+  "countryName", "zipCode", "firstName", "lastName", "isBilling", "isDefaultBilling",
+  "isShipping", "isDefaultShipping", "phoneNumber", "label", "extraFields",
+] as const;
+
+function b2bRecordId(record: JsonRecord | null, ...keys: string[]) {
+  return keys.reduce<number | null>(
+    (found, key) => found ?? readPositiveInteger(record?.[key]),
+    null,
+  );
+}
+
+async function reconcileB2BConfiguration(
+  environment: ConnectedEnvironment,
+  destinationChannelId: number,
+  manifest: CatalogSnapshotManifestV1,
+  resources: Record<string, CapturedConfigurationResource>,
+  warnings: string[],
+  bestEffort: (label: string, work: () => Promise<unknown>) => Promise<void>,
+  sourceToTargetProduct: Map<number, number>,
+) {
+  const sourcePermissions = capturedData(resources.permissions);
+  const sourceRoles = capturedData(resources.roles);
+  const destinationPermissions = await fetchB2BCollection(
+    environment,
+    "/companies/permissions",
+    "destination Company permissions",
+  );
+  const destinationRoles = await fetchB2BCollection(
+    environment,
+    "/companies/roles",
+    "destination Company roles",
+  );
+
+  if (Array.isArray(sourcePermissions)) {
+    for (const value of sourcePermissions) {
+      const permission = asRecord(value);
+      const code = readString(permission?.code);
+      const isCustom = permission?.isCustom === true || Number(permission?.isCustom) === 1;
+      if (!permission || !code || !isCustom) continue;
+      const exists = destinationPermissions.some(
+        (candidate) => normalizeText(asRecord(candidate)?.code) === normalizeText(code),
+      );
+      if (exists) continue;
+      await bestEffort(`B2B permission ${code}`, async () => {
+        const payload = pick(permission, ["name", "description", "code", "moduleName"]);
+        await b2bApiRequest(environment, "/companies/permissions", {
+          method: "POST",
+          body: payload,
+          resource: `Company permission ${code}`,
+        });
+        destinationPermissions.push(permission);
+      });
+    }
+  }
+
+  const sourceRoleToTarget = new Map<number, number>();
+  if (Array.isArray(sourceRoles)) {
+    for (const value of sourceRoles) {
+      const role = asRecord(value);
+      const sourceId = b2bRecordId(role, "id", "roleId");
+      const name = readString(role?.name);
+      const roleType = Number(role?.roleType);
+      if (!role || !sourceId || !name) continue;
+      const existing = destinationRoles.find(
+        (candidate) => normalizeText(asRecord(candidate)?.name) === normalizeText(name),
+      );
+      let targetId = b2bRecordId(asRecord(existing), "id", "roleId");
+      if (targetId) sourceRoleToTarget.set(sourceId, targetId);
+      if (roleType !== 2) {
+        if (targetId) sourceRoleToTarget.set(sourceId, targetId);
+        continue;
+      }
+      const permissions = Array.isArray(role.permissions)
+        ? role.permissions.flatMap((entry) => {
+            const permission = asRecord(entry);
+            const code = readString(permission?.code);
+            const permissionLevel = readPositiveInteger(permission?.permissionLevel);
+            return code && permissionLevel ? [{ code, permissionLevel }] : [];
+          })
+        : [];
+      await bestEffort(`B2B role ${name}`, async () => {
+        if (existing && Number(asRecord(existing)?.roleType) !== 2) {
+          throw new CatalogRestoreError(`A predefined destination role already uses the name “${name}”.`);
+        }
+        const response = await b2bApiRequest(
+          environment,
+          targetId ? `/companies/roles/${targetId}` : "/companies/roles",
+          {
+            method: targetId ? "PUT" : "POST",
+            body: { name, permissions },
+            resource: `Company role ${name}`,
+          },
+        );
+        targetId ??= b2bRecordId(asRecord(asRecord(response)?.data), "id", "roleId");
+        if (targetId) sourceRoleToTarget.set(sourceId, targetId);
+      });
+    }
+  }
+
+  const sourceCompanies = capturedData(resources.companies);
+  const sourceUsers = capturedData(resources.users);
+  const destinationCompanies = await fetchB2BCollection(
+    environment,
+    "/companies?isIncludeExtraFields=1",
+    "destination Companies",
+  );
+  const companyMap = new Map<number, number>();
+  if (Array.isArray(sourceCompanies)) {
+    for (const value of sourceCompanies) {
+      const company = asRecord(value);
+      const sourceId = b2bRecordId(company, "companyId", "id");
+      const name = readString(company?.companyName ?? company?.name);
+      const email = readString(company?.companyEmail ?? company?.email);
+      const uuid = readString(company?.uuid);
+      if (!company || !sourceId || !name) continue;
+      const existing = destinationCompanies.find((candidate) => {
+        const record = asRecord(candidate);
+        return (uuid && readString(record?.uuid) === uuid) ||
+          (email && normalizeText(record?.companyEmail ?? record?.email) === normalizeText(email)) ||
+          normalizeText(record?.companyName ?? record?.name) === normalizeText(name);
+      });
+      let targetId = b2bRecordId(asRecord(existing), "companyId", "id");
+      if (targetId) companyMap.set(sourceId, targetId);
+      await bestEffort(`B2B Company ${name}`, async () => {
+        const body = pick(company, B2B_COMPANY_FIELDS);
+        body.companyName ??= name;
+        body.companyEmail ??= email;
+        body.channelIds = [destinationChannelId];
+        if (!targetId) {
+          const admin = Array.isArray(sourceUsers)
+            ? sourceUsers.map(asRecord).find((user) =>
+                b2bRecordId(user, "companyId") === sourceId &&
+                (Number(user?.role) === 0 || normalizeText(user?.companyRoleName) === "admin"),
+              )
+            : null;
+          body.adminFirstName = readString(admin?.firstName) || "Demo";
+          body.adminLastName = readString(admin?.lastName) || "Administrator";
+          body.adminEmail = readString(admin?.email) || email;
+          body.adminPhoneNumber = readString(admin?.phoneNumber) || readString(company.companyPhone);
+          if (!body.companyEmail || !body.adminEmail || !body.country) {
+            throw new CatalogRestoreError(
+              "The captured Company lacks the email, administrator, or country fields required for creation.",
+            );
+          }
+        }
+        const response = await b2bApiRequest(
+          environment,
+          targetId ? `/companies/${targetId}` : "/companies",
+          {
+            method: targetId ? "PUT" : "POST",
+            body,
+            resource: `Company ${name}`,
+          },
+        );
+        targetId ??= b2bRecordId(asRecord(asRecord(response)?.data), "companyId", "id");
+        if (targetId) companyMap.set(sourceId, targetId);
+      });
+    }
+  }
+
+  const destinationUsers = await fetchB2BCollection(
+    environment,
+    "/users?isIncludeExtraFields=1",
+    "destination Company users",
+  );
+  const userMap = new Map<number, number>();
+  if (Array.isArray(sourceUsers)) {
+    for (const value of sourceUsers) {
+      const user = asRecord(value);
+      const sourceId = b2bRecordId(user, "id", "userId");
+      const sourceCompanyId = b2bRecordId(user, "companyId");
+      const targetCompanyId = sourceCompanyId ? companyMap.get(sourceCompanyId) : null;
+      const email = readString(user?.email);
+      if (!user || !sourceId || !targetCompanyId || !email) continue;
+      const existing = destinationUsers.find(
+        (candidate) => normalizeText(asRecord(candidate)?.email) === normalizeText(email),
+      );
+      let targetId = b2bRecordId(asRecord(existing), "id", "userId");
+      if (targetId) userMap.set(sourceId, targetId);
+      await bestEffort(`B2B user ${email}`, async () => {
+        const body = pick(user, B2B_USER_FIELDS);
+        body.companyId = targetCompanyId;
+        body.channelIds = [destinationChannelId];
+        const sourceRoleId = b2bRecordId(user, "companyRoleId");
+        const targetRoleId = sourceRoleId ? sourceRoleToTarget.get(sourceRoleId) : null;
+        if (targetRoleId) body.companyRoleId = targetRoleId;
+        else if ([0, 1, 2].includes(Number(user.role))) body.role = Number(user.role);
+        const response = await b2bApiRequest(
+          environment,
+          targetId ? `/users/${targetId}` : "/users",
+          {
+            method: targetId ? "PUT" : "POST",
+            body,
+            resource: `Company user ${email}`,
+          },
+        );
+        targetId ??= b2bRecordId(asRecord(asRecord(response)?.data), "id", "userId");
+        if (targetId) userMap.set(sourceId, targetId);
+      });
+    }
+  }
+
+  const sourceAddresses = capturedData(resources.addresses);
+  if (Array.isArray(sourceAddresses)) {
+    const destinationAddresses = await fetchB2BCollection(
+      environment,
+      "/addresses",
+      "destination Company addresses",
+    );
+    for (const value of sourceAddresses) {
+      const address = asRecord(value);
+      const sourceCompanyId = b2bRecordId(address, "companyId");
+      const targetCompanyId = sourceCompanyId ? companyMap.get(sourceCompanyId) : null;
+      if (!address || !targetCompanyId) continue;
+      const signature = [address.label, address.addressLine1, address.city, address.zipCode]
+        .map(normalizeText).join("|");
+      const exists = destinationAddresses.some((candidate) => {
+        const record = asRecord(candidate);
+        return b2bRecordId(record, "companyId") === targetCompanyId &&
+          [record?.label, record?.addressLine1, record?.city, record?.zipCode]
+            .map(normalizeText).join("|") === signature;
+      });
+      if (exists) continue;
+      await bestEffort(`B2B address ${readString(address.label) || readString(address.addressLine1)}`, () =>
+        b2bApiRequest(environment, `/companies/${targetCompanyId}/addresses`, {
+          method: "POST",
+          body: { ...pick(address, B2B_ADDRESS_FIELDS), companyId: targetCompanyId },
+          resource: "Company address",
+        }),
+      );
+    }
+  }
+
+  const sourceHierarchies = capturedData(resources.hierarchies);
+  if (Array.isArray(sourceHierarchies)) {
+    for (const value of sourceHierarchies) {
+      const relation = asRecord(value);
+      const child = companyMap.get(b2bRecordId(relation, "companyId") ?? 0);
+      const parent = companyMap.get(b2bRecordId(relation, "parentCompanyId") ?? 0);
+      if (!child || !parent) continue;
+      await bestEffort(`B2B Company hierarchy ${parent} → ${child}`, () =>
+        b2bApiRequest(environment, `/companies/${child}/parent`, {
+          method: "POST",
+          body: { parentCompanyId: parent },
+          resource: "Company hierarchy",
+        }),
+      );
+    }
+  }
+
+  const sourceShoppingLists = capturedData(resources.shoppingLists);
+  if (Array.isArray(sourceShoppingLists)) {
+    for (const value of sourceShoppingLists) {
+      const list = asRecord(value);
+      const sourceUserId = b2bRecordId(list, "userId");
+      const targetUserId = sourceUserId ? userMap.get(sourceUserId) : null;
+      const name = readString(list?.name);
+      if (!list || !targetUserId || !name) continue;
+      let destinationLists: unknown[];
+      try {
+        destinationLists = await fetchB2BCollection(
+          environment,
+          `/shopping-list?userId=${targetUserId}`,
+          `destination shopping lists for user ${targetUserId}`,
+        );
+      } catch (error) {
+        warnings.push(`B2B shopping list ${name}: ${error instanceof Error ? error.message : "unable to check the destination"}`);
+        continue;
+      }
+      if (destinationLists.some(
+        (candidate) => normalizeText(asRecord(candidate)?.name) === normalizeText(name),
+      )) continue;
+      const items = Array.isArray(list.items)
+        ? list.items.flatMap((entry) => {
+            const item = asRecord(entry);
+            const sourceProductId = b2bRecordId(item, "productId");
+            const targetProductId = sourceProductId
+              ? sourceToTargetProduct.get(sourceProductId) ??
+                (environment.storeHash === manifest.source.storeHash ? sourceProductId : undefined)
+              : undefined;
+            return item && targetProductId
+              ? [{ ...pick(item, ["quantity", "optionList", "itemId"]), productId: targetProductId }]
+              : [];
+          })
+        : [];
+      await bestEffort(`B2B shopping list ${name}`, () =>
+        b2bApiRequest(environment, "/shopping-list", {
+          method: "POST",
+          body: {
+            name,
+            description: readString(list.description),
+            status: [0, 30, 40].includes(Number(list.status)) ? Number(list.status) : 30,
+            userId: targetUserId,
+            channelId: destinationChannelId,
+            items,
+          },
+          resource: `shopping list ${name}`,
+        }),
+      );
+    }
+  }
+
+  if (capturedData(resources.quotes)) {
+    warnings.push("B2B quotes were captured with their products and messages but were not recreated because the Management API automatically submits new quotes to buyers and can send notifications.");
+  }
+  if (capturedData(resources.orders)) {
+    warnings.push("B2B order records were captured, but the B2B Orders API cannot create the underlying BigCommerce orders. Existing destination orders were not modified.");
+  }
+  if (capturedData(resources.invoices) || capturedData(resources.payments)) {
+    warnings.push("B2B invoices and payments were captured as financial history and were not replayed in the destination store.");
+  }
+  if (capturedData(resources.attachments)) {
+    warnings.push("B2B Company attachment metadata was captured; binary attachment files were not copied.");
+  }
+  if (capturedData(resources.salesReps)) {
+    warnings.push("B2B sales-representative records were captured but were not reassigned because destination system-user identities are store-specific.");
+  }
+  if (
+    capturedData(resources.companyExtraFields) ||
+    capturedData(resources.userExtraFields) ||
+    capturedData(resources.addressExtraFields) ||
+    capturedData(resources.orderExtraFields) ||
+    capturedData(resources.quoteExtraFields)
+  ) {
+    warnings.push("B2B extra-field definitions and values were captured. Values are restored on Companies, users, and addresses when compatible destination definitions already exist; definitions themselves remain destination-managed.");
+  }
+  warnings.push("Creating B2B Companies or users can cause BigCommerce to send account or welcome email to newly created administrator and buyer addresses.");
+}
+
+async function restoreConfiguration(
+  environment: ConnectedEnvironment,
+  destinationChannelId: number,
+  manifest: CatalogSnapshotManifestV1,
+  groups: SnapshotRestoreGroup[],
+  warnings: string[],
+  sourceToTargetProduct: Map<number, number>,
+  onProgress?: (currentStep: string, stepIndex?: number, totalSteps?: number) => Promise<void>,
+) {
+  const configuration = manifest.configuration;
+  const selected = groups.filter(
+    (group): group is Exclude<SnapshotRestoreGroup, "catalog"> => group !== "catalog",
+  );
+  let step = 0;
+  const total = Math.max(selected.length, 1);
+  const bestEffort = async (label: string, work: () => Promise<unknown>) => {
+    try {
+      await work();
+    } catch (error) {
+      warnings.push(
+        `${label}: ${error instanceof Error ? error.message.replace(/ The restore may be partially complete\.$/, "") : "restore failed"}`,
+      );
+    }
+  };
+
+  for (const group of selected) {
+    step += 1;
+    await onProgress?.(
+      group === "b2b"
+        ? "Restoring B2B Edition Companies, users, roles, and demo records"
+        : `Restoring ${group.replaceAll("_", " ")} configuration`,
+      groups.includes("catalog") ? total : step,
+      total,
+    );
+    const resources = configuration?.[group]?.resources;
+    if (!resources) {
+      warnings.push(`${group}: this snapshot version does not contain this configuration group.`);
+      continue;
+    }
+    for (const resource of Object.values(resources)) {
+      if (resource.warning) warnings.push(`${resource.label}: ${resource.warning}`);
+    }
+
+    if (group === "channel") {
+      const metafields = capturedData(resources.channelMetafields);
+      if (Array.isArray(metafields)) {
+        await bestEffort("Channel metafields", () =>
+          syncMetafields(
+            environment,
+            `/channels/${destinationChannelId}/metafields`,
+            metafields,
+            "channel metafields",
+          ),
+        );
+      }
+      const sourceChannel = manifest.catalog.channel;
+      const channelPatch = pick(sourceChannel, ["is_visible"]);
+      if (Object.keys(channelPatch).length > 0) {
+        await bestEffort("Channel properties", () =>
+          apiRequest(environment, `/channels/${destinationChannelId}`, {
+            method: "PUT",
+            body: channelPatch,
+            resource: "channel properties",
+          }),
+        );
+      }
+      const sourceRoutes = capturedData(resources.siteRoutes);
+      if (Array.isArray(sourceRoutes) && sourceRoutes.length > 0) {
+        await bestEffort("Site routes", async () => {
+          const destinationSitePayload = await apiRequest(
+            environment,
+            `/channels/${destinationChannelId}/site`,
+            { resource: "destination channel site" },
+          );
+          const destinationSiteId = readPositiveInteger(
+            asRecord(asRecord(destinationSitePayload)?.data)?.id,
+          );
+          if (!destinationSiteId) {
+            throw new CatalogRestoreError("The destination channel has no site for route restoration.");
+          }
+          const routes = sourceRoutes.flatMap((value) => {
+            const route = writableObject(value);
+            if (!route) return [];
+            delete route.url;
+            return [{ ...route, site_id: destinationSiteId }];
+          });
+          if (routes.length > 0) {
+            await apiRequest(environment, `/sites/${destinationSiteId}/routes`, {
+              method: "PUT",
+              body: routes,
+              resource: "site routes",
+            });
+          }
+        });
+      }
+      if (capturedData(resources.site)) {
+        warnings.push("The source site, domain, and checkout URL were captured for reference but were not copied; destination DNS and SSL ownership remain unchanged.");
+      }
+      continue;
+    }
+
+    if (group === "experience") {
+      const endpoints: Record<string, string> = {
+        checkout: `/checkouts/settings/channels/${destinationChannelId}`,
+        cart: `/carts/settings/channels/${destinationChannelId}`,
+        customer: `/customers/settings/channels/${destinationChannelId}`,
+        order: `/orders/settings/channels/${destinationChannelId}`,
+        abandonedCart: `/abandoned-carts/settings/channels/${destinationChannelId}`,
+      };
+      for (const [key, endpoint] of Object.entries(endpoints)) {
+        const body = writableObject(capturedData(resources[key]));
+        if (body) {
+          await bestEffort(resources[key]?.label ?? key, () =>
+            apiRequest(environment, endpoint, {
+              method: "PUT",
+              body,
+              resource: resources[key]?.label ?? key,
+            }),
+          );
+        }
+      }
+      continue;
+    }
+
+    if (group === "pricing") {
+      const currencies = writableObject(capturedData(resources.currencyAssignments));
+      if (currencies) {
+        await bestEffort("Currency assignments", () =>
+          apiRequest(environment, `/channels/${destinationChannelId}/currency-assignments`, {
+            method: "PUT",
+            body: currencies,
+            resource: "currency assignments",
+          }),
+        );
+      }
+      const assignments = capturedData(resources.priceListAssignments);
+      const sourcePriceLists = capturedData(resources.priceLists);
+      const priceListIdMap = new Map<number, number>();
+      if (Array.isArray(sourcePriceLists)) {
+        const targetPriceLists = (
+          await fetchCollection(environment, "/pricelists", "destination price lists")
+        ).flatMap((value) => asRecord(value) ? [asRecord(value)!] : []);
+        for (const value of sourcePriceLists) {
+          const source = asRecord(value);
+          const sourceId = readPositiveInteger(source?.id);
+          const name = readString(source?.name);
+          if (!source || !sourceId || !name) continue;
+          const target = targetPriceLists.find(
+            (candidate) => normalizeText(candidate.name) === normalizeText(name),
+          );
+          let targetId = readPositiveInteger(target?.id);
+          await bestEffort(`Price list ${name}`, async () => {
+            if (!targetId) {
+              const body = writableObject(source);
+              const payload = await apiRequest(environment, "/pricelists", {
+                method: "POST",
+                body,
+                resource: `price list ${name}`,
+              });
+              targetId = readPositiveInteger(asRecord(asRecord(payload)?.data)?.id);
+            }
+            if (targetId) priceListIdMap.set(sourceId, targetId);
+          });
+        }
+      }
+      if (Array.isArray(assignments)) {
+        for (const value of assignments) {
+          const assignment = asRecord(value);
+          const sourcePriceListId = readPositiveInteger(assignment?.price_list_id);
+          const priceListId = sourcePriceListId
+            ? priceListIdMap.get(sourcePriceListId) ??
+              (environment.storeHash === manifest.source.storeHash ? sourcePriceListId : undefined)
+            : undefined;
+          if (!sourcePriceListId || !priceListId) continue;
+          await bestEffort(`Price-list ${sourcePriceListId} assignment`, () =>
+            apiRequest(environment, "/pricelists/assignments", {
+              method: "PUT",
+              body: [{
+                price_list_id: priceListId,
+                channel_id: destinationChannelId,
+                ...(readPositiveInteger(assignment?.customer_group_id)
+                  ? { customer_group_id: Number(assignment!.customer_group_id) }
+                  : {}),
+              }],
+              resource: `price-list ${priceListId} assignment`,
+            }),
+          );
+        }
+      }
+      if (capturedData(resources.priceListRecords)) {
+        warnings.push("Price-list records were captured, but records whose variant IDs differ in the destination were not copied. Price-list definitions and channel assignments were restored by name.");
+      }
+      continue;
+    }
+
+    if (group === "shipping") {
+      const body = writableObject(capturedData(resources.channelShipping));
+      if (body) {
+        await bestEffort("Channel shipping settings", () =>
+          apiRequest(environment, `/shipping/settings/channels/${destinationChannelId}`, {
+            method: "PUT",
+            body,
+            resource: "channel shipping settings",
+          }),
+        );
+      }
+      await reconcileShippingConfiguration(environment, resources, bestEffort);
+      continue;
+    }
+
+    if (group === "tax") {
+      const zoneMap = await reconcileTaxConfiguration(environment, resources, bestEffort);
+      const settings = writableObject(capturedData(resources.taxSettings));
+      if (settings) {
+        for (const key of ["guest_shopper_tax_zone_id", "store_tax_zone_id"]) {
+          const sourceId = readPositiveInteger(settings[key]);
+          if (sourceId && zoneMap.has(sourceId)) settings[key] = zoneMap.get(sourceId);
+        }
+        await bestEffort("Tax settings", () =>
+          apiRequest(environment, "/tax/settings", {
+            method: "PUT",
+            body: settings,
+            resource: "tax settings",
+          }),
+        );
+      }
+      continue;
+    }
+
+    if (group === "inventory") {
+      const settings = writableObject(capturedData(resources.inventorySettings));
+      if (settings) {
+        await bestEffort("Inventory settings", () =>
+          apiRequest(environment, "/settings/inventory", {
+            method: "PUT",
+            body: settings,
+            resource: "inventory settings",
+          }),
+        );
+      }
+      if (capturedData(resources.locations)) {
+        warnings.push("Inventory locations were captured, but existing locations were not modified because location identity and fulfillment mappings are store-wide. Product and variant stock is restored for newly created catalog records.");
+      }
+      continue;
+    }
+
+    if (group === "b2b") {
+      await bestEffort("B2B Edition", () =>
+        reconcileB2BConfiguration(
+          environment,
+          destinationChannelId,
+          manifest,
+          resources,
+          warnings,
+          bestEffort,
+          sourceToTargetProduct,
+        ),
+      );
+      continue;
+    }
+
+    if (group === "localization") {
+      const storeLocale = writableObject(capturedData(resources.storeLocale));
+      if (storeLocale) {
+        await bestEffort("Store locale settings", () =>
+          apiRequest(environment, "/settings/store/locale", {
+            method: "PUT",
+            body: storeLocale,
+            resource: "store locale settings",
+          }),
+        );
+      }
+      const localePayload = asRecord(capturedData(resources.channelLocales));
+      const localeEdges = asRecord(asRecord(asRecord(localePayload?.data)?.store)?.locales)?.edges;
+      if (Array.isArray(localeEdges)) {
+        for (const edge of localeEdges) {
+          const locale = asRecord(asRecord(edge)?.node);
+          const code = readString(locale?.code);
+          const status = readString(locale?.status);
+          if (!code || !status) continue;
+          const normalizedStatus = status.toUpperCase() === "ACTIVE" ? "ACTIVE" : "INACTIVE";
+          await bestEffort(`Locale ${code}`, async () => {
+            const variables = {
+              channelId: `bc/store/channel/${destinationChannelId}`,
+              code,
+            };
+            try {
+              await graphqlRequest(environment, `mutation RestoreLocale($channelId: ID!, $code: String!) { locale { updateLocale(input: { channelId: $channelId, code: $code, status: ${normalizedStatus}, isDefault: ${Boolean(locale?.isDefault)} }) { locale { code } errors { ... on Error { message } } } } }`, variables, `locale ${code}`);
+            } catch {
+              await graphqlRequest(environment, `mutation AddLocale($channelId: ID!, $code: String!) { locale { addLocale(input: { channelId: $channelId, code: $code, status: ${normalizedStatus} }) { locale { code } errors { ... on Error { message } } } } }`, variables, `locale ${code}`);
+              if (Boolean(locale?.isDefault)) {
+                await graphqlRequest(environment, `mutation MakeLocaleDefault($channelId: ID!, $code: String!) { locale { updateLocale(input: { channelId: $channelId, code: $code, status: ${normalizedStatus}, isDefault: true }) { locale { code } errors { ... on Error { message } } } } }`, variables, `locale ${code}`);
+              }
+            }
+          });
+        }
+      }
+      if (capturedData(resources.productTranslations) || capturedData(resources.categoryTranslations)) {
+        warnings.push("Catalog translations were captured for audit, but were not applied because translated resource IDs must be remapped after catalog reconciliation.");
+      }
+      if (capturedData(resources.activeTheme)) {
+        const activeTheme = asRecord(capturedData(resources.activeTheme));
+        const configurations = capturedData(resources.themeConfiguration);
+        const configuration = Array.isArray(configurations)
+          ? asRecord(configurations[0])
+          : null;
+        const themeUuid = readString(activeTheme?.active_theme_uuid);
+        const configurationId =
+          readString(activeTheme?.active_theme_configuration_uuid) ||
+          readString(configuration?.uuid);
+        const variationId = readString(configuration?.variation_id);
+        if (themeUuid && configurationId && variationId) {
+          await bestEffort("Active theme", () =>
+            apiRequest(environment, "/themes/actions/activate", {
+              method: "POST",
+              body: {
+                theme_uuid: themeUuid,
+                variation_id: variationId,
+                configuration_id: configurationId,
+                channel_id: destinationChannelId,
+              },
+              resource: "active theme",
+            }),
+          );
+        }
+      }
+    }
+  }
 }
 
 async function resolveDestination(
@@ -1336,6 +2373,7 @@ export async function restoreCatalogSnapshot(input: {
   destinationEnvironmentId: number;
   destinationChannelId: number;
   userId?: string;
+  restoreGroups?: SnapshotRestoreGroup[];
   onProgress?: (currentStep: string, stepIndex?: number, totalSteps?: number) => Promise<void>;
 }): Promise<CatalogRestoreResult> {
   const userId = input.userId ?? (await requireAppUser()).id;
@@ -1351,23 +2389,51 @@ export async function restoreCatalogSnapshot(input: {
     input.destinationEnvironmentId,
     input.destinationChannelId,
   );
-  await input.onProgress?.("Creating and updating categories", 1, 3);
-  const categoryState = await reconcileCategories(
-    environment,
-    input.destinationChannelId,
-    channelName,
-    manifest.catalog.categories,
+  const restoreGroups = parseSnapshotRestoreGroups(
+    input.restoreGroups?.length ? input.restoreGroups : ["catalog"],
   );
-  await input.onProgress?.("Creating and updating products, variants, images, and metadata", 2, 3);
-  const productState = await reconcileProducts(
+  if (restoreGroups.length === 0) {
+    throw new CatalogRestoreError("Choose at least one snapshot section to restore.");
+  }
+  let categoryState: CategoryRestoreState = {
+    sourceToTarget: new Map(),
+    created: 0,
+    updated: 0,
+  };
+  let productState = {
+    created: 0,
+    updated: 0,
+    assignmentsRemoved: 0,
+    warnings: [] as string[],
+    sourceToTargetProduct: new Map<number, number>(),
+  };
+  if (restoreGroups.includes("catalog")) {
+    await input.onProgress?.("Creating and updating categories", 1, 3);
+    categoryState = await reconcileCategories(
+      environment,
+      input.destinationChannelId,
+      channelName,
+      manifest.catalog.categories,
+    );
+    await input.onProgress?.("Creating and updating products, variants, images, and metadata", 2, 3);
+    productState = await reconcileProducts(
+      environment,
+      input.destinationChannelId,
+      manifest,
+      categoryState.sourceToTarget,
+      input.onProgress,
+    );
+    await input.onProgress?.("Verifying channel catalog assignments", 3, 3);
+  }
+  await restoreConfiguration(
     environment,
     input.destinationChannelId,
     manifest,
-    categoryState.sourceToTarget,
+    restoreGroups,
+    productState.warnings,
+    productState.sourceToTargetProduct,
     input.onProgress,
   );
-
-  await input.onProgress?.("Verifying channel catalog assignments", 3, 3);
   return {
     snapshotName: snapshot.name,
     snapshotVersion: snapshot.snapshotVersion,
@@ -1378,6 +2444,7 @@ export async function restoreCatalogSnapshot(input: {
     productsUpdated: productState.updated,
     productAssignmentsRemoved: productState.assignmentsRemoved,
     warnings: productState.warnings,
+    restoredGroups: restoreGroups,
     destinationEnvironmentName: environment.name,
     destinationChannelName: channelName,
   };

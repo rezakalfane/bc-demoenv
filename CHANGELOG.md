@@ -4,6 +4,29 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate snapshot configuration, B2B demo data, and scoped completion navigation
+
+- **Date:** 2026-07-19
+- **Source:** `feature/snapshot-configuration-b2b`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated inspectable optional configuration capture, categorized restore controls, B2B Edition demo-data portability, and route-scoped snapshot completion navigation after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add portable snapshot configuration and B2B demo data
+
+- **Date:** 2026-07-19
+- **Branch:** `feature/snapshot-configuration-b2b`
+- **Type:** Feature commit
+
+- Captured inspectable channel, storefront, checkout, customer, pricing, shipping, tax, inventory, localization, theme, and script configuration with resource-level warnings.
+- Added opt-in categorized configuration restoration with store-wide impact guidance and safe reconciliation for portable resources.
+- Added B2B Edition capture for permissions, roles, Companies, users, addresses, hierarchies, shopping lists, quotes, orders, invoices, payments, attachments, sales representatives, and extra-field definitions.
+- Restored writable B2B demo records additively with source-to-destination ID mapping while retaining read-only or notification-sensitive records as inspectable data and explicit warnings.
+- Added a protected, on-demand Snapshot settings inspector with secret redaction for owned and published versions.
+- Scoped automatic navigation to a completed snapshot version to the exact channel or snapshot route that launched its capture.
+- Updated README scope, portability, notification, publication, and API-boundary guidance plus reverse-chronological prompt History.
+
 ### Commit — Add application overview screenshot to documentation
 
 - **Date:** 2026-07-19

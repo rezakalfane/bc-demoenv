@@ -40,6 +40,7 @@ export default async function SnapshotsPage() {
       name: String(payload.name || "Snapshot capture"),
       environmentId: Number(payload.environmentId || operation.environmentId),
       channelId: Number(payload.channelId || operation.channelId),
+      originPath: typeof payload.originPath === "string" ? payload.originPath : undefined,
     };
   });
   const sortedSnapshots = snapshots.toSorted((left, right) => {
@@ -102,11 +103,11 @@ export default async function SnapshotsPage() {
           </div>
         ) : (
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {pendingSnapshots.map(({ operation, name, environmentId, channelId }) => (
+            {pendingSnapshots.map(({ operation, name, environmentId, channelId, originPath }) => (
               <article key={`pending-${operation.id}`} className="flex min-h-72 flex-col rounded-3xl border border-emerald-500/25 bg-emerald-500/7 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] sm:p-6">
                 <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Capture in progress</p><h2 className="mt-2 break-words text-lg font-semibold tracking-tight">{name}</h2><p className="mt-1 text-xs text-black/40 dark:text-white/40">Environment {environmentId} · Channel {channelId}</p></div>
                 <div className="mt-auto pt-6">
-                  <CatalogOperationProgress initialOperation={{ kind: "snapshot", operationId: operation.id, environmentId, channelId }} />
+                  <CatalogOperationProgress initialOperation={{ kind: "snapshot", operationId: operation.id, environmentId, channelId, originPath }} />
                 </div>
               </article>
             ))}

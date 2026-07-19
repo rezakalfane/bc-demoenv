@@ -103,7 +103,13 @@ export async function createSnapshot(
       kind: "snapshot",
       environmentId,
       channelId,
-      payload: { environmentId, channelId, name, confirmedSnapshotId },
+      payload: {
+        environmentId,
+        channelId,
+        name,
+        confirmedSnapshotId,
+        originPath: `/environments/${environmentId}/channels/${channelId}`,
+      },
       operationKey: getCatalogSnapshotCaptureKey(name),
     });
     await startCatalogSnapshotWorkflow(user.id, operationId);
@@ -142,6 +148,7 @@ export async function createNextSnapshotVersion(snapshotId: number) {
         channelId: latest.sourceChannelId,
         name: latest.name,
         confirmedSnapshotId: latest.id,
+        originPath: `/snapshots/${snapshotId}`,
       },
       operationKey: getCatalogSnapshotCaptureKey(latest.name),
     });

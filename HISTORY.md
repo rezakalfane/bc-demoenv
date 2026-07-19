@@ -2,6 +2,65 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Keep snapshot completion navigation scoped to its launch page
+
+### Prompt
+
+> Once a capture is finished, open that version in the UI only if user is already in the right channel or snapshot where it was started from
+
+### Summary
+
+- Persisted the channel or snapshot route that launched each capture in the browser's catalog-operation state.
+- Opened the newly created immutable version only when capture completes while the user is still on that exact launch route.
+- Enabled completion navigation for channel-launched captures and preserved the existing new-version behavior for snapshot-launched captures.
+- Prevented server-refreshed progress components from overwriting a locally retained launch route after users navigate elsewhere.
+
+## 2026-07-19 — Capture and restore B2B Edition demo data
+
+### Prompts
+
+> Can you also capture B2B settings that can be captured and applied using BigCommerce B2B API (B2B category when restoring)?
+
+> Please include all Customer/Business records, hierarchies, companies, users, quotes, orders, data as we are managing demo environments
+
+### Summary
+
+- Added an opt-in, store-wide **B2B Edition** snapshot and restore category using the standard BigCommerce access token with the B2B Management API store-hash header.
+- Captured custom Company permissions and full role definitions plus Companies, users, addresses, hierarchy relationships, shopping lists and items, quote details, B2B order records, invoices, payments, attachment metadata, sales representatives, and extra-field definitions.
+- Added additive restore reconciliation for custom permissions and roles, Companies, users, addresses, Company hierarchies, and shopping lists with source-to-destination Company, user, role, channel, and product ID mapping.
+- Preserved quotes, orders, invoices, payments, attachment binaries, sales-representative identities, and extra-field definitions as inspectable audit data when the B2B API cannot replay them faithfully or would automatically notify buyers; restore surfaces explicit warnings instead.
+- Documented B2B read/modify scope requirements and warned that creating Companies or users may trigger BigCommerce account or welcome email.
+
+## 2026-07-19 — Inspect captured snapshot settings
+
+### Prompt
+
+> Add a button in the Snapshot page to inspect those settings that have been captured
+
+### Summary
+
+- Added an **Inspect settings** action to owned and published read-only Snapshot detail pages.
+- Added an accessible modal that groups captured configuration by the same categories used during restore, identifies channel/site/store scope, and expands each resource into formatted captured data and any capture warning.
+- Loaded potentially large configuration only when requested through a Clerk-protected, snapshot-authorized, non-cached endpoint instead of adding it to every Snapshot page response.
+- Applied a defense-in-depth secret-field redaction before captured configuration reaches the browser and added a compatibility message for older catalog-only versions.
+
+## 2026-07-19 — Capture and selectively restore channel configuration
+
+### Prompts
+
+> Looking at the BigCommerce API, what aspect of a Channel can be snapshoted and restored? Shipping config, tax config, more?
+
+> Can you add all these in capture, but make them optional through checkboxes (categorize settings) in restore?
+
+### Summary
+
+- Extended new snapshot manifests with best-effort captures for channel/storefront metadata, channel metafields, sites/routes, checkout/cart/customer/order/abandoned-cart settings, currencies, assigned price lists and records, channel and store-wide shipping, tax settings/zones/rates/classes, inventory settings/locations, Catalyst locales and translations, non-secret channel-script metadata, and active-theme configuration metadata.
+- Kept required catalog capture strict while recording missing optional scopes or unavailable APIs as per-resource warnings so one optional setting cannot invalidate a large durable capture.
+- Added categorized restore checkboxes for Catalog, Channel & storefront, Checkout & customer experience, Pricing & currencies, Shipping, Tax, Inventory & locations, and Localization & presentation; Catalog is selected by default and all configuration is opt-in.
+- Persisted selected groups with the background restore operation and added best-effort reconciliation for portable settings, price-list definitions/assignments, shipping zones/methods, tax zones/rates/settings, locales, and theme activation.
+- Marked store-wide groups visibly, retained destination domains/SSL, excluded provider credentials and secrets, and surfaced mapping-sensitive omissions as non-fatal restore warnings.
+- Preserved compatibility with older catalog-only manifest versions and verified TypeScript, ESLint, and the optimized Next.js/Workflow production build.
+
 ## 2026-07-19 — Add application screenshot to documentation
 
 ### Prompt
