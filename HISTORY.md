@@ -2,6 +2,29 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Document the Turso database schema
+
+### Prompt
+
+> Can you document the database schema in a mermaid block using mermaid cli?
+
+### Summary
+
+- Added a Mermaid entity-relationship diagram to `DETAILS.md` covering all seven Turso/libSQL tables, their columns, and their application-level relationships.
+- Documented Clerk's external ownership model, the absence of SQL foreign keys, and the schema's important uniqueness and active-operation constraints.
+- Validated the diagram syntax by rendering it with Mermaid CLI.
+
+## 2026-07-19 — Move implementation details out of README
+
+### Prompt
+
+> move the long text rom README.md to a DETAILS.md file
+
+### Summary
+
+- Created `DETAILS.md` and organized the existing security, BigCommerce scope, snapshot, configuration, durable-processing, and restoration reference under focused headings.
+- Replaced the long README reference block with a concise link and added `DETAILS.md` to the project-records list.
+
 ## 2026-07-19 — Preserve destination contact email
 
 ### Prompt

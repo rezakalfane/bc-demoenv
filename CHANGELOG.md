@@ -4,6 +4,16 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Commit — Separate implementation details and document the database schema
+
+- **Date:** 2026-07-19
+- **Branch:** `main`
+- **Type:** Documentation commit
+
+- Moved the detailed security, BigCommerce scope, snapshot, configuration, durable-processing, and restoration reference from README into a dedicated `DETAILS.md` document.
+- Added a Mermaid entity-relationship diagram for all Turso/libSQL tables, logical relationships, and key uniqueness constraints.
+- Validated the database diagram by rendering it with Mermaid CLI and updated reverse-chronological prompt History.
+
 ### Merge — Integrate effective Storefront settings restoration
 
 - **Date:** 2026-07-19
