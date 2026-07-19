@@ -350,6 +350,28 @@ export async function createCatalogOperation(userId: string, input: { kind: Cata
 export async function getCatalogOperation(userId: string, id: number) { await ensureSchema(); const r = await getClient().execute({sql:"SELECT * FROM catalog_operations WHERE user_id = ? AND id = ?",args:[userId,id]}); return r.rows[0] ? toCatalogOperation(r.rows[0] as Record<string,unknown>) : null; }
 export async function updateCatalogOperation(userId: string, id: number, patch: Partial<Pick<CatalogOperation,"status"|"currentStep"|"stepIndex"|"totalSteps"|"resultJson"|"error"|"payloadJson"|"snapshotId"|"workflowRunId">>) { await ensureSchema(); const fields: string[]=[]; const args: Array<string | number | null>=[]; for (const [k,v] of Object.entries(patch)) { const col=k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`); fields.push(`${col} = ?`); args.push(v ?? null); } if (!fields.length) return; fields.push("updated_at = CURRENT_TIMESTAMP"); args.push(userId,id); await getClient().execute({sql:`UPDATE catalog_operations SET ${fields.join(", ")} WHERE user_id = ? AND id = ?`,args}); }
 
+export async function getRecentCatalogOperations(userId: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT *
+      FROM catalog_operations
+      WHERE user_id = ?
+        AND (
+          status IN ('queued', 'running')
+          OR updated_at >= datetime('now', '-1 day')
+        )
+      ORDER BY
+        CASE WHEN status IN ('queued', 'running') THEN 0 ELSE 1 END,
+        updated_at DESC,
+        id DESC
+      LIMIT 50
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => toCatalogOperation(row as Record<string, unknown>));
+}
+
 export async function getCatalogOperationsForChannel(userId: string, environmentId: number, channelId: number) {
   await ensureSchema();
   const result = await getClient().execute({ sql: "SELECT * FROM catalog_operations WHERE user_id = ? AND environment_id = ? AND channel_id = ? ORDER BY id DESC LIMIT 100", args: [userId, environmentId, channelId] });

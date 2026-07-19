@@ -1,4 +1,5 @@
 import { AppNavigation } from "@/components/app-navigation";
+import { CatalogOperationNotifications } from "@/components/catalog-operation-notifications";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireAppUser } from "@/lib/auth";
 
@@ -11,6 +12,7 @@ export default async function AppLayout({
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-[1440px] lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+      <CatalogOperationNotifications userId={user.id} />
       <aside className="border-b border-black/10 bg-white/45 px-4 py-4 backdrop-blur-xl dark:border-white/10 dark:bg-white/3 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0 lg:px-5 lg:py-6">
         <div className="flex items-center justify-between lg:block">
           <div className="flex items-center gap-3 px-2">

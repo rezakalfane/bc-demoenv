@@ -4,6 +4,25 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate global catalog-operation notifications
+
+- **Date:** 2026-07-20
+- **Source:** `feature/completion-notifications`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated tenant-scoped, navigation-safe completion notifications for durable snapshot capture, restore, and catalog clear operations after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add global catalog-operation notifications
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/completion-notifications`
+- **Type:** Feature commit
+
+- Added an authenticated recent-operation feed that reconciles active Workflow runs and exposes tenant-scoped terminal status and affected-resource metadata.
+- Added a global notification stack for completed, failed, and manual-action operations with per-user deduplication, cross-tab awareness, dismiss controls, and direct channel or snapshot links.
+- Documented the notification lifecycle, polling behavior, security boundary, and user experience in README, DETAILS, and prompt History.
+
 ### Merge — Integrate the visual restore preflight comparison
 
 - **Date:** 2026-07-20
