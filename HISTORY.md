@@ -2,6 +2,22 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Fix snapshot Workflow startup failure
+
+### Prompts
+
+> The snapshot capture from the Vercal app is stuck at the very beginning and doesn't start
+
+> [Activity log screenshot showing the latest Mulberry Demo snapshot capture remaining queued]
+
+### Summary
+
+- Queried the Vercel Workflow backend and confirmed the queued catalog operation had a corresponding run that failed in about 100 milliseconds with `ReferenceError: require is not defined` before its first step.
+- Traced the exception to Workflow's deterministic VM loading Turso/libSQL's native `@neon-rs` loader because orchestration, Node.js steps, and server-side run creation shared one module dependency graph.
+- Split deterministic orchestration, Node.js catalog steps, and server-side Workflow dispatch into separate modules so the flow bundle contains no libSQL, sqlite3, native loader, or database updater code.
+- Added Workflow-status reconciliation so early platform failures become visible as failed catalog operations instead of remaining queued, and made catalog cancellation cancel the underlying durable run.
+- Verified TypeScript, lint, whitespace, optimized production build, generated Workflow routes and step registrations, and the absence of Node-native dependencies from the generated flow bundle.
+
 ## 2026-07-19 — Make large snapshot captures durable and resumable
 
 ### Prompts

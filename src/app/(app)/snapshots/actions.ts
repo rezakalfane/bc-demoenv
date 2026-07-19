@@ -9,7 +9,7 @@ import {
   getLatestCatalogSnapshotByName,
   normalizeCatalogSnapshotName,
 } from "@/lib/db";
-import { startCatalogSnapshotWorkflow } from "@/workflows/catalog-snapshot";
+import { startCatalogSnapshotWorkflow } from "@/lib/start-catalog-snapshot-workflow";
 
 export type SnapshotConflict = {
   id: number;
