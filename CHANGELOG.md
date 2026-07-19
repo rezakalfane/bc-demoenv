@@ -4,6 +4,27 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate the Workflow sandbox hotfix into `main`
+
+- **Date:** 2026-07-19
+- **Source:** `fix/workflow-sandbox-boundary`
+- **Target:** `main`
+- **Type:** Non-fast-forward hotfix merge
+
+Integrated the corrected Workflow module boundary and durable-run status synchronization after production run inspection, TypeScript, lint, whitespace, optimized production-build, step registration, and generated flow-bundle verification.
+
+### Commit — Keep Node dependencies out of snapshot Workflow orchestration
+
+- **Date:** 2026-07-19
+- **Branch:** `fix/workflow-sandbox-boundary`
+- **Type:** Bug-fix commit
+
+- Fixed production snapshot runs failing before their first step with `ReferenceError: require is not defined` from the libSQL native loader.
+- Separated deterministic orchestration, Node.js catalog steps, and server-side run dispatch so Turso, sqlite3, and native modules remain outside the Workflow VM bundle.
+- Reconciled persisted catalog operations with durable run status so early platform failures are displayed instead of remaining queued.
+- Made catalog cancellation cancel the underlying Workflow run as well as its Turso operation and staging state.
+- Documented the production evidence and verified that the generated flow bundle contains no Node-native database dependencies.
+
 ### Merge — Integrate durable snapshot capture into `main`
 
 - **Date:** 2026-07-19

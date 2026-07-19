@@ -7,7 +7,11 @@ import {
   updateCatalogOperation,
 } from "@/lib/db";
 import { runCatalogOperation } from "@/lib/catalog-operation-runner";
-import { startCatalogSnapshotWorkflow } from "@/workflows/catalog-snapshot";
+import {
+  cancelCatalogSnapshotWorkflow,
+  reconcileCatalogSnapshotWorkflow,
+  startCatalogSnapshotWorkflow,
+} from "@/lib/start-catalog-snapshot-workflow";
 
 export const runtime = "nodejs";
 
@@ -15,7 +19,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ operationI
   const user = await requireAppUser();
   const id = Number((await params).operationId);
   await expireStaleSnapshotOperations(user.id);
-  const op = await getCatalogOperation(user.id, id);
+  let op = await getCatalogOperation(user.id, id);
+  if (!op) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  await reconcileCatalogSnapshotWorkflow(user.id, op);
+  op = await getCatalogOperation(user.id, id);
   if (!op) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ id: op.id, kind: op.kind, status: op.status, currentStep: op.currentStep, stepIndex: op.stepIndex, totalSteps: op.totalSteps, snapshotId: op.snapshotId, error: op.error, result: op.resultJson ? JSON.parse(op.resultJson) : null });
 }
@@ -37,6 +44,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ operation
 export async function DELETE(_: Request, { params }: { params: Promise<{ operationId: string }> }) {
   const user = await requireAppUser();
   const id = Number((await params).operationId);
+  const op = await getCatalogOperation(user.id, id);
+  if (!op) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  await cancelCatalogSnapshotWorkflow(op);
   await updateCatalogOperation(user.id, id, { status: "cancelled", currentStep: "Cancelled" });
   await removeCatalogSnapshotCaptureState(id);
   return NextResponse.json({ status: "cancelled" });
