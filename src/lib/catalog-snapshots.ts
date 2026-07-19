@@ -2,10 +2,12 @@ import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
-import type {
-  CapturedConfigurationGroup,
-  CapturedConfigurationResource,
-  CapturedSnapshotConfiguration,
+import {
+  SNAPSHOT_RESTORE_GROUPS,
+  type CapturedConfigurationGroup,
+  type CapturedConfigurationResource,
+  type CapturedSnapshotConfiguration,
+  type SnapshotRestoreGroup,
 } from "@/lib/snapshot-configuration";
 import {
   addCatalogSnapshot,
@@ -137,6 +139,7 @@ export type CatalogSnapshotView = {
   categories: CatalogCategory[];
   products: CatalogProduct[];
   currency: string;
+  availableRestoreGroups: SnapshotRestoreGroup[];
   error: string | null;
 };
 
@@ -1056,6 +1059,26 @@ async function captureB2BConfiguration(
   };
 }
 
+async function isB2BEnabledForChannel(
+  environment: ConnectedEnvironment,
+  channelId: number,
+) {
+  try {
+    const payload = await fetchB2BJson(
+      environment,
+      `/channels/${channelId}`,
+      `B2B channel ${channelId}`,
+    );
+    const channel = asRecord(asRecord(payload)?.data);
+    return channel?.b2bEnabled === true;
+  } catch {
+    // A channel that is not registered with B2B Edition returns no B2B channel
+    // details. Missing B2B scope is also treated as unavailable rather than
+    // risking the capture of store-wide business data for a B2C snapshot.
+    return false;
+  }
+}
+
 async function captureOptionalGraphql(
   environment: ConnectedEnvironment,
   query: string,
@@ -1135,9 +1158,11 @@ function unwrapData(value: CapturedConfigurationResource) {
 async function loadSnapshotConfiguration(
   environment: ConnectedEnvironment,
   channelId: number,
+  channel: JsonRecord,
   onProgress?: SnapshotProgress,
 ): Promise<CapturedSnapshotConfiguration> {
   await onProgress?.("Capturing channel and storefront configuration", 89, 100);
+  const hasStencilTheme = readString(channel.platform).trim().toLowerCase() === "bigcommerce";
   const [channelMetafields, site, activeTheme] = await Promise.all([
     captureOptionalCollection(
       environment,
@@ -1151,12 +1176,14 @@ async function loadSnapshotConfiguration(
       "channel site",
       "site",
     ),
-    captureOptionalJson(
-      environment,
-      `/v3/channels/${channelId}/active-theme`,
-      "active theme",
-      "channel",
-    ),
+    hasStencilTheme
+      ? captureOptionalJson(
+          environment,
+          `/v3/channels/${channelId}/active-theme`,
+          "active theme",
+          "channel",
+        )
+      : Promise.resolve(capturedResource("active theme", "channel", null)),
   ]);
   const siteId = readPositiveInteger(asRecord(unwrapData(site))?.id);
   const activeThemeData = asRecord(unwrapData(activeTheme));
@@ -1193,12 +1220,18 @@ async function loadSnapshotConfiguration(
   ] as const));
 
   await onProgress?.("Capturing currency and price-list configuration", 91, 100);
-  const [currencyAssignments, priceListAssignments] = await Promise.all([
+  const [currencyAssignments, storeCurrencies, priceListAssignments] = await Promise.all([
     captureOptionalJson(
       environment,
       `/v3/channels/${channelId}/currency-assignments`,
       "currency assignments",
       "channel",
+    ),
+    captureOptionalJson(
+      environment,
+      "/v2/currencies",
+      "store currencies",
+      "store",
     ),
     captureOptionalCollection(
       environment,
@@ -1271,8 +1304,18 @@ async function loadSnapshotConfiguration(
     captureOptionalCollection(environment, "/v3/tax/rates", "tax rates", "store"),
   ]);
 
-  await onProgress?.("Capturing B2B Edition Companies, users, roles, and business records", 94, 100);
-  const b2b = await captureB2BConfiguration(environment);
+  await onProgress?.("Checking whether B2B Edition is enabled for this channel", 94, 100);
+  const b2bEnabled = await isB2BEnabledForChannel(environment, channelId);
+  const b2b = b2bEnabled
+    ? await captureB2BConfiguration(environment)
+    : undefined;
+  await onProgress?.(
+    b2bEnabled
+      ? "Captured B2B Edition Companies, users, roles, and business records"
+      : "Skipping B2B Edition data: this channel is not B2B enabled",
+    94,
+    100,
+  );
 
   await onProgress?.("Capturing locales, translations, and presentation metadata", 95, 100);
   const [storeLocale, channelLocales, inventorySettings, locations, scripts] = await Promise.all([
@@ -1296,7 +1339,7 @@ async function loadSnapshotConfiguration(
     ),
     captureOptionalCollection(
       environment,
-      "/v3/locations",
+      "/v3/inventory/locations",
       "inventory locations",
       "store",
     ),
@@ -1358,6 +1401,7 @@ async function loadSnapshotConfiguration(
     experience: group(Object.fromEntries(experienceEntries)),
     pricing: group({
       currencyAssignments,
+      storeCurrencies,
       priceListAssignments,
       priceLists: capturedResource("assigned price lists", "store", priceLists),
       priceListRecords: capturedResource("assigned price-list records", "store", priceListRecords),
@@ -1374,7 +1418,7 @@ async function loadSnapshotConfiguration(
       taxClasses: capturedResource("tax classes", "store", []),
     }),
     inventory: group({ inventorySettings, locations }),
-    b2b,
+    ...(b2b ? { b2b } : {}),
     localization: group({
       storeLocale,
       channelLocales,
@@ -1480,6 +1524,7 @@ export async function createCatalogSnapshot(input: {
     const configuration = await loadSnapshotConfiguration(
       connectedEnvironment,
       input.channelId,
+      channel,
       input.onProgress,
     );
     if (configuration.tax) {
@@ -1675,6 +1720,7 @@ export async function initializeWorkflowCatalogSnapshot(
   const configuration = await loadSnapshotConfiguration(
     connectedEnvironment,
     channelId,
+    channel,
     progress,
   );
   if (configuration.tax) {
@@ -1981,6 +2027,12 @@ export async function getCatalogSnapshotView(
         })
       : [];
     const currency = readString(preview.currency).toUpperCase();
+    const configuration = asRecord(manifest?.configuration);
+    const availableRestoreGroups = SNAPSHOT_RESTORE_GROUPS.flatMap((group) =>
+      group.id === "catalog" || asRecord(configuration?.[group.id])
+        ? [group.id]
+        : [],
+    );
 
     return {
       summary: snapshot,
@@ -1989,6 +2041,7 @@ export async function getCatalogSnapshotView(
       categories,
       products: parsePreviewProducts(preview.products),
       currency: /^[A-Z]{3}$/.test(currency) ? currency : "USD",
+      availableRestoreGroups,
       error: null,
     };
   } catch {
@@ -1999,6 +2052,7 @@ export async function getCatalogSnapshotView(
       categories: [],
       products: [],
       currency: "USD",
+      availableRestoreGroups: ["catalog"],
       error: "This snapshot payload is invalid or uses an unsupported format.",
     };
   }

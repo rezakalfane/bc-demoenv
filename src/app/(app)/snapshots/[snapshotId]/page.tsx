@@ -19,6 +19,7 @@ import { getSnapshotCatalogHistory } from "@/lib/catalog-history";
 import { requireAppUser } from "@/lib/auth";
 import { getActiveSnapshotOperations } from "@/lib/db";
 import { PublishedIcon } from "@/components/action-icons";
+import { SnapshotInlineName } from "@/components/snapshot-inline-name";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -121,15 +122,19 @@ export default async function SnapshotPage({
               <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
                 Catalog snapshot
               </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-                <span className="inline-flex items-center gap-3">
-                  {snapshot.summary.name}
-                  {publishedVersion ? (
-                    <><PublishedIcon className="text-blue-600 dark:text-blue-300" /><span className="sr-only">Published snapshot</span></>
-                  ) : null}
-                  <CatalogActivityBadge snapshotId={snapshot.summary.id} />
-                </span>
-              </h1>
+              <div className="mt-2 flex min-w-0 items-center gap-3">
+                {snapshot.isOwner ? (
+                  <SnapshotInlineName key={snapshot.summary.name} snapshotId={snapshot.summary.id} name={snapshot.summary.name} />
+                ) : (
+                  <h1 className="min-w-0 break-words text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+                    {snapshot.summary.name}
+                  </h1>
+                )}
+                {publishedVersion ? (
+                  <><PublishedIcon className="text-blue-600 dark:text-blue-300" /><span className="sr-only">Published snapshot</span></>
+                ) : null}
+                <CatalogActivityBadge snapshotId={snapshot.summary.id} />
+              </div>
               <p className="mt-3 text-sm text-black/45 dark:text-white/45">
                 {snapshot.summary.sourceEnvironmentName} ·{" "}
                 {snapshot.summary.sourceChannelName}
@@ -167,7 +172,10 @@ export default async function SnapshotPage({
                   latest={latestVersion}
                 />
                 <SnapshotRestore
-                  snapshot={snapshot.summary}
+                  snapshot={{
+                    ...snapshot.summary,
+                    availableRestoreGroups: snapshot.availableRestoreGroups,
+                  }}
                   destinations={restoreDestinations}
                   stepNames={[
                     ...snapshot.categories.map((category) => `Restoring category ${category.name}`),
@@ -196,7 +204,10 @@ export default async function SnapshotPage({
               ) : (
                 <>
                   <SnapshotRestore
-                    snapshot={snapshot.summary}
+                    snapshot={{
+                      ...snapshot.summary,
+                      availableRestoreGroups: snapshot.availableRestoreGroups,
+                    }}
                     destinations={restoreDestinations}
                     matchSourceDestination={false}
                     stepNames={[

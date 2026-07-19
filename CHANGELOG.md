@@ -4,6 +4,28 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate snapshot portability and configuration-restoration fixes
+
+- **Date:** 2026-07-19
+- **Source:** `fix/snapshot-portability-polish`
+- **Target:** `main`
+- **Type:** Non-fast-forward bug-fix merge
+
+Integrated inline snapshot-series naming, manifest-aware restore controls, B2B channel gating, related-product preservation, and hardened cross-store configuration reconciliation after live BigCommerce shipping verification, TypeScript, lint, whitespace, and optimized production-build checks.
+
+### Commit — Harden snapshot portability and shipping restoration
+
+- **Date:** 2026-07-19
+- **Branch:** `fix/snapshot-portability-polish`
+- **Type:** Bug-fix commit
+
+- Added accessible inline snapshot-series renaming with uniqueness enforcement, History audit events, and realtime publication refreshes.
+- Limited B2B capture to channels explicitly enabled in B2B Edition and limited restore choices to configuration groups present in the selected immutable manifest.
+- Ordered restore candidates by name and descending version, identified published versions, and preserved BigCommerce automatic related-product behavior.
+- Enabled destination currencies when possible, remapped price-list records and catalog translations, corrected inventory/theme capture boundaries, and sanitized tax payloads.
+- Reconciled shipping zones and methods using writable request models, reused the immutable global zone, assigned methods to every live storefront, and retained detailed V2 validation errors.
+- Verified the resulting United States and global flat-rate methods, rates, enabled state, and four-channel assignments against the authorized `rezakalfane` environment.
+
 ### Merge — Integrate snapshot configuration, B2B demo data, and scoped completion navigation
 
 - **Date:** 2026-07-19

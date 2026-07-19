@@ -2,6 +2,109 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-19 — Repair rejected shipping-zone restoration
+
+### Prompts
+
+> Setting shipping zone still doesn't work
+
+> You can use env rezakalfane to test any endpoint
+
+### Summary
+
+- Diagnosed the latest live restores against the authorized `rezakalfane` environment and verified that the United States zone existed but its Flat rate method had not been created.
+- Confirmed BigCommerce rejects the captured read-only `is_fallback` property on shipping-method writes, then removed it from restore payloads.
+- Confirmed BigCommerce rejects updates to the existing global zone, then reused that immutable zone container while still reconciling its methods, rates, enabled state, and channel assignments.
+- Improved V2 error extraction so array-shaped BigCommerce API errors retain their actionable message in restore warnings.
+- Verified the corrected minimal payload by creating the missing United States Flat rate method with the captured rate and all four live storefront channels.
+
+## 2026-07-19 — Assign restored shipping methods to every storefront
+
+### Prompt
+
+> Regarding shipping: zone United States has been added correctly, Rest of the World was already existing. With multi storefront, when adding a shipping method, channels should be specified. Let's add all channels when restoring shipping zones and methods.
+
+### Summary
+
+- Loaded every active or prelaunch storefront channel in the destination environment before reconciling shipping zones.
+- Explicitly supplied all destination storefront channel IDs when creating or updating every restored shipping method.
+- Preserved global-zone reconciliation so an existing Rest of the World zone is reused rather than duplicated.
+
+## 2026-07-19 — Reconcile snapshot configuration warnings
+
+### Prompt
+
+> Can you go through these warnings: Currency assignments rejected because EUR was not enabled; price-list variant IDs differed; Rest of the world shipping zone was rejected; the default tax zone and deprecated tax display setting were rejected; inventory locations and active theme were unavailable; and catalog translations were not applied.
+
+### Summary
+
+- Enabled existing destination currencies before channel assignment, captured source store-currency definitions for future snapshots, and created missing display-only currencies when the API permits it while retaining an actionable warning for transactional currencies that require Control Panel setup.
+- Remapped price-list records through reconciled variant SKUs/base variants and remapped Catalyst product/category translations through their restored destination IDs.
+- Sanitized shipping-zone location IDs, reconciled global zones by type, removed forbidden location/customer-group fields from the default tax zone, and migrated the retired tax control-panel display boolean to the current display-strategy enum.
+- Corrected inventory-location capture to `/v3/inventory/locations` and stopped requesting an active Stencil theme for Catalyst channels.
+
+## 2026-07-19 — Preserve automatic related products during restore
+
+### Prompts
+
+> If product has no related product, option "Automatically show related products" should be checked
+
+> [-1] array value might be the one needed for automatic related products
+
+### Summary
+
+- Preserved BigCommerce's `related_products: [-1]` sentinel instead of discarding it during source-to-destination product ID mapping.
+- Restored automatic related products when the snapshot contains no manual relationships or no manual relationship can be mapped to a destination product.
+- Kept explicit related-product selections mapped to their destination product IDs when available.
+
+## 2026-07-19 — Sort restore snapshots and identify published versions
+
+### Prompt
+
+> Can you order the dropdown by name ascending and version descending? also indicate with an icon the versions that are published
+
+### Summary
+
+- Ordered snapshot restore options alphabetically by snapshot name and newest version first within each name.
+- Marked published versions with a star icon and an explicit Published label in the native selector.
+- Preserved the selected snapshot and manifest-aware restore settings while changing only the selector presentation order.
+
+## 2026-07-19 — Show only captured settings during restore
+
+### Prompt
+
+> In the restore modal, can you only show settings that exist in the selected snapshot for selection?
+
+### Summary
+
+- Derived available restore sections from each immutable snapshot manifest and displayed only captured sections in the restore modal.
+- Updated the available choices immediately when selecting another snapshot version from a Channel page.
+- Enforced the same manifest-aware allowlist on the server so configuration absent from a snapshot cannot be submitted manually.
+
+## 2026-07-19 — Capture B2B data only for B2B-enabled channels
+
+### Prompt
+
+> Don't capture B2B settings if the site is not B2B enabled, like BigGear B2C snapshots shouldn't have B2B settings
+
+### Summary
+
+- Checked the selected channel through the B2B Management API before loading any store-wide B2B records.
+- Captured Companies, users, roles, and business data only when the channel explicitly reports `b2bEnabled: true`.
+- Omitted the B2B configuration group entirely for B2C, unregistered, or inaccessible channels and exposed the decision in capture progress.
+
+## 2026-07-19 — Rename snapshot series inline
+
+### Prompt
+
+> In a snapshot page, it should be possible to update the Snapshot name by double clicking on it, and editing it inline
+
+### Summary
+
+- Added an accessible inline snapshot-name editor for owned snapshots, opened by double-click or keyboard and saved with Enter.
+- Renamed the complete immutable version series and its activity history while preserving publication state and version identifiers.
+- Prevented duplicate names and renaming during an active capture, recorded the rename in Snapshot history, and refreshed published snapshot names for other users in real time.
+
 ## 2026-07-19 — Keep snapshot completion navigation scoped to its launch page
 
 ### Prompt

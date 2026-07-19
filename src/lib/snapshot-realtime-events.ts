@@ -2,6 +2,7 @@ export const SNAPSHOT_REALTIME_CHANNEL = "catalog:snapshots:published:v1";
 
 export const SNAPSHOT_REALTIME_EVENTS = [
   "snapshot.published",
+  "snapshot.renamed",
   "snapshot.unpublished",
 ] as const;
 
