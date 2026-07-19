@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   preflightSnapshotRestore,
@@ -44,8 +43,34 @@ const snapshotNameCollator = new Intl.Collator("en", {
   sensitivity: "base",
 });
 
-function RestoreSubmitButton({ enabled }: { enabled: boolean }) {
-  const { pending } = useFormStatus();
+const restoreWizardSteps = [
+  { id: 1, label: "Destination" },
+  { id: 2, label: "Restore sections" },
+  { id: 3, label: "Review & confirm" },
+] as const;
+
+type RestoreWizardStep = (typeof restoreWizardSteps)[number]["id"];
+
+function getSnapshotSeriesKey(snapshot: { ownerUserId: string; name: string }) {
+  return `${snapshot.ownerUserId}:${snapshot.name.normalize("NFKC").toLocaleLowerCase("en")}`;
+}
+
+function defaultGroupsForSnapshot(availableGroups: SnapshotRestoreGroup[]) {
+  return SNAPSHOT_RESTORE_GROUPS.filter(
+    (group) =>
+      group.defaultChecked &&
+      isSnapshotRestoreGroupRestorable(group.id) &&
+      availableGroups.includes(group.id),
+  ).map((group) => group.id);
+}
+
+function RestoreSubmitButton({
+  enabled,
+  pending,
+}: {
+  enabled: boolean;
+  pending: boolean;
+}) {
 
   return (
     <button
@@ -68,6 +93,7 @@ export function SnapshotRestore({
 }: {
   snapshot: {
     id: number;
+    ownerUserId: string;
     name: string;
     snapshotVersion: number;
     sourceEnvironmentId: number;
@@ -81,11 +107,13 @@ export function SnapshotRestore({
     imageCount: number;
     metafieldCount: number;
     createdAt: string;
+    publishedAt: string | null;
     availableRestoreGroups: SnapshotRestoreGroup[];
   };
   destinations: CatalogRestoreDestination[];
   snapshotOptions?: Array<{
     id: number;
+    ownerUserId: string;
     name: string;
     snapshotVersion: number;
     sourceEnvironmentName: string;
@@ -124,6 +152,32 @@ export function SnapshotRestore({
   const activeSnapshot = selectableSnapshots.find(
     (candidate) => candidate.id.toString() === selectedSnapshotId,
   ) ?? snapshot;
+  const snapshotSeries = selectableSnapshots.reduce<Array<{
+    key: string;
+    name: string;
+    sourceEnvironmentName: string;
+    sourceChannelName: string;
+    versions: typeof selectableSnapshots;
+  }>>((series, option) => {
+    const key = getSnapshotSeriesKey(option);
+    const existing = series.find((candidate) => candidate.key === key);
+    if (existing) {
+      existing.versions.push(option);
+    } else {
+      series.push({
+        key,
+        name: option.name,
+        sourceEnvironmentName: option.sourceEnvironmentName,
+        sourceChannelName: option.sourceChannelName,
+        versions: [option],
+      });
+    }
+    return series;
+  }, []);
+  const selectedSeriesKey = getSnapshotSeriesKey(activeSnapshot);
+  const selectedSeriesVersions = snapshotSeries.find(
+    (series) => series.key === selectedSeriesKey,
+  )?.versions ?? [activeSnapshot];
   const availableGroupDefinitions = SNAPSHOT_RESTORE_GROUPS.filter((group) =>
     isSnapshotRestoreGroupRestorable(group.id) &&
     activeSnapshot.availableRestoreGroups.includes(group.id),
@@ -145,6 +199,7 @@ export function SnapshotRestore({
       (channel) => channel.id === activeSnapshot.sourceChannelId,
     ) : undefined) ?? initialEnvironment?.channels[0];
   const [isOpen, setIsOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState<RestoreWizardStep>(1);
   const [environmentId, setEnvironmentId] = useState(
     initialEnvironment?.id.toString() ?? "",
   );
@@ -152,23 +207,24 @@ export function SnapshotRestore({
     initialChannel?.id.toString() ?? "",
   );
   const [confirmation, setConfirmation] = useState("");
-  const defaultRestoreGroups = SNAPSHOT_RESTORE_GROUPS.filter(
-    (group) =>
-      group.defaultChecked &&
-      isSnapshotRestoreGroupRestorable(group.id) &&
-      activeSnapshot.availableRestoreGroups.includes(group.id),
-  ).map((group) => group.id);
+  const defaultRestoreGroups = defaultGroupsForSnapshot(
+    activeSnapshot.availableRestoreGroups,
+  );
   const [restoreGroups, setRestoreGroups] = useState<SnapshotRestoreGroup[]>(
     defaultRestoreGroups,
   );
   const [showActionFeedback, setShowActionFeedback] = useState(false);
-  const [state, formAction] = useActionState(restoreSnapshot, initialState);
+  const [state, formAction, restorePending] = useActionState(
+    restoreSnapshot,
+    initialState,
+  );
   const [preflightState, preflightAction, preflightPending] = useActionState(
     preflightSnapshotRestore,
     initialPreflightState,
   );
   const modalRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const stepHeadingRef = useRef<HTMLElement>(null);
   const selectedEnvironment = destinations.find(
     (destination) => destination.id.toString() === environmentId,
   );
@@ -193,10 +249,21 @@ export function SnapshotRestore({
     : null;
   const preflightPassed = Boolean(currentPreflight?.canRestore);
 
+  function selectSnapshotVersion(nextSnapshotId: string) {
+    const nextSnapshot = selectableSnapshots.find(
+      (candidate) => candidate.id.toString() === nextSnapshotId,
+    );
+    if (!nextSnapshot) return;
+    setSelectedSnapshotId(nextSnapshotId);
+    setRestoreGroups(defaultGroupsForSnapshot(nextSnapshot.availableRestoreGroups));
+    setConfirmation("");
+  }
+
   function openRestoreModal() {
     setShowActionFeedback(false);
     setConfirmation("");
     setRestoreGroups(defaultRestoreGroups);
+    setWizardStep(1);
     setIsOpen(true);
   }
 
@@ -214,6 +281,7 @@ export function SnapshotRestore({
       finishCatalogOperation();
       queueMicrotask(() => {
         setShowActionFeedback(true);
+        setWizardStep(3);
         setIsOpen(true);
       });
     }
@@ -257,6 +325,11 @@ export function SnapshotRestore({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    stepHeadingRef.current?.focus();
+  }, [isOpen, wizardStep]);
+
   return (
     <>
       <button
@@ -288,200 +361,227 @@ export function SnapshotRestore({
             aria-modal="true"
             aria-labelledby="restore-snapshot-title"
             aria-describedby="restore-snapshot-description"
-            className="flex max-h-[min(54rem,calc(100vh-2rem))] w-full max-w-3xl flex-col rounded-3xl border border-white/12 bg-white p-6 shadow-2xl sm:p-7 dark:bg-neutral-950"
+            className="flex max-h-[min(54rem,calc(100vh-2rem))] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/12 bg-white shadow-2xl dark:bg-neutral-950"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  Catalog restoration
-                </p>
-                <h2
-                  id="restore-snapshot-title"
-                  className="mt-1 break-words text-2xl font-semibold tracking-[-0.03em]"
+            <header className="border-b border-black/8 px-6 pt-6 pb-4 sm:px-7 sm:pt-7 dark:border-white/8">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                    Catalog restoration
+                  </p>
+                  <h2
+                    id="restore-snapshot-title"
+                    className="mt-1 break-words text-2xl font-semibold tracking-[-0.03em]"
+                  >
+                    Restore {activeSnapshot.name}
+                  </h2>
+                </div>
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  aria-label="Close restore wizard"
+                  disabled={preflightPending || restorePending}
+                  onClick={() => setIsOpen(false)}
+                  className="grid size-9 shrink-0 place-items-center rounded-full border border-black/10 text-lg text-black/45 transition hover:bg-black/5 hover:text-black disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/45 dark:hover:bg-white/8 dark:hover:text-white"
                 >
-                  Restore {activeSnapshot.name}
-                </h2>
+                  ×
+                </button>
               </div>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                aria-label="Close restore confirmation"
-                onClick={() => setIsOpen(false)}
-                className="grid size-9 shrink-0 place-items-center rounded-full border border-black/10 text-lg text-black/45 transition hover:bg-black/5 hover:text-black dark:border-white/10 dark:text-white/45 dark:hover:bg-white/8 dark:hover:text-white"
+
+              <p
+                id="restore-snapshot-description"
+                className="mt-2 text-sm leading-6 text-black/55 dark:text-white/55"
               >
-                ×
-              </button>
-            </div>
+                Choose the destination, select the sections to restore, then review a read-only preflight before confirming.
+              </p>
 
-            <p
-              id="restore-snapshot-description"
-              className="mt-3 text-sm leading-6 text-black/55 dark:text-white/55"
-            >
-              Choose any saved environment and active channel. Store-specific IDs
-              are remapped while stable category slugs, product SKUs, and product
-              slugs are used to find existing catalog records.
-            </p>
-
-            <div className="mt-5 min-h-0 overflow-y-auto pr-1">
-              {snapshotOptions.length > 0 ? (
-                <div className="mb-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/7 p-4">
-                  <label htmlFor="restore-snapshot-version" className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
-                    Snapshot version
-                  </label>
-                  <select
-                    id="restore-snapshot-version"
-                    value={selectedSnapshotId}
-                    onChange={(event) => {
-                      const nextSnapshotId = event.target.value;
-                      const nextSnapshot = selectableSnapshots.find(
-                        (candidate) => candidate.id.toString() === nextSnapshotId,
-                      );
-                      setSelectedSnapshotId(nextSnapshotId);
-                      setRestoreGroups((current) => current.filter((group) =>
-                        isSnapshotRestoreGroupRestorable(group) &&
-                        nextSnapshot?.availableRestoreGroups.includes(group),
-                      ));
-                      setConfirmation("");
-                    }}
-                    className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
-                  >
-                    {orderedSnapshotOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.publishedAt ? "★ " : ""}{option.name} · Version {option.snapshotVersion}{option.publishedAt ? " · Published" : ""} · {option.sourceChannelName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-              <div className="grid gap-4 md:grid-cols-2">
-                <article className="rounded-2xl border border-black/8 bg-black/2.5 p-4 dark:border-white/8 dark:bg-white/3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35 dark:text-white/35">
-                    Snapshot source
-                  </p>
-                  <h3 className="mt-2 font-semibold">
-                    {activeSnapshot.sourceEnvironmentName}
-                  </h3>
-                  <p className="mt-1 text-sm text-black/55 dark:text-white/55">
-                    {activeSnapshot.sourceChannelName}
-                  </p>
-                  <dl className="mt-3 space-y-1 text-xs text-black/40 dark:text-white/40">
-                    <div className="flex justify-between gap-3">
-                      <dt>Version</dt><dd>{activeSnapshot.snapshotVersion}</dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt>Captured</dt>
-                      <dd><time dateTime={activeSnapshot.createdAt}>{dateFormatter.format(new Date(activeSnapshot.createdAt))}</time></dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt>Catalog</dt>
-                      <dd>{activeSnapshot.categoryCount} categories · {activeSnapshot.productCount} products</dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt>Children</dt>
-                      <dd>{activeSnapshot.variantCount} variants · {activeSnapshot.imageCount} images</dd>
-                    </div>
-                  </dl>
-                </article>
-
-                <article className="rounded-2xl border border-emerald-500/20 bg-emerald-500/7 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
-                    Destination
-                  </p>
-                  <label className="mt-3 block text-xs font-medium" htmlFor="restore-environment">
-                    Environment
-                  </label>
-                  <select
-                    id="restore-environment"
-                    value={environmentId}
-                    onChange={(event) => {
-                      const nextEnvironmentId = event.target.value;
-                      const nextEnvironment = destinations.find(
-                        (destination) => destination.id.toString() === nextEnvironmentId,
-                      );
-                      setEnvironmentId(nextEnvironmentId);
-                      setChannelId(nextEnvironment?.channels[0]?.id.toString() ?? "");
-                      setConfirmation("");
-                    }}
-                    className="mt-1.5 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
-                  >
-                    {destinations.map((destination) => (
-                      <option
-                        key={destination.id}
-                        value={destination.id}
-                        disabled={destination.channels.length === 0}
+              <ol className="mt-4 grid grid-cols-3 gap-2" aria-label="Restore progress">
+                {restoreWizardSteps.map((step) => {
+                  const isCurrent = wizardStep === step.id;
+                  const isComplete = wizardStep > step.id;
+                  return (
+                    <li key={step.id}>
+                      <button
+                        type="button"
+                        disabled={!isComplete || preflightPending || restorePending}
+                        onClick={() => setWizardStep(step.id)}
+                        aria-current={isCurrent ? "step" : undefined}
+                        className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-semibold transition sm:px-3 ${
+                          isCurrent
+                            ? "bg-emerald-500/12 text-emerald-800 dark:text-emerald-200"
+                            : isComplete
+                              ? "text-emerald-700 hover:bg-emerald-500/8 disabled:opacity-100 dark:text-emerald-300"
+                              : "text-black/35 dark:text-white/35"
+                        }`}
                       >
-                        {destination.name}{destination.error ? " — unavailable" : ""}
-                      </option>
-                    ))}
-                  </select>
+                        <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] ${
+                          isCurrent || isComplete
+                            ? "bg-emerald-600 text-white"
+                            : "bg-black/8 text-black/45 dark:bg-white/10 dark:text-white/45"
+                        }`}>
+                          {isComplete ? "✓" : step.id}
+                        </span>
+                        <span className="hidden truncate sm:block">{step.label}</span>
+                        <span className="sm:hidden">Step {step.id}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </header>
 
-                  <label className="mt-3 block text-xs font-medium" htmlFor="restore-channel">
-                    Channel
-                  </label>
-                  <select
-                    id="restore-channel"
-                    value={channelId}
-                    onChange={(event) => {
-                      setChannelId(event.target.value);
-                      setConfirmation("");
-                    }}
-                    className="mt-1.5 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
-                  >
-                    {selectedEnvironment?.channels.map((channel) => (
-                      <option key={channel.id} value={channel.id}>
-                        {channel.name}
-                      </option>
-                    ))}
-                  </select>
+            <form action={formAction} className="flex min-h-0 flex-1 flex-col">
+              <input type="hidden" name="snapshotId" value={activeSnapshot.id} />
+              <input type="hidden" name="destinationEnvironmentId" value={environmentId} />
+              <input type="hidden" name="destinationChannelId" value={channelId} />
+              {restoreGroups.map((group) => (
+                <input key={group} type="hidden" name="restoreGroups" value={group} />
+              ))}
 
-                  <p className="mt-3 text-xs leading-5 text-black/45 dark:text-white/45">
-                    {isSameChannel
-                      ? "This is the snapshot’s original channel."
-                      : isSameStore
-                        ? "Different channel in the snapshot’s original store."
-                        : "Different store: brands, tax classes, categories, products, and variants will be remapped."}
-                  </p>
-                </article>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/6 p-4 text-sm">
-                <h3 className="font-semibold text-red-800 dark:text-red-200">
-                  This changes the destination catalog
-                </h3>
-                <ul className="mt-2 list-disc space-y-1.5 pl-5 text-xs leading-5 text-red-900/70 dark:text-red-100/70">
-                  <li>Categories are created or updated by slug and hierarchy; existing destination categories are never deleted.</li>
-                  <li>Products are updated by SKU or slug, or created. Their variants, images, custom fields, pricing rules, videos, modifiers, metafields, and category links are synchronized.</li>
-                  <li>Products, variants, and channel assignments absent from the snapshot are preserved.</li>
-                  <li>BigCommerce cannot wrap this work in one transaction. A failed request can leave a partially restored catalog; rerunning the same snapshot safely continues reconciliation.</li>
-                </ul>
-              </div>
-
-              {showActionFeedback && state.status === "success" && state.result ? (
-                <div role="status" className="mt-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-4 text-sm text-emerald-900 dark:text-emerald-100">
-                  <p className="font-semibold">{state.message}</p>
-                  <p className="mt-1 text-xs leading-5 opacity-75">
-                    {state.result.categoriesCreated} categories created, {state.result.categoriesUpdated} updated · {state.result.productsCreated} products created, {state.result.productsUpdated} updated · existing categories, products, variants, and assignments preserved.
-                  </p>
-                </div>
-              ) : null}
-
-              {showActionFeedback && state.status === "error" ? (
-                <div role="alert" className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/8 p-4 text-sm text-red-800 dark:text-red-200">
-                  {state.message}
-                </div>
-              ) : null}
-
-              {!(showActionFeedback && state.status === "success") ? (
-                <form action={formAction} className="mt-5">
-                  <input type="hidden" name="snapshotId" value={activeSnapshot.id} />
-                  <input type="hidden" name="destinationEnvironmentId" value={environmentId} />
-                  <input type="hidden" name="destinationChannelId" value={channelId} />
-                  <fieldset>
-                    <legend className="text-sm font-semibold">Choose what to restore</legend>
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-7">
+                {wizardStep === 1 ? (
+                  <div>
+                    <h3
+                      ref={(node) => { stepHeadingRef.current = node; }}
+                      tabIndex={-1}
+                      className="text-lg font-semibold outline-none"
+                    >
+                      Choose a destination
+                    </h3>
                     <p className="mt-1 text-xs leading-5 text-black/45 dark:text-white/45">
-                      Only sections present in this snapshot version are shown. Catalog is selected by default; configuration is opt-in.
+                      Store-specific IDs are remapped using category paths, product SKUs, and product slugs.
                     </p>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+
+                    {snapshotOptions.length > 0 ? (
+                      <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/7 p-4">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
+                              Snapshot
+                            </span>
+                            <select
+                              id="restore-snapshot-series"
+                              value={selectedSeriesKey}
+                              onChange={(event) => {
+                                const nextSeries = snapshotSeries.find(
+                                  (series) => series.key === event.target.value,
+                                );
+                                const newestVersion = nextSeries?.versions[0];
+                                if (newestVersion) selectSnapshotVersion(newestVersion.id.toString());
+                              }}
+                              className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
+                            >
+                              {snapshotSeries.map((series) => (
+                                <option key={series.key} value={series.key}>
+                                  {series.name} · {series.sourceChannelName}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="block">
+                            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
+                              Version
+                            </span>
+                            <select
+                              id="restore-snapshot-version"
+                              value={selectedSnapshotId}
+                              onChange={(event) => selectSnapshotVersion(event.target.value)}
+                              className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
+                            >
+                              {selectedSeriesVersions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.publishedAt ? "★ " : ""}Version {option.snapshotVersion}{option.publishedAt ? " · Published" : ""} · {dateFormatter.format(new Date(option.createdAt))}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <p className="mt-2 text-[11px] text-black/40 dark:text-white/40">
+                          {activeSnapshot.sourceEnvironmentName} · {activeSnapshot.sourceChannelName}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <article className="rounded-2xl border border-black/8 bg-black/2.5 p-4 dark:border-white/8 dark:bg-white/3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35 dark:text-white/35">
+                          Snapshot source
+                        </p>
+                        <h4 className="mt-2 font-semibold">{activeSnapshot.sourceEnvironmentName}</h4>
+                        <p className="mt-1 text-sm text-black/55 dark:text-white/55">{activeSnapshot.sourceChannelName}</p>
+                        <dl className="mt-3 space-y-1 text-xs text-black/40 dark:text-white/40">
+                          <div className="flex justify-between gap-3"><dt>Version</dt><dd>{activeSnapshot.snapshotVersion}</dd></div>
+                          <div className="flex justify-between gap-3"><dt>Captured</dt><dd><time dateTime={activeSnapshot.createdAt}>{dateFormatter.format(new Date(activeSnapshot.createdAt))}</time></dd></div>
+                          <div className="flex justify-between gap-3"><dt>Catalog</dt><dd>{activeSnapshot.categoryCount} categories · {activeSnapshot.productCount} products</dd></div>
+                          <div className="flex justify-between gap-3"><dt>Children</dt><dd>{activeSnapshot.variantCount} variants · {activeSnapshot.imageCount} images</dd></div>
+                        </dl>
+                      </article>
+
+                      <article className="rounded-2xl border border-emerald-500/20 bg-emerald-500/7 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Destination</p>
+                        <label className="mt-3 block text-xs font-medium" htmlFor="restore-environment">Environment</label>
+                        <select
+                          id="restore-environment"
+                          value={environmentId}
+                          onChange={(event) => {
+                            const nextEnvironmentId = event.target.value;
+                            const nextEnvironment = destinations.find(
+                              (destination) => destination.id.toString() === nextEnvironmentId,
+                            );
+                            setEnvironmentId(nextEnvironmentId);
+                            setChannelId(nextEnvironment?.channels[0]?.id.toString() ?? "");
+                            setConfirmation("");
+                          }}
+                          className="mt-1.5 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
+                        >
+                          {destinations.map((destination) => (
+                            <option key={destination.id} value={destination.id} disabled={destination.channels.length === 0}>
+                              {destination.name}{destination.error ? " — unavailable" : ""}
+                            </option>
+                          ))}
+                        </select>
+
+                        <label className="mt-3 block text-xs font-medium" htmlFor="restore-channel">Channel</label>
+                        <select
+                          id="restore-channel"
+                          value={channelId}
+                          onChange={(event) => {
+                            setChannelId(event.target.value);
+                            setConfirmation("");
+                          }}
+                          className="mt-1.5 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
+                        >
+                          {selectedEnvironment?.channels.map((channel) => (
+                            <option key={channel.id} value={channel.id}>{channel.name}</option>
+                          ))}
+                        </select>
+
+                        <p className="mt-3 text-xs leading-5 text-black/45 dark:text-white/45">
+                          {isSameChannel
+                            ? "This is the snapshot’s original channel."
+                            : isSameStore
+                              ? "Different channel in the snapshot’s original store."
+                              : "Different store: brands, tax classes, categories, products, and variants will be remapped."}
+                        </p>
+                      </article>
+                    </div>
+                  </div>
+                ) : null}
+
+                {wizardStep === 2 ? (
+                  <fieldset>
+                    <legend
+                      ref={(node) => { stepHeadingRef.current = node; }}
+                      tabIndex={-1}
+                      className="text-lg font-semibold outline-none"
+                    >
+                      Choose what to restore
+                    </legend>
+                    <p className="mt-1 text-xs leading-5 text-black/45 dark:text-white/45">
+                      Only sections present in this version are shown. Catalog is selected by default; configuration is opt-in.
+                    </p>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
                       {availableGroupDefinitions.map((group) => {
                         const checked = restoreGroups.includes(group.id);
                         const isStoreWide = group.scope === "store";
@@ -496,7 +596,6 @@ export function SnapshotRestore({
                           >
                             <input
                               type="checkbox"
-                              name="restoreGroups"
                               value={group.id}
                               checked={checked}
                               onChange={(event) => {
@@ -513,145 +612,178 @@ export function SnapshotRestore({
                               <span className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
                                 {group.label}
                                 {isStoreWide ? (
-                                  <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-800 dark:text-amber-200">
-                                    Store-wide
-                                  </span>
+                                  <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-800 dark:text-amber-200">Store-wide</span>
                                 ) : null}
                               </span>
-                              <span className="mt-1 block text-[11px] leading-4 text-black/45 dark:text-white/45">
-                                {group.description}
-                              </span>
+                              <span className="mt-1 block text-[11px] leading-4 text-black/45 dark:text-white/45">{group.description}</span>
                             </span>
                           </label>
                         );
                       })}
                     </div>
                     {restoreGroups.some((group) => group === "shipping" || group === "tax" || group === "inventory" || group === "b2b") ? (
-                      <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] leading-4 text-amber-900 dark:text-amber-100">
-                        Shipping, tax, inventory, and B2B data are shared by the destination store. Portable settings and B2B demo records are restored additively; mapping-sensitive or read-only records remain captured with warnings. Creating B2B Companies or users may trigger BigCommerce account or welcome email.
+                      <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-[11px] leading-4 text-amber-900 dark:text-amber-100">
+                        Shipping, tax, inventory, and B2B data are store-wide. Restore is additive, but creating B2B Companies or users may trigger BigCommerce account or welcome email.
                       </p>
                     ) : null}
+                    {restoreGroups.length === 0 ? (
+                      <p role="alert" className="mt-3 text-xs font-medium text-red-700 dark:text-red-300">Select at least one section to continue.</p>
+                    ) : null}
                   </fieldset>
-                  <div className="my-4 border-t border-black/8 dark:border-white/8" />
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold">Destination preflight</h3>
-                      <p className="mt-1 text-xs leading-5 text-black/45 dark:text-white/45">
-                        Checks catalog matches, selected resources, warnings, and store-wide impact without changing BigCommerce.
-                      </p>
+                ) : null}
+
+                {wizardStep === 3 ? (
+                  <div>
+                    <h3
+                      ref={(node) => { stepHeadingRef.current = node; }}
+                      tabIndex={-1}
+                      className="text-lg font-semibold outline-none"
+                    >
+                      Review and confirm
+                    </h3>
+                    <div className="mt-3 rounded-2xl border border-black/8 bg-black/2.5 p-4 text-xs dark:border-white/8 dark:bg-white/3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div><p className="text-black/40 dark:text-white/40">Snapshot</p><p className="mt-1 font-semibold">{activeSnapshot.name} · Version {activeSnapshot.snapshotVersion}</p></div>
+                        <div><p className="text-black/40 dark:text-white/40">Destination</p><p className="mt-1 font-semibold">{selectedEnvironment?.name} · {selectedChannel?.name}</p></div>
+                      </div>
+                      <p className="mt-3 text-black/40 dark:text-white/40">Selected sections</p>
+                      <p className="mt-1 font-medium">{availableGroupDefinitions.filter((group) => restoreGroups.includes(group.id)).map((group) => group.label).join(", ")}</p>
                     </div>
+
+                    <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/6 p-4">
+                      <h4 className="text-sm font-semibold text-red-800 dark:text-red-200">This changes the destination</h4>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-red-900/70 dark:text-red-100/70">
+                        <li>Existing matched products keep their attributes and are assigned to the selected channel and snapshot categories.</li>
+                        <li>Missing products are created with their variants, images, metadata, category links, and stock.</li>
+                        <li>Records absent from the snapshot are preserved; BigCommerce cannot wrap the restore in one transaction.</li>
+                      </ul>
+                    </div>
+
+                    {preflightPending ? (
+                      <div role="status" aria-live="polite" className="mt-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-5 text-center text-sm text-emerald-900 dark:text-emerald-100">
+                        <span className="mx-auto block size-6 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />
+                        <p className="mt-3 font-semibold">Running destination preflight…</p>
+                        <p className="mt-1 text-xs opacity-70">Checking catalog matches, resources, warnings, and store-wide impact.</p>
+                      </div>
+                    ) : preflightMatchesCurrentSelection && preflightState.message ? (
+                      <div className={`mt-4 rounded-2xl border p-4 text-xs leading-5 ${
+                        preflightPassed
+                          ? "border-emerald-500/25 bg-emerald-500/8 text-emerald-900 dark:text-emerald-100"
+                          : "border-red-500/25 bg-red-500/8 text-red-900 dark:text-red-100"
+                      }`} role={preflightPassed ? "status" : "alert"}>
+                        <p className="font-semibold">{preflightState.message}</p>
+                        {currentPreflight?.catalog ? (
+                          <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Categories created</dt><dd className="text-base font-semibold">{currentPreflight.catalog.categoriesToCreate}</dd></div>
+                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Categories matched</dt><dd className="text-base font-semibold">{currentPreflight.catalog.categoriesToUpdate}</dd></div>
+                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Products created</dt><dd className="text-base font-semibold">{currentPreflight.catalog.productsToCreate}</dd></div>
+                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Products matched</dt><dd className="text-base font-semibold">{currentPreflight.catalog.productsToMatch}</dd></div>
+                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Assignments added</dt><dd className="text-base font-semibold">{currentPreflight.catalog.channelAssignmentsToAdd}</dd></div>
+                            <div className="rounded-lg bg-black/4 p-2 dark:bg-white/5"><dt className="opacity-55">Already assigned</dt><dd className="text-base font-semibold">{currentPreflight.catalog.productsAlreadyAssigned}</dd></div>
+                          </dl>
+                        ) : null}
+                        {currentPreflight?.selectedGroups.length ? <p className="mt-3">Resources: {currentPreflight.selectedGroups.map((group) => `${group.label} (${group.resourceCount})`).join(", ")}</p> : null}
+                        {currentPreflight?.warnings.length ? <ul className="mt-2 list-disc space-y-1 pl-4">{currentPreflight.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+                        {currentPreflight?.manualActions.length ? <ul className="mt-2 list-disc space-y-1 pl-4">{currentPreflight.manualActions.map((action) => <li key={action}>{action}</li>)}</ul> : null}
+                        {currentPreflight?.blockingIssues.length ? <ul className="mt-2 list-disc space-y-1 pl-4">{currentPreflight.blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul> : null}
+                      </div>
+                    ) : (
+                      <p className="mt-4 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+                        Run preflight again before restoring this selection.
+                      </p>
+                    )}
+
+                    {showActionFeedback && state.status === "error" ? (
+                      <div role="alert" className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/8 p-4 text-sm text-red-800 dark:text-red-200">{state.message}</div>
+                    ) : null}
+
+                    {preflightPassed ? (
+                      <div className="mt-4">
+                        <label htmlFor="restore-confirmation" className="text-sm font-medium">Type <span className="font-mono">RESTORE</span> to confirm</label>
+                        <input
+                          id="restore-confirmation"
+                          name="confirmation"
+                          autoComplete="off"
+                          value={confirmation}
+                          onChange={(event) => setConfirmation(event.target.value)}
+                          className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 font-mono text-sm outline-none focus:border-red-500 dark:border-white/12 dark:bg-neutral-900"
+                        />
+                      </div>
+                    ) : <input type="hidden" name="confirmation" value="" />}
+                  </div>
+                ) : null}
+              </div>
+
+              <footer className="flex shrink-0 flex-col-reverse gap-3 border-t border-black/8 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7 dark:border-white/8 dark:bg-neutral-950">
+                <button
+                  type="button"
+                  disabled={preflightPending || restorePending}
+                  onClick={() => setIsOpen(false)}
+                  className="inline-flex items-center justify-center rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold transition hover:bg-black/4 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/10 dark:hover:bg-white/6"
+                >
+                  Cancel
+                </button>
+                <div className="flex gap-2 sm:justify-end">
+                  {wizardStep > 1 ? (
+                    <button
+                      type="button"
+                      disabled={preflightPending || restorePending}
+                      onClick={() => {
+                        setConfirmation("");
+                        setWizardStep((wizardStep - 1) as RestoreWizardStep);
+                      }}
+                      className="inline-flex flex-1 items-center justify-center rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold transition hover:bg-black/4 disabled:cursor-not-allowed disabled:opacity-45 sm:flex-none dark:border-white/10 dark:hover:bg-white/6"
+                    >
+                      Back
+                    </button>
+                  ) : null}
+                  {wizardStep === 1 ? (
+                    <button
+                      type="button"
+                      disabled={!selectedEnvironment || !selectedChannel}
+                      onClick={() => setWizardStep(2)}
+                      className="inline-flex flex-1 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-32 sm:flex-none"
+                    >
+                      Continue
+                    </button>
+                  ) : null}
+                  {wizardStep === 2 ? (
                     <button
                       type="submit"
                       formAction={preflightAction}
-                      disabled={preflightPending}
+                      disabled={restoreGroups.length === 0 || preflightPending}
                       aria-busy={preflightPending}
-                      className="inline-flex items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-45 dark:text-emerald-200"
+                      onClick={() => {
+                        setConfirmation("");
+                        setWizardStep(3);
+                      }}
+                      className="inline-flex flex-1 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-44 sm:flex-none"
+                    >
+                      Continue
+                    </button>
+                  ) : null}
+                  {wizardStep === 3 && (!preflightPassed || preflightPending) ? (
+                    <button
+                      type="submit"
+                      formAction={preflightAction}
+                      disabled={preflightPending || restoreGroups.length === 0}
+                      aria-busy={preflightPending}
+                      className="inline-flex flex-1 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-44 sm:flex-none"
                     >
                       {preflightPending ? (
-                        <>
-                          <span
-                            className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
-                            aria-hidden="true"
-                          />
-                          Running preflight…
-                        </>
-                      ) : (
-                        "Run restore preflight"
-                      )}
+                        <><span className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />Running preflight…</>
+                      ) : "Run preflight again"}
                     </button>
-                  </div>
-
-                  {preflightMatchesCurrentSelection && preflightState.message ? (
-                    <div className={`mt-3 rounded-xl border p-3 text-xs leading-5 ${
-                      preflightPassed
-                        ? "border-emerald-500/25 bg-emerald-500/8 text-emerald-900 dark:text-emerald-100"
-                        : "border-red-500/25 bg-red-500/8 text-red-900 dark:text-red-100"
-                    }`} role={preflightPassed ? "status" : "alert"}>
-                      <p className="font-semibold">{preflightState.message}</p>
-                      {currentPreflight?.catalog ? (
-                        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
-                          <div><dt className="text-black/45 dark:text-white/45">Categories created</dt><dd className="font-semibold">{currentPreflight.catalog.categoriesToCreate}</dd></div>
-                          <div><dt className="text-black/45 dark:text-white/45">Categories matched</dt><dd className="font-semibold">{currentPreflight.catalog.categoriesToUpdate}</dd></div>
-                          <div><dt className="text-black/45 dark:text-white/45">Products created</dt><dd className="font-semibold">{currentPreflight.catalog.productsToCreate}</dd></div>
-                          <div><dt className="text-black/45 dark:text-white/45">Products matched</dt><dd className="font-semibold">{currentPreflight.catalog.productsToMatch}</dd></div>
-                          <div><dt className="text-black/45 dark:text-white/45">Assignments added</dt><dd className="font-semibold">{currentPreflight.catalog.channelAssignmentsToAdd}</dd></div>
-                          <div><dt className="text-black/45 dark:text-white/45">Already assigned</dt><dd className="font-semibold">{currentPreflight.catalog.productsAlreadyAssigned}</dd></div>
-                        </dl>
-                      ) : null}
-                      {currentPreflight?.selectedGroups.length ? (
-                        <p className="mt-2">
-                          Sections: {currentPreflight.selectedGroups.map((group) => `${group.label} (${group.resourceCount})`).join(", ")}
-                        </p>
-                      ) : null}
-                      {currentPreflight?.warnings.length ? (
-                        <ul className="mt-2 list-disc space-y-1 pl-4">
-                          {currentPreflight.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-                        </ul>
-                      ) : null}
-                      {currentPreflight?.manualActions.length ? (
-                        <ul className="mt-2 list-disc space-y-1 pl-4">
-                          {currentPreflight.manualActions.map((action) => <li key={action}>{action}</li>)}
-                        </ul>
-                      ) : null}
-                      {currentPreflight?.blockingIssues.length ? (
-                        <ul className="mt-2 list-disc space-y-1 pl-4">
-                          {currentPreflight.blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}
-                        </ul>
-                      ) : null}
-                    </div>
-                  ) : preflightState.status !== "idle" ? (
-                    <p className="mt-3 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
-                      The restore selection changed. Run preflight again.
-                    </p>
                   ) : null}
-
-                  {preflightPassed ? (
-                    <div className="mt-4">
-                      <label htmlFor="restore-confirmation" className="text-sm font-medium">
-                        Type <span className="font-mono">RESTORE</span> to confirm
-                      </label>
-                      <input
-                        id="restore-confirmation"
-                        name="confirmation"
-                        autoComplete="off"
-                        value={confirmation}
-                        onChange={(event) => setConfirmation(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 font-mono text-sm outline-none focus:border-red-500 dark:border-white/12 dark:bg-neutral-900"
-                      />
-                    </div>
-                  ) : (
-                    <input type="hidden" name="confirmation" value="" />
-                  )}
-                  <div className="mt-5 flex flex-col-reverse gap-3 border-t border-black/8 pt-5 sm:flex-row sm:justify-end dark:border-white/8">
-                    <button
-                      type="button"
-                      onClick={() => setIsOpen(false)}
-                      className="inline-flex items-center justify-center rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold transition hover:bg-black/4 dark:border-white/10 dark:hover:bg-white/6"
-                    >
-                      Cancel
-                    </button>
+                  {wizardStep === 3 && preflightPassed && !preflightPending ? (
                     <RestoreSubmitButton
-                      enabled={
-                        preflightPassed &&
-                        confirmation === "RESTORE" &&
-                        restoreGroups.length > 0 &&
-                        Boolean(selectedEnvironment && selectedChannel)
-                      }
+                      pending={restorePending}
+                      enabled={confirmation === "RESTORE" && Boolean(selectedEnvironment && selectedChannel)}
                     />
-                  </div>
-                </form>
-              ) : (
-                <div className="mt-5 flex justify-end border-t border-black/8 pt-5 dark:border-white/8">
-                  <button
-                    type="button"
-                    onClick={() => setIsOpen(false)}
-                    className="inline-flex items-center justify-center rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
-                  >
-                    Close
-                  </button>
+                  ) : null}
                 </div>
-              )}
-            </div>
+              </footer>
+            </form>
           </section>
         </div>
       ) : null}
