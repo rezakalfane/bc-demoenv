@@ -273,7 +273,15 @@ async function fetchJson(
     );
   }
 
-  return (await response.json()) as unknown;
+  const text = response.status === 204 ? "" : await response.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new SnapshotCaptureError(
+      `BigCommerce returned invalid JSON while capturing ${resource}.`,
+    );
+  }
 }
 
 function readDataArray(payload: unknown, resource: string) {
@@ -779,6 +787,52 @@ async function captureOptionalJson(
   }
 }
 
+function mergeEffectiveChannelSettings(
+  globalValue: unknown,
+  channelValue: unknown,
+): unknown {
+  const globalRecord = asRecord(globalValue);
+  const channelRecord = asRecord(channelValue);
+  if (!channelRecord) return globalValue;
+
+  return Object.fromEntries(Object.entries(channelRecord).map(([key, value]) => {
+    const globalFallback = globalRecord?.[key];
+    if (value === null || value === undefined) return [key, globalFallback ?? null];
+    if (asRecord(value) && asRecord(globalFallback)) {
+      return [key, mergeEffectiveChannelSettings(globalFallback, value)];
+    }
+    return [key, value];
+  }));
+}
+
+async function captureEffectiveChannelSettings(
+  environment: ConnectedEnvironment,
+  globalPath: string,
+  channelPath: string,
+  label: string,
+) {
+  try {
+    const [globalPayload, channelPayload] = await Promise.all([
+      fetchJson(environment, globalPath, `global ${label}`),
+      fetchJson(environment, channelPath, `channel ${label}`),
+    ]);
+    const globalData = asRecord(globalPayload)?.data ?? globalPayload;
+    const channelData = asRecord(channelPayload)?.data ?? channelPayload;
+    return capturedResource(
+      label,
+      "channel",
+      mergeEffectiveChannelSettings(globalData, channelData),
+    );
+  } catch (error) {
+    return capturedResource(
+      label,
+      "channel",
+      null,
+      error instanceof Error ? error.message : `Unable to capture ${label}.`,
+    );
+  }
+}
+
 async function captureOptionalCollection(
   environment: ConnectedEnvironment,
   path: string,
@@ -1207,11 +1261,48 @@ async function loadSnapshotConfiguration(
       : Promise.resolve(capturedResource("theme configuration", "channel", [])),
   ]);
 
-  await onProgress?.("Capturing checkout and customer experience settings", 90, 100);
+  await onProgress?.("Capturing effective storefront settings", 90, 100);
+  const storefrontEntries = await Promise.all([
+    ["profile", "/v3/settings/store/profile", "store profile settings"],
+    ["logo", "/v3/settings/logo", "logo and favicon settings"],
+    ["seo", "/v3/settings/storefront/seo", "storefront SEO settings"],
+    ["robots", "/v3/settings/storefront/robotstxt", "robots.txt settings"],
+    ["productDisplay", "/v3/settings/storefront/product", "storefront product settings"],
+    ["categoryDisplay", "/v3/settings/storefront/category", "storefront category settings"],
+    ["catalogPreferences", "/v3/settings/catalog", "catalog preference settings"],
+    ["inventoryRules", "/v3/settings/inventory", "channel inventory rules"],
+    ["search", "/v3/settings/storefront/search", "storefront search settings"],
+    ["statusMessages", "/v3/settings/storefront/status", "storefront status messages"],
+  ].map(async ([key, path, label]) => [
+    key,
+    await captureEffectiveChannelSettings(
+      environment,
+      path,
+      `${path}?channel_id=${channelId}`,
+      label,
+    ),
+  ] as const));
+  const [customerPrivacy, customerGroups] = await Promise.all([
+    captureEffectiveChannelSettings(
+      environment,
+      "/v3/customers/settings",
+      `/v3/customers/settings/channels/${channelId}`,
+      "customer privacy and group settings",
+    ),
+    captureOptionalJson(
+      environment,
+      "/v2/customer_groups",
+      "customer groups",
+      "store",
+    ).then((resource) => ({
+      ...resource,
+      data: resource.data ?? [],
+    })),
+  ]);
+  await onProgress?.("Capturing checkout and customer experience settings", 91, 100);
   const experienceEntries = await Promise.all([
     ["checkout", `/v3/checkouts/settings/channels/${channelId}`, "checkout settings"],
     ["cart", `/v3/carts/settings/channels/${channelId}`, "cart settings"],
-    ["customer", `/v3/customers/settings/channels/${channelId}`, "customer settings"],
     ["order", `/v3/orders/settings/channels/${channelId}`, "order settings"],
     ["abandonedCart", `/v3/abandoned-carts/settings/channels/${channelId}`, "abandoned-cart settings"],
   ].map(async ([key, path, label]) => [
@@ -1425,6 +1516,11 @@ async function loadSnapshotConfiguration(
 
   return {
     channel: group({ channelMetafields, site, siteRoutes, activeTheme }),
+    storefront: group({
+      ...Object.fromEntries(storefrontEntries),
+      customerPrivacy,
+      customerGroups,
+    }),
     experience: group(Object.fromEntries(experienceEntries)),
     pricing: group({
       currencyAssignments,

@@ -4,6 +4,29 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-19
 
+### Merge — Integrate effective Storefront settings restoration
+
+- **Date:** 2026-07-19
+- **Source:** `feature/storefront-settings-restore`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated effective channel Storefront settings capture and destination override restoration, including safe asset uploads and customer-group remapping, after live `rezakalfane` API validation, TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add effective Storefront settings restoration
+
+- **Date:** 2026-07-19
+- **Branch:** `feature/storefront-settings-restore`
+- **Type:** Feature commit
+
+- Added an opt-in Storefront settings snapshot group for contact details, branding, SEO, robots.txt, product/category display, catalog preferences, inventory rules, search, status messages, and customer privacy.
+- Resolved inherited global values during capture and restored them as explicit channel overrides without changing site ownership, domains, routes, checkout URLs, or Makeswift integration configuration.
+- Remapped customer-group selections by name and made successful empty V2 responses compatible with both new and existing immutable snapshots.
+- Restored image logos and favicons through validated BigCommerce-CDN multipart uploads, retained valid text-logo support, and skipped unsupported empty text-logo mutations.
+- Preserved the destination contact email, generated prelaunch password, global-only search configuration, and non-writable launch state.
+- Verified every writable JSON settings endpoint, customer privacy update, and favicon upload against `rezakalfane` channel `1881648` with successful HTTP 200 responses.
+- Updated README operational guidance and reverse-chronological prompt History.
+
 ### Merge — Integrate default tax-zone restoration fix
 
 - **Date:** 2026-07-19
