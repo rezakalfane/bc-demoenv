@@ -2,6 +2,52 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Release the restore wizard UX
+
+### Prompt
+
+> you can doc, branch, commit, merge and push. then Let's improve pre-flight
+
+### Summary
+
+- Finalized documentation for the guided restore wizard, split Snapshot and Version selectors, published-version indicator, and clarified Continue action.
+- Created `feature/restore-wizard-ux`, verified the complete change set, committed it, merged it into `main`, and pushed the updated main branch before beginning the next preflight improvement.
+
+## 2026-07-20 — Clarify the restore-sections action
+
+### Prompt
+
+> in this step the "Run restore preflight" should be "Continue" instead
+
+### Summary
+
+- Renamed the restore-sections primary action to **Continue**, matching its role in advancing the three-step wizard.
+- Preserved the existing behavior that starts preflight while opening the review step, where its loading state and results are shown.
+
+## 2026-07-20 — Split snapshot and version restore selectors
+
+### Prompt
+
+> To select the snapshot version, maybe we should use two dropdowns, one for Snapshot, second for Version (with publish icon if needed)
+
+### Summary
+
+- Replaced the combined snapshot/version restore selector with separate Snapshot and Version dropdowns in the restore wizard.
+- Scoped the Version choices to the selected owner/name series, selected its newest version when changing snapshots, and marked published versions with a star and label.
+- Preserved restore-section defaults, preflight invalidation, destination selection, and typed confirmation when switching versions.
+
+## 2026-07-20 — Convert snapshot restore into a guided wizard
+
+### Prompt
+
+> I'd like to implement 1
+
+### Summary
+
+- Reorganized Snapshot Restore into three focused steps: destination, restore sections, and preflight review with typed confirmation.
+- Added a responsive progress header, navigation back to completed steps, a non-scrolling action footer, and step-specific validation without changing the existing Server Actions or durable Workflow launch.
+- Preserved preflight invalidation and server-side revalidation, improved the destination-impact explanation, and added accessible focus movement and pending states across wizard transitions.
+
 ## 2026-07-20 — Release durable catalog workflows and restore preflight
 
 ### Prompt

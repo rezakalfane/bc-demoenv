@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate the guided restore wizard
+
+- **Date:** 2026-07-20
+- **Source:** `feature/restore-wizard-ux`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the three-step restore wizard, split snapshot/version selectors, published-version markers, and clearer step actions after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add the guided snapshot restore wizard
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/restore-wizard-ux`
+- **Type:** Feature commit
+
+- Reorganized Snapshot Restore into destination, restore-section, and preflight-review steps with accessible focus movement and a persistent action footer.
+- Split channel-page source selection into Snapshot and Version dropdowns, defaulting a changed snapshot to its newest version and identifying published versions.
+- Preserved selection-bound preflight invalidation, typed confirmation, pending feedback, and durable Workflow launch behavior.
+- Updated README, implementation details, and reverse-chronological prompt History.
+
 ### Merge — Integrate durable catalog workflows and restore preflight
 
 - **Date:** 2026-07-20
