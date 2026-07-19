@@ -444,14 +444,12 @@ function shippingZoneInput(source: JsonRecord, includeType: boolean) {
 
 async function reconcileShippingConfiguration(
   environment: ConnectedEnvironment,
+  destinationChannelId: number,
   resources: Record<string, CapturedConfigurationResource>,
   bestEffort: (label: string, work: () => Promise<unknown>) => Promise<void>,
 ) {
   const sourceZones = capturedData(resources.shippingZones);
   if (!Array.isArray(sourceZones)) return;
-  const allStorefrontChannelIds = (await listChannels(environment)).map(
-    (channel) => channel.id,
-  );
   const targetPayload = await apiRequestV2(environment, "/shipping/zones", {
     resource: "destination shipping zones",
   });
@@ -507,6 +505,16 @@ async function reconcileShippingConfiguration(
             normalizeText(candidate.type) === normalizeText(method.type),
         );
         const targetMethodId = readPositiveInteger(targetMethod?.id);
+        const existingChannelIds = Array.isArray(targetMethod?.channel_ids)
+          ? targetMethod.channel_ids.flatMap((value) => {
+              const channelId = readPositiveInteger(value);
+              return channelId ? [channelId] : [];
+            })
+          : [];
+        const channelIds = [...new Set([
+          ...existingChannelIds,
+          destinationChannelId,
+        ])];
         await apiRequestV2(
           environment,
           targetMethodId
@@ -516,9 +524,7 @@ async function reconcileShippingConfiguration(
             method: targetMethodId ? "PUT" : "POST",
             body: {
               ...pick(method, SHIPPING_METHOD_FIELDS),
-              ...(allStorefrontChannelIds.length > 0
-                ? { channel_ids: allStorefrontChannelIds }
-                : {}),
+              channel_ids: channelIds,
             },
             resource: `shipping method ${methodName}`,
           },
@@ -1533,7 +1539,12 @@ async function restoreConfiguration(
           }),
         );
       }
-      await reconcileShippingConfiguration(environment, resources, bestEffort);
+      await reconcileShippingConfiguration(
+        environment,
+        destinationChannelId,
+        resources,
+        bestEffort,
+      );
       continue;
     }
 
