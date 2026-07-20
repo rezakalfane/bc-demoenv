@@ -3,6 +3,7 @@ import "server-only";
 import { requireAppUser } from "@/lib/auth";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
 import {
+  hasCapturedTranslations,
   SNAPSHOT_RESTORE_GROUPS,
   type CapturedConfigurationGroup,
   type CapturedConfigurationResource,
@@ -155,6 +156,7 @@ export type CatalogSnapshotView = {
   products: CatalogProduct[];
   currency: string;
   availableRestoreGroups: SnapshotRestoreGroup[];
+  hasTranslations: boolean;
   error: string | null;
 };
 
@@ -2332,6 +2334,9 @@ export async function getCatalogSnapshotView(
       products: parsePreviewProducts(preview.products),
       currency: /^[A-Z]{3}$/.test(currency) ? currency : "USD",
       availableRestoreGroups,
+      hasTranslations: hasCapturedTranslations(
+        manifest?.configuration as CapturedSnapshotConfiguration | undefined,
+      ),
       error: null,
     };
   } catch {
@@ -2343,6 +2348,7 @@ export async function getCatalogSnapshotView(
       products: [],
       currency: "USD",
       availableRestoreGroups: ["catalog"],
+      hasTranslations: false,
       error: "This snapshot payload is invalid or uses an unsupported format.",
     };
   }

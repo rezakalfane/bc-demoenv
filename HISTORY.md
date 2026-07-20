@@ -2,6 +2,21 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Mark localized snapshots automatically
+
+### Prompt
+
+> when translations exists add a computed "localized" tag on a snapshot
+>
+> you can validate that phase
+
+### Summary
+
+- Added a version-aware, read-only `localized` tag when a snapshot contains actual captured product or category translation records.
+- Exposed the computed tag in snapshot details, cards, compact tables, search, and the existing multi-select tag filter for owned and shared published snapshots.
+- Reserved `localized` from custom tag creation and hid any stored name collision so computed and user-managed labels cannot conflict.
+- Validated the implementation with lint, TypeScript, whitespace, production build, and a representative SQLite JSON query before documenting, branching, committing, merging, and pushing the phase.
+
 ## 2026-07-20 — Add custom snapshot series tags
 
 ### Prompt

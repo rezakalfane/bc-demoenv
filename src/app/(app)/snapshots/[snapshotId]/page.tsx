@@ -181,6 +181,12 @@ export default async function SnapshotPage({
                 <span className="sr-only">Snapshot metadata: </span><span>{value}</span>
               </div>
             ))}
+            {snapshot.hasTranslations ? (
+              <div className="inline-flex min-h-7 items-center rounded-full border border-blue-600/20 bg-blue-500/8 px-3 py-1 text-xs text-blue-800 dark:text-blue-300">
+                <span className="sr-only">Computed tag: </span>
+                <span>localized</span>
+              </div>
+            ) : null}
             <SnapshotTags
               snapshotId={snapshot.summary.id}
               initialTags={customTags}

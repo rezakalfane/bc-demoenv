@@ -77,6 +77,7 @@ export type CatalogSnapshotSeriesSummary = CatalogSnapshotSummary & {
   publishedSnapshotId: number | null;
   publishedVersion: number | null;
   isOwner: boolean;
+  hasTranslations: boolean;
 };
 
 export type CatalogSnapshotEvent = {
@@ -1387,6 +1388,31 @@ const catalogSnapshotColumns = `
   updated_at
 `;
 
+const catalogSnapshotHasTranslationsSql = `
+  CASE WHEN json_valid(payload_json) AND (
+    EXISTS (
+      SELECT 1
+      FROM json_tree(
+        payload_json,
+        '$.configuration.localization.resources.productTranslations.data'
+      ) AS product_translation_tree
+      WHERE product_translation_tree.key = 'edges'
+        AND product_translation_tree.type = 'array'
+        AND json_array_length(product_translation_tree.value) > 0
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM json_tree(
+        payload_json,
+        '$.configuration.localization.resources.categoryTranslations.data'
+      ) AS category_translation_tree
+      WHERE category_translation_tree.key = 'edges'
+        AND category_translation_tree.type = 'array'
+        AND json_array_length(category_translation_tree.value) > 0
+    )
+  ) THEN 1 ELSE 0 END
+`;
+
 export async function getCatalogSnapshots(
   userId: string,
 ): Promise<CatalogSnapshotRestoreOption[]> {
@@ -1444,10 +1470,12 @@ export async function getCatalogSnapshotSeries(
   await ensureSchema();
   const ownedResult = await getClient().execute({
     sql: `
-      SELECT ${catalogSnapshotColumns}, version_count, published_snapshot_id, published_version
+      SELECT ${catalogSnapshotColumns},
+             ${catalogSnapshotHasTranslationsSql} AS has_translations,
+             version_count, published_snapshot_id, published_version
       FROM (
         SELECT
-          ${catalogSnapshotColumns},
+          ${catalogSnapshotColumns}, payload_json,
           COUNT(*) OVER (
             PARTITION BY name COLLATE NOCASE
           ) AS version_count,
@@ -1472,7 +1500,9 @@ export async function getCatalogSnapshotSeries(
 
   const sharedResult = await getClient().execute({
     sql: `
-      SELECT ${catalogSnapshotColumns}, 1 AS version_count,
+      SELECT ${catalogSnapshotColumns},
+             ${catalogSnapshotHasTranslationsSql} AS has_translations,
+             1 AS version_count,
              id AS published_snapshot_id, snapshot_version AS published_version
       FROM catalog_snapshots
       WHERE published_at IS NOT NULL AND user_id <> ?
@@ -1487,6 +1517,7 @@ export async function getCatalogSnapshotSeries(
     publishedSnapshotId: row.published_snapshot_id == null ? null : Number(row.published_snapshot_id),
     publishedVersion: row.published_version == null ? null : Number(row.published_version),
     isOwner: String(row.user_id) === userId,
+    hasTranslations: Number(row.has_translations) === 1,
   })).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
@@ -1496,13 +1527,14 @@ export async function getAccessibleCatalogSnapshotTagSeries(userId: string) {
     sql: `
       SELECT tags.user_id, tags.snapshot_name, tags.tag
       FROM catalog_snapshot_tags AS tags
-      WHERE tags.user_id = ? OR EXISTS (
+      WHERE tags.tag <> 'localized' COLLATE NOCASE
+        AND (tags.user_id = ? OR EXISTS (
         SELECT 1
         FROM catalog_snapshots AS snapshots
         WHERE snapshots.user_id = tags.user_id
           AND snapshots.name = tags.snapshot_name COLLATE NOCASE
           AND snapshots.published_at IS NOT NULL
-      )
+      ))
       ORDER BY tags.tag COLLATE NOCASE ASC
     `,
     args: [userId],
@@ -1526,6 +1558,7 @@ export async function getCatalogSnapshotTags(ownerUserId: string, name: string) 
       SELECT tag
       FROM catalog_snapshot_tags
       WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE
+        AND tag <> 'localized' COLLATE NOCASE
       ORDER BY tag COLLATE NOCASE ASC
     `,
     args: [ownerUserId, name],
@@ -1540,6 +1573,7 @@ export async function getCatalogSnapshotTagSuggestions(userId: string) {
       SELECT tag
       FROM catalog_snapshot_tags
       WHERE user_id = ?
+        AND tag <> 'localized' COLLATE NOCASE
       GROUP BY tag COLLATE NOCASE
       ORDER BY tag COLLATE NOCASE ASC
     `,
@@ -1557,6 +1591,9 @@ export async function addCatalogSnapshotTag(
   const tag = normalizeCatalogSnapshotTag(requestedTag);
   if (tag.length < 1 || tag.length > 32) {
     return { error: "Tags must contain between 1 and 32 characters.", tags: [] } as const;
+  }
+  if (tag.localeCompare("localized", "en-US", { sensitivity: "base" }) === 0) {
+    return { error: "Localized is a computed snapshot tag.", tags: [] } as const;
   }
 
   const transaction = await getClient().transaction("write");
