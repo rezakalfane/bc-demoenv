@@ -1,4 +1,5 @@
 import { CatalogOperationsTable } from "@/components/catalog-operations-table";
+import { OperationsSubnavigation } from "@/components/operations-subnavigation";
 import { requireAppUser } from "@/lib/auth";
 import { getCatalogOperationList } from "@/lib/catalog-operations-list";
 
@@ -29,6 +30,7 @@ export default async function OperationsPage() {
                 Monitor current catalog work and inspect catalog, snapshot lifecycle, and
                 environment activity across your account.
               </p>
+              <OperationsSubnavigation active="operations" />
             </div>
             <dl className="grid grid-cols-3 gap-2 text-center">
               <div className="min-w-24 rounded-xl border border-black/8 bg-white/55 px-3 py-2 dark:border-white/8 dark:bg-white/3">

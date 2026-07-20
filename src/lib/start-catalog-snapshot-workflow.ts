@@ -1,6 +1,7 @@
 import { getRun, start } from "workflow/api";
 import {
   claimCatalogOperationWorkflowRecovery,
+  createCatalogOperation,
   getCatalogOperation,
   type CatalogOperation,
   updateCatalogOperation,
@@ -37,6 +38,36 @@ export async function startCatalogOperationWorkflow(
 }
 
 export const startCatalogSnapshotWorkflow = startCatalogOperationWorkflow;
+
+export async function retryCatalogOperationWorkflow(
+  userId: string,
+  operationId: number,
+) {
+  const operation = await getCatalogOperation(userId, operationId);
+  if (!operation) throw new Error("The catalog operation was not found.");
+  if (["queued", "running"].includes(operation.status)) {
+    throw new Error("The catalog operation is still active.");
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(operation.payloadJson) as unknown;
+  } catch {
+    throw new Error("The catalog operation payload is invalid.");
+  }
+
+  const replacementId = await createCatalogOperation(userId, {
+    kind: operation.kind,
+    environmentId: operation.environmentId ?? undefined,
+    channelId: operation.channelId ?? undefined,
+    snapshotId: operation.snapshotId ?? undefined,
+    payload,
+    totalSteps: operation.totalSteps,
+    operationKey: operation.operationKey ?? undefined,
+  });
+  await startCatalogOperationWorkflow(userId, replacementId);
+  return replacementId;
+}
 
 export const CATALOG_WORKFLOW_RUN_NOT_FOUND_ERROR =
   "The durable catalog workflow run was not found.";

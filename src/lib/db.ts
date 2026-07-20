@@ -112,6 +112,7 @@ export type CollectionViewPreference = {
 export type CatalogOperation = {
   id: number; userId: string; kind: "snapshot" | "restore" | "clear";
   environmentId: number | null; channelId: number | null; snapshotId: number | null;
+  operationKey: string | null;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   currentStep: string; stepIndex: number; totalSteps: number; payloadJson: string;
   resultJson: string | null; error: string | null; workflowRunId: string | null;
@@ -457,7 +458,7 @@ async function ensureSchema() {
 }
 
 function toCatalogOperation(row: Record<string, unknown>): CatalogOperation {
-  return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), workflowRunId: row.workflow_run_id == null ? null : String(row.workflow_run_id), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
+  return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), operationKey: row.operation_key == null ? null : String(row.operation_key), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), workflowRunId: row.workflow_run_id == null ? null : String(row.workflow_run_id), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
 }
 
 export async function createCatalogOperation(userId: string, input: { kind: CatalogOperation["kind"]; environmentId?: number; channelId?: number; snapshotId?: number; payload: unknown; totalSteps?: number; operationKey?: string }) {
@@ -564,6 +565,44 @@ export async function getCatalogOperations(userId: string) {
     args: [userId],
   });
   return result.rows.map((row) => toCatalogOperation(row as Record<string, unknown>));
+}
+
+export async function getWorkflowCatalogOperations(userId: string, limit = 100) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT *
+      FROM catalog_operations
+      WHERE user_id = ? AND workflow_run_id IS NOT NULL
+      ORDER BY
+        CASE WHEN status IN ('queued', 'running') THEN 0 ELSE 1 END,
+        updated_at DESC,
+        id DESC
+      LIMIT ?
+    `,
+    args: [userId, Math.min(Math.max(limit, 1), 250)],
+  });
+  return result.rows.map((row) => toCatalogOperation(row as Record<string, unknown>));
+}
+
+export async function getCatalogSnapshotCaptureStates(
+  userId: string,
+  operationIds: number[],
+) {
+  await ensureSchema();
+  if (operationIds.length === 0) return [];
+  const placeholders = operationIds.map(() => "?").join(",");
+  const result = await getClient().execute({
+    sql: `
+      SELECT *
+      FROM catalog_snapshot_capture_state
+      WHERE user_id = ? AND operation_id IN (${placeholders})
+    `,
+    args: [userId, ...operationIds],
+  });
+  return result.rows.map((row) =>
+    toCatalogSnapshotCaptureState(row as Record<string, unknown>)
+  );
 }
 
 export async function getCatalogOperationsForChannel(userId: string, environmentId: number, channelId: number) {

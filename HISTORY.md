@@ -2,6 +2,31 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Add Workflow observability and detailed traces
+
+### Prompt
+
+> Can we add a Workflows page under Operations to debug current and past workflows, get as much useful information as possible, offer some actions directly on workflows, offer a visual representation of the done or running workflow with active states and possible operations?
+>
+> last one's name is weird: workflow//./src/workflows/catalog-snapshot//catalogSnapshotWorkflow
+>
+> also Can we open a workflow from an operation?
+>
+> Capturing settings should also be different steps in the workflow, right?
+>
+> But I don't see that in the Workflow details as steps or macro steps (setting groups)
+>
+> also for clear, clearing categories and clearing products should be different steps as well?
+
+### Summary
+
+- Added a tenant-scoped Workflows subpage under Operations with searchable and filterable runs, application/runtime status, progress, heartbeat age, duration, exact run IDs, raw technical metadata, direct resource links, and visual traces.
+- Added status refresh, active-run cancellation, failed/cancelled retry, run-ID copying, and operation-to-workflow deep links that open the exact workflow detail.
+- Normalized compiler-generated Workflow names for display while retaining the original runtime name in Technical details.
+- Expanded snapshot traces into catalog-context and configuration macro stages for storefront, customer experience, pricing, shipping, tax, B2B, and localization/inventory capture.
+- Expanded clear traces into product unassignment, category removal, and final BigCommerce verification, attributing failure or cancellation to the active phase.
+- Preserved the distinction between native Vercel `"use step"` spans and application macro stages inferred from durable Turso checkpoints and progress messages.
+
 ## 2026-07-20 — Add graceful offline recovery
 
 ### Prompt
