@@ -60,6 +60,13 @@ erDiagram
         TEXT created_at
     }
 
+    CATALOG_SNAPSHOT_TAGS {
+        TEXT user_id PK
+        TEXT snapshot_name PK
+        TEXT tag PK
+        TEXT created_at
+    }
+
     APPLICATION_EVENTS {
         INTEGER id PK
         TEXT user_id
@@ -138,6 +145,7 @@ erDiagram
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_OPERATIONS : "targeted by"
     BIGCOMMERCE_ENVIRONMENTS o|..o{ FAVORITES : "may be favored as"
     CATALOG_SNAPSHOTS o|..o{ CATALOG_SNAPSHOT_EVENTS : "described by"
+    CATALOG_SNAPSHOTS o|..o{ CATALOG_SNAPSHOT_TAGS : "series labeled by"
     CATALOG_SNAPSHOTS o|..o{ CATALOG_OPERATIONS : "used by"
     CATALOG_SNAPSHOTS o|..o{ FAVORITES : "series may be favored as"
     CATALOG_OPERATIONS ||..o| CATALOG_SNAPSHOT_CAPTURE_STATE : "checkpoints"
@@ -148,6 +156,7 @@ Important uniqueness rules and indexes are:
 
 - Environment names are case-insensitively unique per user.
 - Snapshot `(user_id, name, snapshot_version)` tuples are unique, and only one version per case-insensitive user/name series can be published.
+- Snapshot tags use the composite primary key `(user_id, snapshot_name, tag)`. Both the series name and tag compare case-insensitively, so tags belong to the complete owner/name series rather than an individual immutable version. A series can have at most 12 tags of 1–32 characters; rename and deletion transactions move or remove the associated rows.
 - Only one queued or running operation can exist for a non-null `(user_id, kind, operation_key)` tuple.
 - Capture-product rows use the composite primary key `(operation_id, product_index)`.
 - Favorites use the composite primary key `(user_id, resource_type, resource_key)`. Environment keys use the tenant-owned database ID, channel keys combine environment and BigCommerce channel IDs, and snapshot keys combine the owner Clerk ID with the normalized series name so a favorite survives new immutable versions. Snapshot rename and deletion reconcile those keys for every viewer.
@@ -163,7 +172,7 @@ Snapshot payloads contain catalog data and public image links, but never BigComm
 
 Favorites are private presentation metadata. Every favorite lookup and toggle includes the current Clerk user ID; the Server Action also verifies ownership of environments and channels or current access to an owned/published snapshot before accepting the mutation. Favorite status never grants access to a resource that is no longer otherwise visible.
 
-Collection browsing keeps resource rendering on the server. A narrow Client Component toolbar controls sibling Server-rendered cards and compact table rows through stable data attributes. Dashboard environments, saved Settings environments, channel lists, snapshot series, and live/captured product browsers expose the same left-aligned instant search and right-aligned 32-pixel card/table controls. Filtering operates only on the already-authorized display model received from the Server Component; credentials, snapshot payloads, and raw BigCommerce responses never cross this boundary. Compact administrative tables preserve primary navigation and resource actions with horizontal overflow on narrow screens; catalog product tables instead use a fixed percentage layout with wrapping and line clamping so all four columns remain visible beside the category tree on desktop. Snapshot collections add a separate eye control that hides or reveals shared read-only series without affecting owned snapshots or in-progress captures. Card/table selection and shared-snapshot visibility are persisted by page type through authenticated Server Actions in `collection_view_preferences`; switching one live channel catalog changes the preference for every live channel catalog, while snapshot catalogs and other page types remain independent. Each desktop page also exposes a small arrow on the sidebar edge. Collapsing it converts navigation to an icon rail, removes the shell and page-content maximum widths, and stores one global `app-shell` preference for that user, so the navigation remains consistent while moving between pages. Existing page-scoped collapsed choices are folded into the global value until the user explicitly toggles it. Each write and initial read derives the Clerk user ID server-side, and the saved initial state is rendered on the server to avoid a layout flash. The persistent app layout carries that authorized preference map through client navigation, allowing Dashboard, environment, Snapshots, and product loading boundaries to render card or compact-table skeletons that match the selected mode. Search text remains intentionally transient.
+Collection browsing keeps resource rendering on the server. A narrow Client Component toolbar controls sibling Server-rendered cards and compact table rows through stable data attributes. Dashboard environments, saved Settings environments, channel lists, snapshot series, and live/captured product browsers expose the same left-aligned instant search and right-aligned 32-pixel card/table controls. Filtering operates only on the already-authorized display model received from the Server Component; credentials, snapshot payloads, and raw BigCommerce responses never cross this boundary. Compact administrative tables preserve primary navigation and resource actions with horizontal overflow on narrow screens; catalog product tables instead use a fixed percentage layout with wrapping and line clamping so all four columns remain visible beside the category tree on desktop. Snapshot collections add a separate eye control that hides or reveals shared read-only series without affecting owned snapshots or in-progress captures, plus a multi-select tag filter. A snapshot must contain every selected tag, enabling increasingly narrow intersections without another server request. Card/table selection and shared-snapshot visibility are persisted by page type through authenticated Server Actions in `collection_view_preferences`; switching one live channel catalog changes the preference for every live channel catalog, while snapshot catalogs and other page types remain independent. Each desktop page also exposes a small arrow on the sidebar edge. Collapsing it converts navigation to an icon rail, removes the shell and page-content maximum widths, and stores one global `app-shell` preference for that user, so the navigation remains consistent while moving between pages. Existing page-scoped collapsed choices are folded into the global value until the user explicitly toggles it. Each write and initial read derives the Clerk user ID server-side, and the saved initial state is rendered on the server to avoid a layout flash. The persistent app layout carries that authorized preference map through client navigation, allowing Dashboard, environment, Snapshots, and product loading boundaries to render card or compact-table skeletons that match the selected mode. Search text and selected tag filters remain intentionally transient.
 
 ## BigCommerce access scopes
 
@@ -175,7 +184,7 @@ Deleted channels are excluded from totals, navigation, and restore destinations.
 
 ## Snapshot storage, capture, and publication
 
-Snapshot names define case-insensitive, per-user version series; each row is uniquely identified by name and snapshot version, metadata is indexed separately for fast navigation, and no retained payload is overwritten. Publication is opt-in and limited to one version per owner/series; unpublishing immediately removes cross-tenant access.
+Snapshot names define case-insensitive, per-user version series; each row is uniquely identified by name and snapshot version, metadata is indexed separately for fast navigation, and no retained payload is overwritten. Custom tags are series-level presentation metadata: owners can add or remove several tags optimistically while earlier writes finish in the background, receive autocomplete suggestions from existing database tags, and see only the affected tag roll back if a write fails. Published viewers can use the shared tags for filtering but cannot edit them. Publication is opt-in and limited to one version per owner/series; unpublishing immediately removes cross-tenant access.
 
 Snapshot owners can compare any two retained versions in the same series without sending their multi-megabyte manifests to the browser. The authenticated Server Action reloads both versions through the existing tenant/publication access predicate, confirms that their owner and case-insensitive series name match, and computes a directional source-to-destination diff on the server. Stable category paths, product SKUs or slugs, variant SKUs or option values, image URLs, and namespace/key metafield identities distinguish added, removed, changed, and unchanged resources. Product child collections are compared separately, and the metafield section includes category, product, and variant metafields. Captured configuration is compared by restore group and resource key. The browser receives only aggregate counts plus a bounded 120-change preview per section, with changed top-level field names and an omitted-record count for larger catalogs.
 

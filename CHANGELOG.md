@@ -4,6 +4,27 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate snapshot series tags
+
+- **Date:** 2026-07-20
+- **Source:** `feature/snapshot-series-tags`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated owner-managed, series-level snapshot tags with autocomplete, optimistic background writes, shared read-only visibility, and multi-select Snapshots filtering after TypeScript, lint, whitespace, production-build, and Mermaid schema validation.
+
+### Commit — Add snapshot series tags
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/snapshot-series-tags`
+- **Type:** Feature commit
+
+- Added tenant-scoped custom tags to complete snapshot name series rather than individual immutable versions.
+- Added inline add/remove controls, database-backed autocomplete, a 12-tag limit, and optimistic concurrent saves with targeted rollback on failure.
+- Added tag metadata to owned and published snapshot cards/tables plus a multi-select AND filter on the Snapshots index.
+- Reconciled tag rows during series rename and deletion while keeping tags read-only for shared snapshot viewers.
+- Updated README, implementation details, database schema diagram, prompt History, and Changelog.
+
 ### Merge — Integrate snapshot version comparison
 
 - **Date:** 2026-07-20

@@ -3,7 +3,9 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { requireAppUser } from "@/lib/auth";
 import {
   getActiveSnapshotOperations,
+  getAccessibleCatalogSnapshotTagSeries,
   getCatalogSnapshotSeries,
+  getCatalogSnapshotSeriesKey,
   getFavoriteResourceKeys,
   getSnapshotFavoriteKey,
   type CatalogSnapshotSeriesSummary,
@@ -34,7 +36,7 @@ function formatBytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-type SnapshotListItem = CatalogSnapshotSeriesSummary & { isFavorite: boolean };
+type SnapshotListItem = CatalogSnapshotSeriesSummary & { isFavorite: boolean; tags: string[] };
 
 function SnapshotSeriesCard({
   snapshot,
@@ -60,6 +62,11 @@ function SnapshotSeriesCard({
             <div className="mt-2 text-[11px] text-blue-700 dark:text-blue-300">
               <p className="font-semibold uppercase tracking-[0.14em]">Published catalog · read only</p>
               <p className="mt-1 normal-case tracking-normal text-black/45 dark:text-white/45">Published by {publisherEmail ?? "email unavailable"}</p>
+            </div>
+          ) : null}
+          {snapshot.tags.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {snapshot.tags.map((tag) => <span key={tag.toLocaleLowerCase("en-US")} className="rounded-full border border-emerald-600/20 bg-emerald-500/8 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">{tag}</span>)}
             </div>
           ) : null}
         </div>
@@ -91,10 +98,11 @@ function SnapshotSeriesCard({
 
 export default async function SnapshotsPage() {
   const user = await requireAppUser();
-  const [snapshots, activeOperations, favoriteKeys] = await Promise.all([
+  const [snapshots, activeOperations, favoriteKeys, tagsBySeries] = await Promise.all([
     getCatalogSnapshotSeries(user.id),
     getActiveSnapshotOperations(user.id),
     getFavoriteResourceKeys(user.id, "snapshot"),
+    getAccessibleCatalogSnapshotTagSeries(user.id),
   ]);
   const pendingSnapshots = activeOperations.map((operation) => {
     let payload: Record<string, unknown> = {};
@@ -113,6 +121,9 @@ export default async function SnapshotsPage() {
       isFavorite: favoriteKeys.has(
         getSnapshotFavoriteKey(snapshot.ownerUserId, snapshot.name),
       ),
+      tags: tagsBySeries.get(
+        getCatalogSnapshotSeriesKey(snapshot.ownerUserId, snapshot.name),
+      ) ?? [],
     }))
     .toSorted((left, right) => {
     const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
@@ -128,6 +139,8 @@ export default async function SnapshotsPage() {
       .map((snapshot) => snapshot.ownerUserId),
   )];
   const publisherEmails = new Map<string, string>();
+  const filterTags = [...new Set(sortedSnapshots.flatMap((snapshot) => snapshot.tags))]
+    .toSorted((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
 
   if (sharedOwnerIds.length > 0) {
     const client = await clerkClient();
@@ -180,11 +193,13 @@ export default async function SnapshotsPage() {
             ariaLabel="Catalog snapshots"
             searchPlaceholder="Search snapshots…"
             allowSharedToggle
+            filterTags={filterTags}
             columns={[
               { key: "name", label: "Snapshot", className: "max-w-64" },
               { key: "source", label: "Source", className: "max-w-64" },
               { key: "access", label: "Access" },
               { key: "catalog", label: "Catalog" },
+              { key: "tags", label: "Tags" },
               { key: "version", label: "Version" },
               { key: "captured", label: "Latest capture" },
               { key: "favorite", label: "Favorite", align: "right" },
@@ -193,11 +208,13 @@ export default async function SnapshotsPage() {
               ...pendingSnapshots.map(({ operation, name, environmentId, channelId, originPath }) => ({
                 id: `pending-${operation.id}`,
                 searchText: `${name} ${environmentId} ${channelId} capture in progress`,
+                tags: [],
                 card: <article className="flex min-h-72 flex-col rounded-3xl border border-emerald-500/25 bg-emerald-500/7 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] sm:p-6"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">Capture in progress</p><h2 className="mt-2 break-words text-lg font-semibold tracking-tight">{name}</h2><p className="mt-1 text-xs text-black/40 dark:text-white/40">Environment {environmentId} · Channel {channelId}</p></div><div className="mt-auto pt-6"><CatalogOperationProgress initialOperation={{ kind: "snapshot", operationId: operation.id, environmentId, channelId, originPath }} /></div></article>,
                 cells: [
                   <span key="name" className="font-semibold">{name}</span>,
                   <span key="source">Environment {environmentId} · Channel {channelId}</span>,
                   <span key="access" className="rounded-full bg-amber-500/12 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">Capturing</span>,
+                  "—",
                   "—",
                   "Pending",
                   <time key="captured" dateTime={operation.createdAt}>{dateFormatter.format(new Date(operation.createdAt))}</time>,
@@ -206,7 +223,8 @@ export default async function SnapshotsPage() {
               })),
               ...sortedSnapshots.map((snapshot) => ({
                 id: String(snapshot.id),
-                searchText: `${snapshot.name} ${snapshot.sourceEnvironmentName} ${snapshot.sourceChannelName} ${snapshot.isOwner ? "owned" : "shared"} version ${snapshot.snapshotVersion}`,
+                searchText: `${snapshot.name} ${snapshot.sourceEnvironmentName} ${snapshot.sourceChannelName} ${snapshot.isOwner ? "owned" : "shared"} version ${snapshot.snapshotVersion} ${snapshot.tags.join(" ")}`,
+                tags: snapshot.tags,
                 isShared: !snapshot.isOwner,
                 card: <SnapshotSeriesCard snapshot={snapshot} publisherEmail={publisherEmails.get(snapshot.ownerUserId)} />,
                 cells: [
@@ -214,6 +232,7 @@ export default async function SnapshotsPage() {
                   <span key="source" className="block truncate">{snapshot.sourceEnvironmentName} · {snapshot.sourceChannelName}</span>,
                   <span key="access" className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${snapshot.isOwner ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300" : "bg-blue-500/12 text-blue-700 dark:text-blue-300"}`}>{snapshot.isOwner ? "Owned" : "Shared"}</span>,
                   `${snapshot.categoryCount} cat. · ${snapshot.productCount} prod. · ${snapshot.variantCount} var.`,
+                  snapshot.tags.length > 0 ? <div key="tags" className="flex max-w-48 flex-wrap gap-1">{snapshot.tags.map((tag) => <span key={tag.toLocaleLowerCase("en-US")} className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-800 dark:text-emerald-300">{tag}</span>)}</div> : "—",
                   snapshot.publishedSnapshotId ? `Published v${snapshot.publishedVersion}` : `Latest v${snapshot.snapshotVersion}`,
                   <time key="captured" dateTime={snapshot.createdAt} className="whitespace-nowrap">{dateFormatter.format(new Date(snapshot.createdAt))}</time>,
                   <div key="favorite" className="flex justify-end"><FavoriteButton target={{ type: "snapshot", snapshotId: snapshot.id }} initialFavorite={snapshot.isFavorite} label={snapshot.name} /></div>,

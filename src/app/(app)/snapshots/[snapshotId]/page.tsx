@@ -20,6 +20,8 @@ import { getSnapshotCatalogHistory } from "@/lib/catalog-history";
 import { requireAppUser } from "@/lib/auth";
 import {
   getActiveSnapshotOperations,
+  getCatalogSnapshotTags,
+  getCatalogSnapshotTagSuggestions,
   getFavoriteResourceKeys,
   getSnapshotFavoriteKey,
 } from "@/lib/db";
@@ -27,6 +29,7 @@ import { PublishedIcon } from "@/components/action-icons";
 import { SnapshotInlineName } from "@/components/snapshot-inline-name";
 import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
+import { SnapshotTags } from "@/components/snapshot-tags";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -76,9 +79,11 @@ export default async function SnapshotPage({
     : [];
 
   const user = await requireAppUser();
-  const [favoriteKeys, activeSnapshotOperations] = await Promise.all([
+  const [favoriteKeys, activeSnapshotOperations, customTags, tagSuggestions] = await Promise.all([
     getFavoriteResourceKeys(user.id, "snapshot"),
     snapshot.isOwner ? getActiveSnapshotOperations(user.id) : Promise.resolve([]),
+    getCatalogSnapshotTags(snapshot.summary.ownerUserId, snapshot.summary.name),
+    snapshot.isOwner ? getCatalogSnapshotTagSuggestions(user.id) : Promise.resolve([]),
   ]);
   const isFavorite = favoriteKeys.has(
     getSnapshotFavoriteKey(snapshot.summary.ownerUserId, snapshot.summary.name),
@@ -160,7 +165,7 @@ export default async function SnapshotPage({
               </p>
           </div>
 
-          <dl className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-wrap gap-2">
             {[
               `${snapshot.summary.categoryCount} categories`,
               `${snapshot.summary.productCount} products`,
@@ -173,10 +178,16 @@ export default async function SnapshotPage({
               `Manifest format v${snapshot.summary.formatVersion}`,
             ].map((value) => (
               <div key={value} className="rounded-full border border-black/10 bg-white/60 px-3 py-1.5 text-xs text-black/50 dark:border-white/10 dark:bg-white/5 dark:text-white/50">
-                <dt className="sr-only">Snapshot metadata</dt><dd>{value}</dd>
+                <span className="sr-only">Snapshot metadata: </span><span>{value}</span>
               </div>
             ))}
-          </dl>
+            <SnapshotTags
+              snapshotId={snapshot.summary.id}
+              initialTags={customTags}
+              suggestions={tagSuggestions}
+              editable={snapshot.isOwner}
+            />
+          </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="text-left text-xs leading-5 text-black/40 dark:text-white/40">
