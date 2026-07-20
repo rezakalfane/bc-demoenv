@@ -19,14 +19,11 @@ function parseRecord(value: string | null) {
 
 export async function GET() {
   const user = await requireAppUser();
-  await expireStaleSnapshotOperations(user.id);
-
   const initialOperations = await getRecentCatalogOperations(user.id);
   for (const operation of initialOperations) {
-    if (operation.status === "queued" || operation.status === "running") {
-      await reconcileCatalogOperationWorkflow(user.id, operation);
-    }
+    await reconcileCatalogOperationWorkflow(user.id, operation);
   }
+  await expireStaleSnapshotOperations(user.id);
 
   const operations = await getRecentCatalogOperations(user.id);
   return NextResponse.json({

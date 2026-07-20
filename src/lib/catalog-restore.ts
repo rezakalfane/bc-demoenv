@@ -5,6 +5,9 @@ import {
   getBigCommerceEnvironmentConnection,
   getBigCommerceEnvironmentConnections,
   getAccessibleCatalogSnapshot,
+  getChannelFavoriteKey,
+  getEnvironmentFavoriteKey,
+  getFavoriteResourceKeys,
   type BigCommerceEnvironmentConnection,
   type CatalogSnapshotRecord,
 } from "@/lib/db";
@@ -51,7 +54,8 @@ export type CatalogRestoreDestination = {
   id: number;
   name: string;
   storeHash: string;
-  channels: Array<{ id: number; name: string }>;
+  isFavorite: boolean;
+  channels: Array<{ id: number; name: string; isFavorite: boolean }>;
   error: string | null;
 };
 
@@ -963,7 +967,10 @@ async function fetchCollection(
   }
 }
 
-async function listChannels(environment: ConnectedEnvironment) {
+async function listChannels(
+  environment: ConnectedEnvironment,
+  favoriteKeys: Set<string> = new Set(),
+) {
   const channels = await fetchCollection(environment, "/channels", "channels");
 
   return channels.flatMap((value) => {
@@ -972,8 +979,16 @@ async function listChannels(environment: ConnectedEnvironment) {
     const name = readString(channel?.name);
 
     return id && name && normalizeText(channel?.type) === "storefront" && ["active", "prelaunch"].includes(normalizeText(channel?.status))
-      ? [{ id, name }]
+      ? [{
+          id,
+          name,
+          isFavorite: favoriteKeys.has(getChannelFavoriteKey(environment.id, id)),
+        }]
       : [];
+  }).sort((left, right) => {
+    const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
+    if (favoriteOrder !== 0) return favoriteOrder;
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
   });
 }
 
@@ -981,15 +996,22 @@ export async function getCatalogRestoreDestinations(): Promise<
   CatalogRestoreDestination[]
 > {
   const user = await requireAppUser();
-  const environments = await getBigCommerceEnvironmentConnections(user.id);
+  const [environments, environmentFavoriteKeys, channelFavoriteKeys] = await Promise.all([
+    getBigCommerceEnvironmentConnections(user.id),
+    getFavoriteResourceKeys(user.id, "environment"),
+    getFavoriteResourceKeys(user.id, "channel"),
+  ]);
   const destinations: CatalogRestoreDestination[] = [];
 
   for (const environment of environments) {
+    const isFavorite = environmentFavoriteKeys.has(getEnvironmentFavoriteKey(environment.id));
+
     if (!environment.accessToken) {
       destinations.push({
         id: environment.id,
         name: environment.name,
         storeHash: environment.storeHash,
+        isFavorite,
         channels: [],
         error: "The saved token could not be decrypted. Re-save it in Settings.",
       });
@@ -1001,7 +1023,11 @@ export async function getCatalogRestoreDestinations(): Promise<
         id: environment.id,
         name: environment.name,
         storeHash: environment.storeHash,
-        channels: await listChannels({ ...environment, accessToken: environment.accessToken }),
+        isFavorite,
+        channels: await listChannels(
+          { ...environment, accessToken: environment.accessToken },
+          channelFavoriteKeys,
+        ),
         error: null,
       });
     } catch (error) {
@@ -1009,6 +1035,7 @@ export async function getCatalogRestoreDestinations(): Promise<
         id: environment.id,
         name: environment.name,
         storeHash: environment.storeHash,
+        isFavorite,
         channels: [],
         error:
           error instanceof CatalogRestoreError
@@ -1018,7 +1045,11 @@ export async function getCatalogRestoreDestinations(): Promise<
     }
   }
 
-  return destinations;
+  return destinations.sort((left, right) => {
+    const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
+    if (favoriteOrder !== 0) return favoriteOrder;
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  });
 }
 
 function parseManifest(snapshot: CatalogSnapshotRecord) {

@@ -126,8 +126,12 @@ export type CatalogSnapshotCaptureState = {
   channelId: number;
   channelJson: string;
   categoryDataJson: string;
+  categoryRecordsJson: string;
   supportingDataJson: string;
   productIdsJson: string;
+  nextCategoryIndex: number;
+  totalCategories: number;
+  initializationComplete: boolean;
   nextProductIndex: number;
   totalProducts: number;
 };
@@ -400,13 +404,46 @@ async function ensureSchema() {
       channel_id INTEGER NOT NULL,
       channel_json TEXT NOT NULL,
       category_data_json TEXT NOT NULL,
+      category_records_json TEXT NOT NULL DEFAULT '[]',
       supporting_data_json TEXT NOT NULL,
       product_ids_json TEXT NOT NULL,
+      next_category_index INTEGER NOT NULL DEFAULT 0,
+      total_categories INTEGER NOT NULL DEFAULT 0,
+      initialization_complete INTEGER NOT NULL DEFAULT 0,
       next_product_index INTEGER NOT NULL DEFAULT 0,
       total_products INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
+    const captureStateColumns = await db.execute(
+      "PRAGMA table_info(catalog_snapshot_capture_state)",
+    );
+    const captureStateColumnNames = new Set(
+      captureStateColumns.rows.map((column) => String(column.name)),
+    );
+    if (!captureStateColumnNames.has("category_records_json")) {
+      await db.execute(
+        "ALTER TABLE catalog_snapshot_capture_state ADD COLUMN category_records_json TEXT NOT NULL DEFAULT '[]'",
+      );
+    }
+    if (!captureStateColumnNames.has("next_category_index")) {
+      await db.execute(
+        "ALTER TABLE catalog_snapshot_capture_state ADD COLUMN next_category_index INTEGER NOT NULL DEFAULT 0",
+      );
+    }
+    if (!captureStateColumnNames.has("total_categories")) {
+      await db.execute(
+        "ALTER TABLE catalog_snapshot_capture_state ADD COLUMN total_categories INTEGER NOT NULL DEFAULT 0",
+      );
+    }
+    if (!captureStateColumnNames.has("initialization_complete")) {
+      await db.execute(
+        "ALTER TABLE catalog_snapshot_capture_state ADD COLUMN initialization_complete INTEGER NOT NULL DEFAULT 0",
+      );
+      await db.execute(
+        "UPDATE catalog_snapshot_capture_state SET initialization_complete = 1",
+      );
+    }
     await db.execute(`CREATE TABLE IF NOT EXISTS catalog_snapshot_capture_products (
       operation_id INTEGER NOT NULL,
       product_index INTEGER NOT NULL,
@@ -434,6 +471,64 @@ export async function createCatalogOperation(userId: string, input: { kind: Cata
 }
 export async function getCatalogOperation(userId: string, id: number) { await ensureSchema(); const r = await getClient().execute({sql:"SELECT * FROM catalog_operations WHERE user_id = ? AND id = ?",args:[userId,id]}); return r.rows[0] ? toCatalogOperation(r.rows[0] as Record<string,unknown>) : null; }
 export async function updateCatalogOperation(userId: string, id: number, patch: Partial<Pick<CatalogOperation,"status"|"currentStep"|"stepIndex"|"totalSteps"|"resultJson"|"error"|"payloadJson"|"snapshotId"|"workflowRunId">>) { await ensureSchema(); const fields: string[]=[]; const args: Array<string | number | null>=[]; for (const [k,v] of Object.entries(patch)) { const col=k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`); fields.push(`${col} = ?`); args.push(v ?? null); } if (!fields.length) return; fields.push("updated_at = CURRENT_TIMESTAMP"); args.push(userId,id); await getClient().execute({sql:`UPDATE catalog_operations SET ${fields.join(", ")} WHERE user_id = ? AND id = ?`,args}); }
+
+export async function claimCatalogOperationWorkflowRecovery(
+  userId: string,
+  id: number,
+  workflowRunId: string,
+  updatedBefore: Date,
+  recoverableError: string,
+) {
+  await ensureSchema();
+  try {
+    const result = await getClient().execute({
+      sql: `
+        UPDATE catalog_operations
+        SET status = 'running',
+            current_step = 'Resuming after local server restart',
+            error = NULL,
+            workflow_run_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ?
+          AND id = ?
+          AND workflow_run_id = ?
+          AND (
+            status IN ('queued', 'running')
+            OR (status = 'failed' AND error = ?)
+          )
+          AND updated_at < datetime(?)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM catalog_operations AS newer
+            WHERE newer.user_id = catalog_operations.user_id
+              AND newer.kind = catalog_operations.kind
+              AND newer.operation_key = catalog_operations.operation_key
+              AND newer.id > catalog_operations.id
+          )
+      `,
+      args: [
+        userId,
+        id,
+        workflowRunId,
+        recoverableError,
+        updatedBefore.toISOString(),
+      ],
+    });
+    return result.rowsAffected > 0;
+  } catch (error) {
+    // A concurrent request may create or recover the same operation key after
+    // the NOT EXISTS check but before this update acquires SQLite's write lock.
+    // Treat that unique-index race as an unsuccessful claim so one historical
+    // operation cannot break the shared operations status feed.
+    if (
+      error instanceof Error &&
+      error.message.includes("UNIQUE constraint failed: catalog_operations.user_id")
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
 
 export async function getRecentCatalogOperations(userId: string) {
   await ensureSchema();
@@ -487,7 +582,9 @@ export async function getCatalogOperationsForSnapshots(userId: string, snapshotI
 
 export async function getActiveSnapshotOperations(userId: string) {
   await ensureSchema();
-  await expireStaleSnapshotOperations(userId);
+  if (process.env.NODE_ENV !== "development") {
+    await expireStaleSnapshotOperations(userId);
+  }
   const result = await getClient().execute({
     sql: "SELECT * FROM catalog_operations WHERE user_id = ? AND kind = 'snapshot' AND status IN ('queued', 'running') ORDER BY id DESC",
     args: [userId],
@@ -524,11 +621,135 @@ function toCatalogSnapshotCaptureState(
     channelId: Number(row.channel_id),
     channelJson: String(row.channel_json),
     categoryDataJson: String(row.category_data_json),
+    categoryRecordsJson: String(row.category_records_json ?? "[]"),
     supportingDataJson: String(row.supporting_data_json),
     productIdsJson: String(row.product_ids_json),
+    nextCategoryIndex: Number(row.next_category_index ?? 0),
+    totalCategories: Number(row.total_categories ?? 0),
+    initializationComplete: Number(row.initialization_complete ?? 0) === 1,
     nextProductIndex: Number(row.next_product_index),
     totalProducts: Number(row.total_products),
   };
+}
+
+export async function initializeCatalogSnapshotCategoryState(input: {
+  operationId: number;
+  userId: string;
+  snapshotName: string;
+  environmentId: number;
+  channelId: number;
+  channelJson: string;
+  categoryDataJson: string;
+  categoryRecordsJson: string;
+  totalCategories: number;
+}) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO catalog_snapshot_capture_state (
+        operation_id, user_id, snapshot_name, environment_id, channel_id,
+        channel_json, category_data_json, category_records_json,
+        supporting_data_json, product_ids_json, total_categories, total_products
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, '{}', '[]', ?, 0
+      WHERE EXISTS (
+        SELECT 1 FROM catalog_operations
+        WHERE id = ? AND user_id = ? AND status IN ('queued', 'running')
+      )
+      ON CONFLICT(operation_id) DO NOTHING
+    `,
+    args: [
+      input.operationId,
+      input.userId,
+      input.snapshotName,
+      input.environmentId,
+      input.channelId,
+      input.channelJson,
+      input.categoryDataJson,
+      input.categoryRecordsJson,
+      input.totalCategories,
+      input.operationId,
+      input.userId,
+    ],
+  });
+  const state = await getCatalogSnapshotCaptureState(input.userId, input.operationId);
+  if (!state) throw new Error("Snapshot capture was cancelled before category initialization.");
+  return state;
+}
+
+export async function saveCatalogSnapshotCategoryBatch(input: {
+  userId: string;
+  operationId: number;
+  startCategoryIndex: number;
+  nextCategoryIndex: number;
+  categoryDataJson: string;
+}) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      UPDATE catalog_snapshot_capture_state
+      SET category_data_json = ?,
+          next_category_index = MAX(next_category_index, ?),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE operation_id = ? AND user_id = ?
+        AND next_category_index = ?
+        AND EXISTS (
+          SELECT 1 FROM catalog_operations
+          WHERE id = ? AND user_id = ? AND status IN ('queued', 'running')
+        )
+    `,
+    args: [
+      input.categoryDataJson,
+      input.nextCategoryIndex,
+      input.operationId,
+      input.userId,
+      input.startCategoryIndex,
+      input.operationId,
+      input.userId,
+    ],
+  });
+  if (result.rowsAffected === 0) throw new Error("Snapshot capture was cancelled.");
+}
+
+export async function completeCatalogSnapshotCaptureInitialization(input: {
+  userId: string;
+  operationId: number;
+  supportingDataJson: string;
+  productIdsJson: string;
+  totalProducts: number;
+}) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      UPDATE catalog_snapshot_capture_state
+      SET supporting_data_json = ?,
+          product_ids_json = ?,
+          total_products = ?,
+          initialization_complete = 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE operation_id = ? AND user_id = ?
+        AND next_category_index >= total_categories
+        AND EXISTS (
+          SELECT 1 FROM catalog_operations
+          WHERE id = ? AND user_id = ? AND status IN ('queued', 'running')
+        )
+    `,
+    args: [
+      input.supportingDataJson,
+      input.productIdsJson,
+      input.totalProducts,
+      input.operationId,
+      input.userId,
+      input.operationId,
+      input.userId,
+    ],
+  });
+  if (result.rowsAffected === 0) {
+    throw new Error("Snapshot category capture is incomplete or was cancelled.");
+  }
+  const state = await getCatalogSnapshotCaptureState(input.userId, input.operationId);
+  if (!state) throw new Error("Snapshot capture state was not found.");
+  return state;
 }
 
 export async function getCatalogSnapshotCaptureState(
@@ -549,56 +770,6 @@ export async function getCatalogSnapshotCaptureState(
   return row
     ? toCatalogSnapshotCaptureState(row as Record<string, unknown>)
     : null;
-}
-
-export async function initializeCatalogSnapshotCaptureState(input: {
-  operationId: number;
-  userId: string;
-  snapshotName: string;
-  environmentId: number;
-  channelId: number;
-  channelJson: string;
-  categoryDataJson: string;
-  supportingDataJson: string;
-  productIdsJson: string;
-  totalProducts: number;
-}) {
-  await ensureSchema();
-  await getClient().execute({
-    sql: `
-      INSERT INTO catalog_snapshot_capture_state (
-        operation_id, user_id, snapshot_name, environment_id, channel_id,
-        channel_json, category_data_json, supporting_data_json,
-        product_ids_json, total_products
-      )
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-      WHERE EXISTS (
-        SELECT 1 FROM catalog_operations
-        WHERE id = ? AND user_id = ? AND status IN ('queued', 'running')
-      )
-      ON CONFLICT(operation_id) DO NOTHING
-    `,
-    args: [
-      input.operationId,
-      input.userId,
-      input.snapshotName,
-      input.environmentId,
-      input.channelId,
-      input.channelJson,
-      input.categoryDataJson,
-      input.supportingDataJson,
-      input.productIdsJson,
-      input.totalProducts,
-      input.operationId,
-      input.userId,
-    ],
-  });
-  const state = await getCatalogSnapshotCaptureState(
-    input.userId,
-    input.operationId,
-  );
-  if (!state) throw new Error("Snapshot capture was cancelled before initialization.");
-  return state;
 }
 
 export async function saveCatalogSnapshotProductBatch(input: {

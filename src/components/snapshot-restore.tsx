@@ -258,6 +258,7 @@ export function SnapshotRestore({
     metafieldCount: number;
     createdAt: string;
     publishedAt: string | null;
+    isFavorite?: boolean;
     availableRestoreGroups: SnapshotRestoreGroup[];
   };
   destinations: CatalogRestoreDestination[];
@@ -275,8 +276,10 @@ export function SnapshotRestore({
     productCount: number;
     variantCount: number;
     imageCount: number;
+    metafieldCount: number;
     createdAt: string;
     publishedAt: string | null;
+    isFavorite?: boolean;
     availableRestoreGroups: SnapshotRestoreGroup[];
   }>;
   initialDestinationEnvironmentId?: number;
@@ -292,6 +295,8 @@ export function SnapshotRestore({
       : { snapshotId: snapshot.id },
   );
   const orderedSnapshotOptions = [...snapshotOptions].sort((left, right) => {
+    const favoriteOrder = Number(Boolean(right.isFavorite)) - Number(Boolean(left.isFavorite));
+    if (favoriteOrder !== 0) return favoriteOrder;
     const nameOrder = snapshotNameCollator.compare(left.name, right.name);
     return nameOrder || right.snapshotVersion - left.snapshotVersion || right.id - left.id;
   });
@@ -307,6 +312,7 @@ export function SnapshotRestore({
     name: string;
     sourceEnvironmentName: string;
     sourceChannelName: string;
+    isFavorite: boolean;
     versions: typeof selectableSnapshots;
   }>>((series, option) => {
     const key = getSnapshotSeriesKey(option);
@@ -319,6 +325,7 @@ export function SnapshotRestore({
         name: option.name,
         sourceEnvironmentName: option.sourceEnvironmentName,
         sourceChannelName: option.sourceChannelName,
+        isFavorite: Boolean(option.isFavorite),
         versions: [option],
       });
     }
@@ -623,7 +630,7 @@ export function SnapshotRestore({
                             >
                               {snapshotSeries.map((series) => (
                                 <option key={series.key} value={series.key}>
-                                  {series.name} · {series.sourceChannelName}
+                                  {series.isFavorite ? "⭐ " : ""}{series.name} · {series.sourceChannelName}
                                 </option>
                               ))}
                             </select>
@@ -641,7 +648,7 @@ export function SnapshotRestore({
                             >
                               {selectedSeriesVersions.map((option) => (
                                 <option key={option.id} value={option.id}>
-                                  {option.publishedAt ? "★ " : ""}Version {option.snapshotVersion}{option.publishedAt ? " · Published" : ""} · {dateFormatter.format(new Date(option.createdAt))}
+                                  {option.publishedAt ? "🌐 " : ""}Version {option.snapshotVersion}{option.publishedAt ? " · Published" : ""} · {dateFormatter.format(new Date(option.createdAt))}
                                 </option>
                               ))}
                             </select>
@@ -687,7 +694,7 @@ export function SnapshotRestore({
                         >
                           {destinations.map((destination) => (
                             <option key={destination.id} value={destination.id} disabled={destination.channels.length === 0}>
-                              {destination.name}{destination.error ? " — unavailable" : ""}
+                              {destination.isFavorite ? "⭐ " : ""}{destination.name}{destination.error ? " — unavailable" : ""}
                             </option>
                           ))}
                         </select>
@@ -703,7 +710,9 @@ export function SnapshotRestore({
                           className="mt-1.5 w-full rounded-xl border border-black/12 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 dark:border-white/12 dark:bg-neutral-900"
                         >
                           {selectedEnvironment?.channels.map((channel) => (
-                            <option key={channel.id} value={channel.id}>{channel.name}</option>
+                            <option key={channel.id} value={channel.id}>
+                              {channel.isFavorite ? "⭐ " : ""}{channel.name}
+                            </option>
                           ))}
                         </select>
 

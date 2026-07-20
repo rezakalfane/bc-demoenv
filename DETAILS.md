@@ -115,8 +115,12 @@ erDiagram
         INTEGER channel_id
         TEXT channel_json
         TEXT category_data_json
+        TEXT category_records_json
         TEXT supporting_data_json
         TEXT product_ids_json
+        INTEGER next_category_index
+        INTEGER total_categories
+        INTEGER initialization_complete
         INTEGER next_product_index
         INTEGER total_products
         TEXT created_at
@@ -221,7 +225,7 @@ BigCommerce currently restricts payment-profile channel associations to its auth
 
 ## Durable catalog processing
 
-Large snapshot captures are initialized once, checkpointed in Turso, and processed in retryable 30-product Workflow steps before an atomic finalization transaction creates the immutable snapshot version. Closing the browser, navigating away, an individual Function timeout, or a deployment does not discard completed batches. A capture with no server heartbeat for ten minutes is marked failed instead of remaining permanently active, and its name becomes available for another attempt.
+Large snapshot captures persist their source channel and category-tree seed first, then checkpoint retryable 10-category and 30-product Workflow batches in Turso before an atomic finalization transaction creates the immutable snapshot version. Category attributes and metafields therefore resume from the last saved category batch instead of restarting the entire initialization phase after a worker restart. Closing the browser, navigating away, an individual Function timeout, or a deployment does not discard completed batches. In local development, Workflow runtime metadata is stored below `.next/workflow-data`; a development-server restart or a local build can therefore leave Turso with a valid checkpoint whose old local run is orphaned or no longer present. An active operation whose last heartbeat predates the current `next dev` process—or the latest matching operation that reports that exact missing-run failure—is atomically claimed for recovery. The orphaned run is cancelled when it still exists, then a replacement Workflow run continues the same operation from its Turso cursor. Recovery clears the old run ID during the compare-and-swap claim, refuses any operation superseded by a newer row with the same operation key, and treats concurrent unique-index races as an unclaimed recovery. This prevents multiple polling pages or historical failures from starting duplicate runs or breaking the shared operation feed. In deployed environments, a capture with no server heartbeat for ten minutes is marked failed instead of remaining permanently active, and its name becomes available for another attempt.
 
 Restore and clear operations also start registered Vercel Workflow runs instead of relying on a browser request or a Next.js `after()` callback. Their Workflow run IDs are stored with the tenant-owned operation row in Turso, allowing the API to reconcile run state after navigation, reload, deployment, or a Function restart. Restore checkpoints the selected catalog/configuration groups as retryable steps; clear safely re-reads the remaining channel assignments and categories when a step is retried. Cancellation stops the Workflow run and updates the same operation row used by the channel, environment, dashboard, snapshot, and History views.
 
@@ -233,15 +237,21 @@ The Operations page merges the complete `catalog_operations` Workflow ledger, `c
 
 ```mermaid
 flowchart TD
-    start([Start snapshot capture]) --> initialize["initializeSnapshotStep<br/>Validate operation and persist capture state<br/>maxRetries: 2"]
-    initialize --> remaining{"Products remaining?"}
-    remaining -- Yes --> batch["captureProductBatchStep<br/>Capture next 30 products and checkpoint<br/>maxRetries: 4"]
-    batch --> remaining
+    start([Start snapshot capture]) --> initialize["initializeSnapshotStep<br/>Validate operation and persist channel/category seed<br/>maxRetries: 2"]
+    initialize --> categories{"Categories remaining?"}
+    categories -- Yes --> categoryBatch["captureCategoryBatchStep<br/>Capture next 10 categories and checkpoint<br/>maxRetries: 4"]
+    categoryBatch --> categories
+    categories -- No --> completeInit["completeSnapshotInitializationStep<br/>Capture supporting configuration and product IDs<br/>maxRetries: 2"]
+    completeInit --> remaining{"Products remaining?"}
+    remaining -- Yes --> productBatch["captureProductBatchStep<br/>Capture next 30 products and checkpoint<br/>maxRetries: 4"]
+    productBatch --> remaining
     remaining -- No --> finalize["finalizeSnapshotStep<br/>Create immutable version atomically<br/>maxRetries: 2"]
     finalize --> success([Snapshot captured])
 
     initialize -. Error .-> fail["failSnapshotStep<br/>Persist failure and release active name<br/>maxRetries: 2"]
-    batch -. Error after retries .-> fail
+    categoryBatch -. Error after retries .-> fail
+    completeInit -. Error .-> fail
+    productBatch -. Error after retries .-> fail
     finalize -. Error .-> fail
     fail --> failed([Failed])
 

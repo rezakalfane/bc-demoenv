@@ -21,6 +21,7 @@ import {
   getChannelFavoriteKey,
   getFavoriteResourceKeys,
   getLatestCatalogSnapshotSeries,
+  getSnapshotFavoriteKey,
 } from "@/lib/db";
 import { getCatalogRestoreDestinations } from "@/lib/catalog-restore";
 import { getChannelCatalogHistory } from "@/lib/catalog-history";
@@ -66,13 +67,14 @@ export default async function ChannelPage({
   }
 
   const user = await requireAppUser();
-  const [catalog, snapshotSuggestions, allSnapshots, restoreDestinations, history, favoriteKeys] = await Promise.all([
+  const [catalog, snapshotSuggestions, allSnapshots, restoreDestinations, history, channelFavoriteKeys, snapshotFavoriteKeys] = await Promise.all([
     getChannelCatalog(parsedEnvironmentId, parsedChannelId),
     getLatestCatalogSnapshotSeries(user.id),
     getCatalogSnapshots(user.id),
     getCatalogRestoreDestinations(),
     getChannelCatalogHistory(parsedEnvironmentId, parsedChannelId),
     getFavoriteResourceKeys(user.id, "channel"),
+    getFavoriteResourceKeys(user.id, "snapshot"),
   ]);
 
   if (!catalog) {
@@ -95,9 +97,15 @@ export default async function ChannelPage({
     selectedCategory,
   );
   const basePath = `/environments/${catalog.environment.id}/channels/${parsedChannelId}`;
-  const isFavorite = favoriteKeys.has(
+  const isFavorite = channelFavoriteKeys.has(
     getChannelFavoriteKey(catalog.environment.id, parsedChannelId),
   );
+  const restoreSnapshotOptions = allSnapshots.map((snapshot) => ({
+    ...snapshot,
+    isFavorite: snapshotFavoriteKeys.has(
+      getSnapshotFavoriteKey(snapshot.ownerUserId, snapshot.name),
+    ),
+  }));
 
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
@@ -151,8 +159,8 @@ export default async function ChannelPage({
                   }))}
                 />
                 {allSnapshots.length > 0 ? <SnapshotRestore
-                  snapshot={allSnapshots[0]}
-                  snapshotOptions={allSnapshots}
+                  snapshot={restoreSnapshotOptions[0]}
+                  snapshotOptions={restoreSnapshotOptions}
                   destinations={restoreDestinations}
                   initialDestinationEnvironmentId={catalog.environment.id}
                   initialDestinationChannelId={catalog.channel.id}

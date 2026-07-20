@@ -4,6 +4,30 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate resumable snapshot capture
+
+- **Date:** 2026-07-20
+- **Source:** `feature/resumable-snapshot-capture`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated favorite-first Restore selectors, distinct publication markers, channel-card status refinements, checkpointed category capture, guarded local Workflow recovery after a development-server restart, and fixed-width Operations progress summaries following TypeScript, lint, whitespace, database-state, and live checkpoint-resumption verification.
+
+### Commit — Make snapshot capture resumable across initialization and local restarts
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/resumable-snapshot-capture`
+- **Type:** Feature commit
+
+- Added favorite-first environment, channel, and snapshot selectors to Restore while distinguishing published versions with a blue globe marker.
+- Refined channel-card status placement and removed the redundant catalog footer link.
+- Persisted snapshot initialization before category enrichment and processed categories in retryable 10-record batches ahead of the existing 30-product batches.
+- Added schema migrations and cursor guards for category checkpoints, supporting configuration capture, product capture, and atomic version finalization.
+- Added compare-and-swap local recovery that replaces orphaned or missing local runs after a `next dev` restart and resumes the latest matching operation from Turso without reviving superseded failures.
+- Prevented historical recovery-key conflicts from breaking the shared operations feed, restoring channel progress, activity indicators, and action disabling while a capture runs.
+- Fixed the Operations progress/result column width and truncated long step descriptions without hiding their full hover text.
+- Updated README, implementation details, database-schema and Workflow diagrams, and reverse-chronological prompt History.
+
 ### Merge — Integrate global app-shell and operation-feedback polish
 
 - **Date:** 2026-07-20
