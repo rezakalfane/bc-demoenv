@@ -1,7 +1,9 @@
 import { AppNavigation } from "@/components/app-navigation";
 import { CatalogOperationNotifications } from "@/components/catalog-operation-notifications";
+import { CollectionPreferencesProvider } from "@/components/collection-preferences-provider";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireAppUser } from "@/lib/auth";
+import { getCollectionViewPreferences } from "@/lib/db";
 
 export default async function AppLayout({
   children,
@@ -9,11 +11,13 @@ export default async function AppLayout({
   children: React.ReactNode;
 }>) {
   const user = await requireAppUser();
+  const collectionPreferences = await getCollectionViewPreferences(user.id);
 
   return (
-    <div className="app-shell mx-auto min-h-screen w-full max-w-[1440px] lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
-      <CatalogOperationNotifications userId={user.id} />
-      <aside className="app-sidebar border-b border-black/10 bg-white/45 px-4 py-4 backdrop-blur-xl dark:border-white/10 dark:bg-white/3 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0 lg:px-5 lg:py-6">
+    <CollectionPreferencesProvider initialPreferences={collectionPreferences}>
+      <div className="app-shell mx-auto min-h-screen w-full max-w-[1440px] lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+        <CatalogOperationNotifications userId={user.id} />
+        <aside className="app-sidebar border-b border-black/10 bg-white/45 px-4 py-4 backdrop-blur-xl dark:border-white/10 dark:bg-white/3 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0 lg:px-5 lg:py-6">
         <div className="flex items-center justify-between lg:block">
           <div className="app-brand flex items-center gap-3 px-2">
             <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500 text-sm font-bold text-white shadow-sm">
@@ -43,9 +47,10 @@ export default async function AppLayout({
             <SignOutButton />
           </div>
         </div>
-      </aside>
+        </aside>
 
-      <main className="min-w-0">{children}</main>
-    </div>
+        <main className="min-w-0">{children}</main>
+      </div>
+    </CollectionPreferencesProvider>
   );
 }

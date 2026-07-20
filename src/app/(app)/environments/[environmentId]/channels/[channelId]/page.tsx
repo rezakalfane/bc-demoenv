@@ -252,7 +252,7 @@ export default async function ChannelPage({
                 </div>
               ) : (
                 <CollectionBrowser
-                  collectionId={`channel-${catalog.environment.id}-${parsedChannelId}-products`}
+                  collectionId="channel-products"
                   ariaLabel={`${channelTitle} products`}
                   searchPlaceholder="Search products…"
                   cardsClassName="channel-live-products grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"

@@ -1,5 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { CollectionToolbar } from "@/components/collection-toolbar";
+import { requireAppUser } from "@/lib/auth";
+import { getCollectionViewPreference } from "@/lib/db";
 
 export type CollectionColumn = {
   key: string;
@@ -16,7 +18,7 @@ export type CollectionBrowserItem = {
   cells: ReactNode[];
 };
 
-export function CollectionBrowser({
+export async function CollectionBrowser({
   collectionId,
   ariaLabel,
   items,
@@ -35,6 +37,14 @@ export function CollectionBrowser({
   emptyMessage?: string;
   allowSharedToggle?: boolean;
 }) {
+  const user = await requireAppUser();
+  const preference = await getCollectionViewPreference(user.id, collectionId);
+  const initialView = preference.viewMode;
+  const initialShowShared = allowSharedToggle ? preference.showShared : true;
+  const initialVisibleItems = initialShowShared
+    ? items
+    : items.filter((item) => !item.isShared);
+
   return (
     <section id={collectionId} aria-label={ariaLabel}>
       <CollectionToolbar
@@ -43,12 +53,19 @@ export function CollectionBrowser({
         searchPlaceholder={searchPlaceholder}
         itemCount={items.length}
         allowSharedToggle={allowSharedToggle}
+        initialView={initialView}
+        initialShowShared={initialShowShared}
       />
 
-      <div data-collection-cards className={cardsClassName}>
+      <div
+        data-collection-cards
+        hidden={initialView !== "cards" || initialVisibleItems.length === 0}
+        className={cardsClassName}
+      >
         {items.map((item) => (
           <div
             key={item.id}
+            hidden={!initialShowShared && item.isShared}
             className="contents"
             data-collection-entry
             data-search-text={item.searchText.toLocaleLowerCase("en-US")}
@@ -59,7 +76,11 @@ export function CollectionBrowser({
         ))}
       </div>
 
-      <div data-collection-table hidden className="overflow-hidden rounded-2xl border border-black/8 bg-white/55 dark:border-white/8 dark:bg-white/3">
+      <div
+        data-collection-table
+        hidden={initialView !== "table" || initialVisibleItems.length === 0}
+        className="overflow-hidden rounded-2xl border border-black/8 bg-white/55 dark:border-white/8 dark:bg-white/3"
+      >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] border-collapse text-left text-xs">
             <thead className="border-b border-black/8 bg-black/[0.025] dark:border-white/8 dark:bg-white/[0.025]">
@@ -79,6 +100,7 @@ export function CollectionBrowser({
               {items.map((item) => (
                 <tr
                   key={item.id}
+                  hidden={!initialShowShared && item.isShared}
                   data-collection-entry
                   data-search-text={item.searchText.toLocaleLowerCase("en-US")}
                   data-shared={item.isShared ? "true" : "false"}
@@ -96,7 +118,11 @@ export function CollectionBrowser({
         </div>
       </div>
 
-      <div data-collection-empty hidden className="rounded-2xl border border-dashed border-black/15 px-6 py-12 text-center dark:border-white/15">
+      <div
+        data-collection-empty
+        hidden={initialVisibleItems.length > 0}
+        className="rounded-2xl border border-dashed border-black/15 px-6 py-12 text-center dark:border-white/15"
+      >
         <p className="font-medium">{emptyMessage}</p>
         <p className="mt-1 text-sm text-black/45 dark:text-white/45">Try a different search or display filter.</p>
       </div>

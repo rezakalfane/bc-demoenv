@@ -213,7 +213,7 @@ export default async function EnvironmentPage({
             </div>
 
             <CollectionBrowser
-              collectionId={`environment-${environment.id}-channels`}
+              collectionId="environment-channels"
               ariaLabel={`${environment.name} channels`}
               searchPlaceholder="Search channels…"
               columns={[
