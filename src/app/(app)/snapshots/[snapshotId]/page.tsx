@@ -30,6 +30,7 @@ import { SnapshotInlineName } from "@/components/snapshot-inline-name";
 import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
 import { SnapshotTags } from "@/components/snapshot-tags";
+import { CatalogLocaleSelector } from "@/components/catalog-locale-selector";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -52,7 +53,10 @@ export default async function SnapshotPage({
   searchParams,
 }: {
   params: Promise<{ snapshotId: string }>;
-  searchParams: Promise<{ category?: string | string[] }>;
+  searchParams: Promise<{
+    category?: string | string[];
+    locale?: string | string[];
+  }>;
 }) {
   const [{ snapshotId }, query] = await Promise.all([params, searchParams]);
   const parsedSnapshotId = Number(snapshotId);
@@ -60,13 +64,16 @@ export default async function SnapshotPage({
     ? query.category[0]
     : query.category;
   const parsedCategoryId = Number(requestedCategory);
+  const requestedLocale = Array.isArray(query.locale)
+    ? query.locale[0]
+    : query.locale;
 
   if (!Number.isSafeInteger(parsedSnapshotId) || parsedSnapshotId < 1) {
     notFound();
   }
 
   const [snapshot, restoreDestinations] = await Promise.all([
-    getCatalogSnapshotView(parsedSnapshotId),
+    getCatalogSnapshotView(parsedSnapshotId, requestedLocale),
     getCatalogRestoreDestinations(),
   ]);
 
@@ -114,7 +121,7 @@ export default async function SnapshotPage({
     snapshot.products,
     selectedCategory,
   );
-  const priceFormatter = new Intl.NumberFormat("en", {
+  const priceFormatter = new Intl.NumberFormat(snapshot.activeLocale ?? "en", {
     style: "currency",
     currency: snapshot.currency,
   });
@@ -322,6 +329,7 @@ export default async function SnapshotPage({
                   categories={snapshot.categories}
                   basePath={basePath}
                   selectedCategoryId={selectedCategory?.id ?? null}
+                  locale={snapshot.activeLocale ?? undefined}
                 />
               )}
             </aside>
@@ -339,9 +347,15 @@ export default async function SnapshotPage({
                     </span>
                   ) : null}
                 </h2>
-                <p className="text-xs text-black/40 dark:text-white/40">
-                  {products.length} captured · {snapshot.currency}
-                </p>
+                <div className="flex shrink-0 items-center gap-2 text-xs text-black/40 dark:text-white/40">
+                  <span>{products.length} captured · {snapshot.currency}</span>
+                  {snapshot.locales.length > 1 && snapshot.activeLocale ? (
+                    <CatalogLocaleSelector
+                      locales={snapshot.locales}
+                      activeLocale={snapshot.activeLocale}
+                    />
+                  ) : null}
+                </div>
               </div>
 
               {products.length === 0 ? (

@@ -220,6 +220,8 @@ Localization capture records the source channel's locales and its effective defa
 
 Product and category translations are mapped independently from Catalog restoration using stable product SKUs/slugs and category paths, so Localization can be restored on its own after the destination catalog already exists.
 
+The live channel browser loads configured channel locales and paginated product/category translations server-side. Snapshot browsing reads the equivalent locale and translation resources from the immutable manifest. A locale selector appears beside the currency only when more than one locale is available; it preserves the locale through category navigation, falls back to the original catalog text when a translated field is absent, and uses the selected locale for price formatting.
+
 Snapshots whose visible manifest contains at least one captured product or category translation edge receive the computed `localized` tag. The check uses captured records rather than the presence of an empty localization resource, so untranslated snapshots are not mislabeled. Because translation contents are immutable per version, a series can gain or lose this computed label when the latest owned version changes or when its published version changes.
 
 ### Shipping

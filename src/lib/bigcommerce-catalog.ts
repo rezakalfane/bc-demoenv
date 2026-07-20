@@ -3,6 +3,13 @@ import "server-only";
 import { requireAppUser } from "@/lib/auth";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
 import {
+  applyCatalogTranslations,
+  parseCatalogLocales,
+  parseCatalogTranslations,
+  selectCatalogLocale,
+  type CatalogLocale,
+} from "@/lib/catalog-localization";
+import {
   getBigCommerceEnvironmentConnection,
   type BigCommerceEnvironmentConnection,
 } from "@/lib/db";
@@ -40,6 +47,8 @@ export type ChannelCatalog = {
   categories: CatalogCategory[];
   products: CatalogProduct[];
   currency: string;
+  locales: CatalogLocale[];
+  activeLocale: string | null;
   categoriesError: string | null;
   productsError: string | null;
   error: string | null;
@@ -95,6 +104,93 @@ async function fetchBigCommerce(
     await wait(delay);
   }
   throw new CatalogRequestError("BigCommerce rate limit persisted.");
+}
+
+async function fetchBigCommerceGraphql(
+  environment: ConnectedEnvironment,
+  query: string,
+  variables: Record<string, unknown>,
+) {
+  const response = await fetch(
+    `${API_BASE_URL}/${encodeURIComponent(environment.storeHash)}/graphql`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Auth-Token": environment.accessToken,
+      },
+      body: JSON.stringify({ query, variables }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+  );
+  const payload = (await response.json()) as unknown;
+  const errors =
+    typeof payload === "object" && payload !== null && "errors" in payload
+      ? payload.errors
+      : null;
+  if (!response.ok || (Array.isArray(errors) && errors.length > 0)) {
+    throw new CatalogRequestError("BigCommerce did not return catalog localization data.");
+  }
+  return payload;
+}
+
+async function loadTranslationCollection(
+  environment: ConnectedEnvironment,
+  channelId: number,
+  localeCode: string,
+  resourceType: "PRODUCTS" | "CATEGORIES",
+) {
+  const edges: unknown[] = [];
+  let after: string | null = null;
+  while (true) {
+    const payload = await fetchBigCommerceGraphql(
+      environment,
+      `query CatalogTranslations($channelId: ID!, $localeId: ID!, $after: String) { store { translations(filters: { resourceType: ${resourceType}, channelId: $channelId, localeId: $localeId } first: 50 after: $after) { edges { node { resourceId fields { fieldName original translation } } cursor } pageInfo { hasNextPage endCursor } } } }`,
+      {
+        channelId: `bc/store/channel/${channelId}`,
+        localeId: `bc/store/locale/${localeCode}`,
+        after,
+      },
+    );
+    const root = payload as { data?: { store?: { translations?: {
+      edges?: unknown[];
+      pageInfo?: { hasNextPage?: boolean; endCursor?: string };
+    } } } };
+    const translations = root.data?.store?.translations;
+    if (Array.isArray(translations?.edges)) edges.push(...translations.edges);
+    if (!translations?.pageInfo?.hasNextPage || !translations.pageInfo.endCursor) break;
+    after = translations.pageInfo.endCursor;
+  }
+  return { edges };
+}
+
+async function loadChannelLocalization(
+  environment: ConnectedEnvironment,
+  channelId: number,
+  requestedLocale?: string | null,
+) {
+  const payload = await fetchBigCommerceGraphql(
+    environment,
+    `query ChannelLocales($channelId: ID!) { store { locales(input: { channelId: $channelId }) { edges { node { code status isDefault } } } } }`,
+    { channelId: `bc/store/channel/${channelId}` },
+  );
+  const locales = parseCatalogLocales(payload);
+  const activeLocale = selectCatalogLocale(locales, requestedLocale);
+  if (!activeLocale || locales.length < 2) {
+    return { locales, activeLocale: activeLocale?.code ?? null, categoryTranslations: new Map(), productTranslations: new Map() };
+  }
+  const [products, categories] = await Promise.all([
+    loadTranslationCollection(environment, channelId, activeLocale.code, "PRODUCTS"),
+    loadTranslationCollection(environment, channelId, activeLocale.code, "CATEGORIES"),
+  ]);
+  return {
+    locales,
+    activeLocale: activeLocale.code,
+    categoryTranslations: parseCatalogTranslations(categories),
+    productTranslations: parseCatalogTranslations(products),
+  };
 }
 
 function readString(value: unknown) {
@@ -496,6 +592,7 @@ async function capture<T>(promise: Promise<T>) {
 export async function getChannelCatalog(
   environmentId: number,
   channelId: number,
+  requestedLocale?: string | null,
 ): Promise<ChannelCatalog | null> {
   const user = await requireAppUser();
   const environment = await getBigCommerceEnvironmentConnection(
@@ -520,6 +617,8 @@ export async function getChannelCatalog(
       categories: [],
       products: [],
       currency: DEFAULT_CURRENCY,
+      locales: [],
+      activeLocale: null,
       categoriesError: null,
       productsError: null,
       error: "The saved token could not be decrypted. Re-save it in Settings.",
@@ -541,6 +640,8 @@ export async function getChannelCatalog(
       categories: [],
       products: [],
       currency: DEFAULT_CURRENCY,
+      locales: [],
+      activeLocale: null,
       categoriesError: null,
       productsError: null,
       error: getRequestErrorMessage(error),
@@ -551,18 +652,29 @@ export async function getChannelCatalog(
     return null;
   }
 
-  const [categoriesResult, productsResult, currency] = await Promise.all([
+  const [categoriesResult, productsResult, currency, localizationResult] = await Promise.all([
     capture(loadCategories(connectedEnvironment, channelId)),
     capture(loadProducts(connectedEnvironment, channelId)),
     loadCurrency(connectedEnvironment),
+    capture(loadChannelLocalization(connectedEnvironment, channelId, requestedLocale)),
   ]);
+
+  const localization = localizationResult.data;
+  const localized = applyCatalogTranslations(
+    categoriesResult.data ?? [],
+    productsResult.data ?? [],
+    localization?.categoryTranslations ?? new Map(),
+    localization?.productTranslations ?? new Map(),
+  );
 
   return {
     environment: safeEnvironment,
     channel,
-    categories: categoriesResult.data ?? [],
-    products: productsResult.data ?? [],
+    categories: localized.categories,
+    products: localized.products,
     currency,
+    locales: localization?.locales ?? [],
+    activeLocale: localization?.activeLocale ?? null,
     categoriesError: categoriesResult.error,
     productsError: productsResult.error,
     error: null,

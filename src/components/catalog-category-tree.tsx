@@ -37,12 +37,14 @@ function CategoryBranch({
   selectedCategoryId,
   expandedIds,
   onToggle,
+  locale,
 }: {
   categories: CatalogCategory[];
   basePath: string;
   selectedCategoryId: number | null;
   expandedIds: Set<number>;
   onToggle: (categoryId: number) => void;
+  locale?: string;
 }) {
   return (
     <ul className="space-y-1">
@@ -84,7 +86,10 @@ function CategoryBranch({
               )}
 
               <Link
-                href={`${basePath}?category=${category.id}`}
+                href={`${basePath}?${new URLSearchParams({
+                  category: String(category.id),
+                  ...(locale ? { locale } : {}),
+                }).toString()}`}
                 prefetch={false}
                 scroll={false}
                 aria-current={isSelected ? "page" : undefined}
@@ -106,6 +111,7 @@ function CategoryBranch({
                   selectedCategoryId={selectedCategoryId}
                   expandedIds={expandedIds}
                   onToggle={onToggle}
+                  locale={locale}
                 />
               </div>
             ) : null}
@@ -120,10 +126,12 @@ export function CatalogCategoryTree({
   categories,
   basePath,
   selectedCategoryId,
+  locale,
 }: {
   categories: CatalogCategory[];
   basePath: string;
   selectedCategoryId: number | null;
+  locale?: string;
 }) {
   const [expandedIds, setExpandedIds] = useState(
     () =>
@@ -150,7 +158,7 @@ export function CatalogCategoryTree({
   return (
     <nav aria-label="Category tree">
       <Link
-        href={basePath}
+        href={locale ? `${basePath}?locale=${encodeURIComponent(locale)}` : basePath}
         prefetch={false}
         scroll={false}
         aria-current={selectedCategoryId === null ? "page" : undefined}
@@ -168,6 +176,7 @@ export function CatalogCategoryTree({
         selectedCategoryId={selectedCategoryId}
         expandedIds={expandedIds}
         onToggle={toggleCategory}
+        locale={locale}
       />
     </nav>
   );
