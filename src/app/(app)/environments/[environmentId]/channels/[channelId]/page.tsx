@@ -9,6 +9,7 @@ import { SnapshotForm } from "@/components/snapshot-form";
 import { SnapshotRestore } from "@/components/snapshot-restore";
 import { CatalogHistory } from "@/components/catalog-history";
 import { FavoriteButton } from "@/components/favorite-button";
+import { CollectionBrowser } from "@/components/collection-browser";
 import { requireAppUser } from "@/lib/auth";
 import { getChannelCatalog } from "@/lib/bigcommerce-catalog";
 import {
@@ -250,15 +251,29 @@ export default async function ChannelPage({
                   </p>
                 </div>
               ) : (
-                <div className="channel-live-products grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-                  {products.map((product) => (
-                    <CatalogProductCard
-                      key={product.id}
-                      product={product}
-                      priceFormatter={priceFormatter}
-                    />
-                  ))}
-                </div>
+                <CollectionBrowser
+                  collectionId={`channel-${catalog.environment.id}-${parsedChannelId}-products`}
+                  ariaLabel={`${channelTitle} products`}
+                  searchPlaceholder="Search products…"
+                  cardsClassName="channel-live-products grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
+                  columns={[
+                    { key: "name", label: "Product", className: "max-w-64" },
+                    { key: "description", label: "Description", className: "max-w-md" },
+                    { key: "categories", label: "Categories" },
+                    { key: "price", label: "Price", align: "right" },
+                  ]}
+                  items={products.map((product) => ({
+                    id: String(product.id),
+                    searchText: `${product.id} ${product.name} ${product.description} ${product.price ?? ""}`,
+                    card: <CatalogProductCard product={product} priceFormatter={priceFormatter} />,
+                    cells: [
+                      <span key="name" className="font-semibold">{product.name}</span>,
+                      <span key="description" className="line-clamp-2 text-black/50 dark:text-white/50">{product.description || "No description available."}</span>,
+                      product.categoryIds.length,
+                      <span key="price" className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{product.price === null ? "—" : priceFormatter.format(product.price)}</span>,
+                    ],
+                  }))}
+                />
               )}
             </section>
           </div>

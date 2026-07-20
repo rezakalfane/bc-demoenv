@@ -149,6 +149,8 @@ Snapshot payloads contain catalog data and public image links, but never BigComm
 
 Favorites are private presentation metadata. Every favorite lookup and toggle includes the current Clerk user ID; the Server Action also verifies ownership of environments and channels or current access to an owned/published snapshot before accepting the mutation. Favorite status never grants access to a resource that is no longer otherwise visible.
 
+Collection browsing keeps resource rendering on the server. A narrow Client Component toolbar controls sibling Server-rendered cards and compact table rows through stable data attributes. Dashboard environments, saved Settings environments, channel lists, snapshot series, and live/captured product browsers expose the same left-aligned instant search and right-aligned 32-pixel card/table controls. Filtering operates only on the already-authorized display model received from the Server Component; credentials, snapshot payloads, and raw BigCommerce responses never cross this boundary. Compact tables preserve primary navigation and resource actions while horizontal overflow keeps dense columns usable on small screens. Snapshot collections add a separate eye control that hides or reveals shared read-only series without affecting owned snapshots or in-progress captures.
+
 ## BigCommerce access scopes
 
 For catalog-only Dashboard metrics and snapshot capture, **Products: read-only** and **Channel Settings: read-only** are sufficient. Capturing every optional configuration section also benefits from Sites & Routes, Information & Settings, Themes, Content, the corresponding Shipping/Tax read scopes, and **B2B Edition: read-only**.

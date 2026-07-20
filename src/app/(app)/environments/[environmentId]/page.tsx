@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getEnvironmentDetails } from "@/lib/bigcommerce";
+import { getEnvironmentDetails, type EnvironmentChannel } from "@/lib/bigcommerce";
 import { CatalogActivityBadge } from "@/components/catalog-operation-progress";
 import { FavoriteButton } from "@/components/favorite-button";
+import { CollectionBrowser } from "@/components/collection-browser";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,74 @@ function ChannelUrl({ url }: { url: string }) {
       </span>
       <span className="sr-only"> (opens in a new tab)</span>
     </a>
+  );
+}
+
+function ChannelStatus({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClasses(status)}`}>
+      {formatLabel(status)}
+    </span>
+  );
+}
+
+function ChannelCard({
+  channel,
+  environmentId,
+}: {
+  channel: EnvironmentChannel;
+  environmentId: number;
+}) {
+  const catalogHref = `/environments/${environmentId}/channels/${channel.id}`;
+  const modifiedDate = formatDate(channel.dateModified);
+  const createdDate = formatDate(channel.dateCreated);
+  const channelFacts: Array<[string, string | number]> = [
+    ["Channel ID", channel.id],
+    ["Site ID", channel.siteId ?? "—"],
+    ["Merchant UI", channel.isVisible === null ? "Not reported" : channel.isVisible ? "Visible" : "Hidden"],
+    ["Product listings", channel.isListableFromUi === null ? "Not reported" : channel.isListableFromUi ? "Available" : "Unavailable"],
+  ];
+
+  return (
+    <article className="flex min-h-80 flex-col rounded-3xl border border-black/10 bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold tracking-tight">
+            <Link href={catalogHref} className="rounded-sm transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:hover:text-emerald-300">
+              <span className="inline-flex items-center gap-2">
+                <span className="line-clamp-2">{channel.name}</span>
+                <CatalogActivityBadge environmentId={environmentId} channelId={channel.id} />
+              </span>
+            </Link>
+          </h3>
+          <p className="mt-1 text-xs text-black/40 dark:text-white/40">{formatLabel(channel.type)} · {formatLabel(channel.platform)}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <ChannelStatus status={channel.status} />
+          <FavoriteButton target={{ type: "channel", environmentId, channelId: channel.id }} initialFavorite={channel.isFavorite} label={channel.name} />
+        </div>
+      </div>
+
+      <dl className="mt-5 grid grid-cols-2 gap-2.5 text-sm">
+        {channelFacts.map(([label, value]) => (
+          <div key={label} className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
+            <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">{label}</dt>
+            <dd className={`mt-1 text-xs font-semibold ${label.endsWith("ID") ? "font-mono tabular-nums" : ""}`}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {channel.urls.length > 0 ? <div className="mt-4">{channel.urls.map((url) => <ChannelUrl key={url} url={url} />)}</div> : (
+        <p className="mt-4 text-sm text-black/40 dark:text-white/40">{channel.urlError ?? "No storefront URL is available for this channel."}</p>
+      )}
+
+      <div className="mt-auto flex items-end justify-between gap-4 pt-5">
+        <p className="text-[11px] leading-4 text-black/35 dark:text-white/35">
+          {modifiedDate ? `Updated ${modifiedDate}` : createdDate ? `Created ${createdDate}` : "Live channel details"}
+        </p>
+        <Link href={catalogHref} className="inline-flex shrink-0 rounded-sm text-xs font-semibold text-emerald-700 transition hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200">View catalog →</Link>
+      </div>
+    </article>
   );
 }
 
@@ -143,130 +212,45 @@ export default async function EnvironmentPage({
               </p>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {environment.channels.map((channel) => {
+            <CollectionBrowser
+              collectionId={`environment-${environment.id}-channels`}
+              ariaLabel={`${environment.name} channels`}
+              searchPlaceholder="Search channels…"
+              columns={[
+                { key: "name", label: "Channel", className: "max-w-64" },
+                { key: "type", label: "Type / platform" },
+                { key: "ids", label: "Channel / site ID" },
+                { key: "visibility", label: "Merchant UI" },
+                { key: "listings", label: "Listings" },
+                { key: "url", label: "Storefront", className: "max-w-64" },
+                { key: "updated", label: "Updated" },
+                { key: "status", label: "Status" },
+                { key: "favorite", label: "Favorite", align: "right" },
+              ]}
+              items={environment.channels.map((channel) => {
                 const catalogHref = `/environments/${environment.id}/channels/${channel.id}`;
                 const modifiedDate = formatDate(channel.dateModified);
                 const createdDate = formatDate(channel.dateCreated);
-
-                return (
-                  <article
-                    key={channel.id}
-                    className="flex min-h-80 flex-col rounded-3xl border border-black/10 bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <h3 className="text-lg font-semibold tracking-tight">
-                          <Link
-                            href={catalogHref}
-                            className="rounded-sm transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:hover:text-emerald-300"
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <span className="line-clamp-2">{channel.name}</span>
-                              <CatalogActivityBadge
-                                environmentId={environment.id}
-                                channelId={channel.id}
-                              />
-                            </span>
-                          </Link>
-                        </h3>
-                        <p className="mt-1 text-xs text-black/40 dark:text-white/40">
-                          {formatLabel(channel.type)} · {formatLabel(channel.platform)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClasses(channel.status)}`}
-                        >
-                          {formatLabel(channel.status)}
-                        </span>
-                        <FavoriteButton
-                          target={{
-                            type: "channel",
-                            environmentId: environment.id,
-                            channelId: channel.id,
-                          }}
-                          initialFavorite={channel.isFavorite}
-                          label={channel.name}
-                        />
-                      </div>
-                    </div>
-
-                    <dl className="mt-5 grid grid-cols-2 gap-2.5 text-sm">
-                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
-                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
-                          Channel ID
-                        </dt>
-                        <dd className="mt-1 font-mono text-xs font-semibold tabular-nums">
-                          {channel.id}
-                        </dd>
-                      </div>
-                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
-                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
-                          Site ID
-                        </dt>
-                        <dd className="mt-1 font-mono text-xs font-semibold tabular-nums">
-                          {channel.siteId ?? "—"}
-                        </dd>
-                      </div>
-                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
-                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
-                          Merchant UI
-                        </dt>
-                        <dd className="mt-1 text-xs font-semibold">
-                          {channel.isVisible === null
-                            ? "Not reported"
-                            : channel.isVisible
-                              ? "Visible"
-                              : "Hidden"}
-                        </dd>
-                      </div>
-                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
-                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
-                          Product listings
-                        </dt>
-                        <dd className="mt-1 text-xs font-semibold">
-                          {channel.isListableFromUi === null
-                            ? "Not reported"
-                            : channel.isListableFromUi
-                              ? "Available"
-                              : "Unavailable"}
-                        </dd>
-                      </div>
-                    </dl>
-
-                    {channel.urls.length > 0 ? (
-                      <div className="mt-4">
-                        {channel.urls.map((url) => (
-                          <ChannelUrl key={url} url={url} />
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-4 text-sm text-black/40 dark:text-white/40">
-                        {channel.urlError ??
-                          "No storefront URL is available for this channel."}
-                      </p>
-                    )}
-
-                    <div className="mt-auto flex items-end justify-between gap-4 pt-5">
-                      <p className="text-[11px] leading-4 text-black/35 dark:text-white/35">
-                        {modifiedDate
-                          ? `Updated ${modifiedDate}`
-                          : createdDate
-                            ? `Created ${createdDate}`
-                            : "Live channel details"}
-                      </p>
-                      <Link
-                        href={catalogHref}
-                        className="inline-flex shrink-0 rounded-sm text-xs font-semibold text-emerald-700 transition hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200"
-                      >
-                        View catalog →
-                      </Link>
-                    </div>
-                  </article>
-                );
+                const visibility = channel.isVisible === null ? "Not reported" : channel.isVisible ? "Visible" : "Hidden";
+                const listings = channel.isListableFromUi === null ? "Not reported" : channel.isListableFromUi ? "Available" : "Unavailable";
+                return {
+                  id: String(channel.id),
+                  searchText: `${channel.name} ${channel.type} ${channel.platform} ${channel.status} ${channel.id} ${channel.siteId ?? ""} ${channel.urls.join(" ")}`,
+                  card: <ChannelCard channel={channel} environmentId={environment.id} />,
+                  cells: [
+                    <Link key="name" href={catalogHref} className="inline-flex max-w-full items-center gap-2 font-semibold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300"><span className="truncate">{channel.name}</span><CatalogActivityBadge environmentId={environment.id} channelId={channel.id} /></Link>,
+                    <span key="type" className="whitespace-nowrap">{formatLabel(channel.type)} · {formatLabel(channel.platform)}</span>,
+                    <span key="ids" className="font-mono text-black/55 dark:text-white/55">{channel.id} / {channel.siteId ?? "—"}</span>,
+                    visibility,
+                    listings,
+                    channel.urls[0] ? <a key="url" href={channel.urls[0]} target="_blank" rel="noopener noreferrer" className="block truncate text-emerald-700 hover:text-emerald-900 dark:text-emerald-300">{channel.urls[0]} ↗</a> : "—",
+                    modifiedDate ?? createdDate ?? "—",
+                    <ChannelStatus key="status" status={channel.status} />,
+                    <div key="favorite" className="flex justify-end"><FavoriteButton target={{ type: "channel", environmentId: environment.id, channelId: channel.id }} initialFavorite={channel.isFavorite} label={channel.name} /></div>,
+                  ],
+                };
               })}
-            </div>
+            />
           </section>
         )}
       </div>

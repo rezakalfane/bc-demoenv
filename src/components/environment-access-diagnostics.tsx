@@ -340,8 +340,10 @@ function AccessReportModal({
 
 export function EnvironmentAccessDiagnostics({
   environment,
+  compact = false,
 }: {
   environment: BigCommerceEnvironment;
+  compact?: boolean;
 }) {
   const action = testEnvironmentAccess.bind(null, environment.id);
   const [state, formAction] = useActionState(action, initialState);
@@ -354,14 +356,14 @@ export function EnvironmentAccessDiagnostics({
   }, [state.report]);
 
   return (
-    <div className="mt-5 border-t border-black/8 pt-4 dark:border-white/8">
+    <div className={compact ? "" : "mt-5 border-t border-black/8 pt-4 dark:border-white/8"}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        {!compact ? <div>
           <p className="text-sm font-medium">Access diagnostics</p>
           <p className="mt-0.5 text-xs text-black/45 dark:text-white/45">
             Verify safe read capabilities, inferred scopes, and store-specific APIs.
           </p>
-        </div>
+        </div> : null}
         <div className="flex flex-wrap items-center justify-end gap-2">
           {state.report && (
             <button
