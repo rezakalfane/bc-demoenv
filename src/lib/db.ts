@@ -89,6 +89,18 @@ export type CatalogSnapshotEvent = {
   createdAt: string;
 };
 
+export type ApplicationEvent = {
+  id: number;
+  eventType: "environment_added" | "environment_deleted" | "snapshot_deleted";
+  resourceType: "environment" | "snapshot";
+  resourceId: number | null;
+  resourceName: string;
+  payloadJson: string;
+  createdAt: string;
+};
+
+export type FavoriteResourceType = "environment" | "channel" | "snapshot";
+
 export type CatalogOperation = {
   id: number; userId: string; kind: "snapshot" | "restore" | "clear";
   environmentId: number | null; channelId: number | null; snapshotId: number | null;
@@ -125,6 +137,18 @@ export function normalizeCatalogSnapshotName(name: string) {
 
 export function getCatalogSnapshotCaptureKey(name: string) {
   return normalizeCatalogSnapshotName(name).toLocaleLowerCase("en-US");
+}
+
+export function getEnvironmentFavoriteKey(environmentId: number) {
+  return `environment:${environmentId}`;
+}
+
+export function getChannelFavoriteKey(environmentId: number, channelId: number) {
+  return `channel:${environmentId}:${channelId}`;
+}
+
+export function getSnapshotFavoriteKey(ownerUserId: string, name: string) {
+  return `snapshot:${ownerUserId}:${getCatalogSnapshotCaptureKey(name)}`;
 }
 
 let client: Client | undefined;
@@ -274,6 +298,35 @@ async function ensureSchema() {
       "CREATE INDEX IF NOT EXISTS catalog_snapshot_events_user_name_idx ON catalog_snapshot_events(user_id, snapshot_name, id DESC)",
     );
 
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS application_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        resource_type TEXT NOT NULL,
+        resource_id INTEGER,
+        resource_name TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS application_events_user_created_idx ON application_events(user_id, id DESC)",
+    );
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS favorites (
+        user_id TEXT NOT NULL,
+        resource_type TEXT NOT NULL CHECK(resource_type IN ('environment', 'channel', 'snapshot')),
+        resource_key TEXT NOT NULL CHECK(length(resource_key) BETWEEN 1 AND 240),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, resource_type, resource_key)
+      )
+    `);
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS favorites_user_type_idx ON favorites(user_id, resource_type, created_at DESC)",
+    );
+
     await db.execute(`CREATE TABLE IF NOT EXISTS catalog_operations (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, kind TEXT NOT NULL,
       environment_id INTEGER, channel_id INTEGER, snapshot_id INTEGER,
@@ -366,6 +419,20 @@ export async function getRecentCatalogOperations(userId: string) {
         updated_at DESC,
         id DESC
       LIMIT 50
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => toCatalogOperation(row as Record<string, unknown>));
+}
+
+export async function getCatalogOperations(userId: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT *
+      FROM catalog_operations
+      WHERE user_id = ?
+      ORDER BY updated_at DESC, id DESC
     `,
     args: [userId],
   });
@@ -583,6 +650,64 @@ export async function getNotes(userId: string): Promise<Note[]> {
   }));
 }
 
+export async function getFavoriteResourceKeys(
+  userId: string,
+  resourceType: FavoriteResourceType,
+) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT resource_key
+      FROM favorites
+      WHERE user_id = ? AND resource_type = ?
+    `,
+    args: [userId, resourceType],
+  });
+  return new Set(result.rows.map((row) => String(row.resource_key)));
+}
+
+export async function toggleFavoriteResource(
+  userId: string,
+  resourceType: FavoriteResourceType,
+  resourceKey: string,
+) {
+  await ensureSchema();
+  if (!resourceKey || resourceKey.length > 240) {
+    throw new Error("Invalid favorite resource.");
+  }
+
+  const transaction = await getClient().transaction("write");
+  try {
+    const existing = await transaction.execute({
+      sql: `
+        SELECT 1
+        FROM favorites
+        WHERE user_id = ? AND resource_type = ? AND resource_key = ?
+        LIMIT 1
+      `,
+      args: [userId, resourceType, resourceKey],
+    });
+
+    if (existing.rows[0]) {
+      await transaction.execute({
+        sql: "DELETE FROM favorites WHERE user_id = ? AND resource_type = ? AND resource_key = ?",
+        args: [userId, resourceType, resourceKey],
+      });
+      await transaction.commit();
+      return false;
+    }
+
+    await transaction.execute({
+      sql: "INSERT INTO favorites (user_id, resource_type, resource_key) VALUES (?, ?, ?)",
+      args: [userId, resourceType, resourceKey],
+    });
+    await transaction.commit();
+    return true;
+  } finally {
+    transaction.close();
+  }
+}
+
 export async function addNote(userId: string, title: string) {
   await ensureSchema();
   await getClient().execute({
@@ -699,31 +824,56 @@ export async function getBigCommerceEnvironmentConnection(
   };
 }
 
+export async function hasBigCommerceEnvironment(userId: string, id: number) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: "SELECT 1 FROM bigcommerce_environments WHERE id = ? AND user_id = ? LIMIT 1",
+    args: [id, userId],
+  });
+  return Boolean(result.rows[0]);
+}
+
 export async function addBigCommerceEnvironment(
   userId: string,
   input: BigCommerceEnvironmentInput & { accessToken: string },
 ) {
   await ensureSchema();
   const encryptedToken = encryptSecret(input.accessToken, userId);
-
-  await getClient().execute({
-    sql: `
-      INSERT INTO bigcommerce_environments (
-        user_id,
-        name,
-        store_hash,
-        access_token_encrypted,
-        access_token_hint
-      ) VALUES (?, ?, ?, ?, ?)
-    `,
-    args: [
-      userId,
-      input.name,
-      input.storeHash,
-      encryptedToken,
-      input.accessToken.slice(-4),
-    ],
-  });
+  const transaction = await getClient().transaction("write");
+  try {
+    const result = await transaction.execute({
+      sql: `
+        INSERT INTO bigcommerce_environments (
+          user_id,
+          name,
+          store_hash,
+          access_token_encrypted,
+          access_token_hint
+        ) VALUES (?, ?, ?, ?, ?)
+        RETURNING id
+      `,
+      args: [
+        userId,
+        input.name,
+        input.storeHash,
+        encryptedToken,
+        input.accessToken.slice(-4),
+      ],
+    });
+    const environmentId = Number(result.rows[0]?.id);
+    await transaction.execute({
+      sql: `
+        INSERT INTO application_events (
+          user_id, event_type, resource_type, resource_id, resource_name, payload_json
+        ) VALUES (?, 'environment_added', 'environment', ?, ?, ?)
+      `,
+      args: [userId, environmentId, input.name, JSON.stringify({ storeHash: input.storeHash })],
+    });
+    await transaction.commit();
+    return environmentId;
+  } finally {
+    transaction.close();
+  }
 }
 
 export async function updateBigCommerceEnvironment(
@@ -771,10 +921,53 @@ export async function removeBigCommerceEnvironment(
   id: number,
 ) {
   await ensureSchema();
-  await getClient().execute({
-    sql: "DELETE FROM bigcommerce_environments WHERE id = ? AND user_id = ?",
-    args: [id, userId],
-  });
+  const transaction = await getClient().transaction("write");
+  try {
+    const environmentResult = await transaction.execute({
+      sql: "SELECT name, store_hash FROM bigcommerce_environments WHERE id = ? AND user_id = ? LIMIT 1",
+      args: [id, userId],
+    });
+    const environment = environmentResult.rows[0];
+    if (!environment) {
+      await transaction.rollback();
+      return 0;
+    }
+    await transaction.execute({
+      sql: `
+        INSERT INTO application_events (
+          user_id, event_type, resource_type, resource_id, resource_name, payload_json
+        ) VALUES (?, 'environment_deleted', 'environment', ?, ?, ?)
+      `,
+      args: [
+        userId,
+        id,
+        String(environment.name),
+        JSON.stringify({ storeHash: String(environment.store_hash) }),
+      ],
+    });
+    await transaction.execute({
+      sql: `
+        DELETE FROM favorites
+        WHERE user_id = ? AND (
+          (resource_type = 'environment' AND resource_key = ?) OR
+          (resource_type = 'channel' AND resource_key LIKE ?)
+        )
+      `,
+      args: [
+        userId,
+        getEnvironmentFavoriteKey(id),
+        `${getChannelFavoriteKey(id, 0).slice(0, -1)}%`,
+      ],
+    });
+    const result = await transaction.execute({
+      sql: "DELETE FROM bigcommerce_environments WHERE id = ? AND user_id = ?",
+      args: [id, userId],
+    });
+    await transaction.commit();
+    return result.rowsAffected;
+  } finally {
+    transaction.close();
+  }
 }
 
 function toCatalogSnapshotSummary(row: Record<string, unknown>) {
@@ -996,6 +1189,24 @@ export async function getAccessibleCatalogSnapshot(
   return row ? { ...toCatalogSnapshotSummary(row), payloadJson: String(row.payload_json) } : null;
 }
 
+export async function getAccessibleCatalogSnapshotSummary(
+  userId: string,
+  id: number,
+): Promise<CatalogSnapshotSummary | null> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT ${catalogSnapshotColumns}
+      FROM catalog_snapshots
+      WHERE id = ? AND (user_id = ? OR published_at IS NOT NULL)
+      LIMIT 1
+    `,
+    args: [id, userId],
+  });
+  const row = result.rows[0];
+  return row ? toCatalogSnapshotSummary(row) : null;
+}
+
 export async function setPublishedCatalogSnapshotVersion(
   userId: string,
   id: number,
@@ -1071,6 +1282,8 @@ export async function renameCatalogSnapshotSeries(
     const previousName = snapshot.name;
     const previousKey = getCatalogSnapshotCaptureKey(previousName);
     const nextKey = getCatalogSnapshotCaptureKey(name);
+    const previousFavoriteKey = getSnapshotFavoriteKey(userId, previousName);
+    const nextFavoriteKey = getSnapshotFavoriteKey(userId, name);
 
     const activeResult = await transaction.execute({
       sql: `
@@ -1122,6 +1335,14 @@ export async function renameCatalogSnapshotSeries(
     await transaction.execute({
       sql: `UPDATE catalog_snapshot_events SET snapshot_name = ? WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE`,
       args: [name, userId, previousName],
+    });
+    await transaction.execute({
+      sql: `
+        UPDATE favorites
+        SET resource_key = ?
+        WHERE resource_type = 'snapshot' AND resource_key = ?
+      `,
+      args: [nextFavoriteKey, previousFavoriteKey],
     });
     await transaction.execute({
       sql: `
@@ -1356,11 +1577,57 @@ export async function completeCatalogSnapshotCapture(
 
 export async function removeCatalogSnapshotSeries(userId: string, name: string) {
   await ensureSchema();
-  const result = await getClient().execute({
-    sql: "DELETE FROM catalog_snapshots WHERE user_id = ? AND name = ? COLLATE NOCASE",
-    args: [userId, name],
-  });
-  return result.rowsAffected;
+  const transaction = await getClient().transaction("write");
+  try {
+    const versionsResult = await transaction.execute({
+      sql: `
+        SELECT id, snapshot_version, source_environment_name, source_channel_name,
+               category_count, product_count, variant_count
+        FROM catalog_snapshots
+        WHERE user_id = ? AND name = ? COLLATE NOCASE
+        ORDER BY snapshot_version DESC, id DESC
+      `,
+      args: [userId, name],
+    });
+    if (versionsResult.rows.length === 0) {
+      await transaction.rollback();
+      return 0;
+    }
+    const latest = versionsResult.rows[0];
+    await transaction.execute({
+      sql: `
+        INSERT INTO application_events (
+          user_id, event_type, resource_type, resource_id, resource_name, payload_json
+        ) VALUES (?, 'snapshot_deleted', 'snapshot', ?, ?, ?)
+      `,
+      args: [
+        userId,
+        Number(latest.id),
+        name,
+        JSON.stringify({
+          versionCount: versionsResult.rows.length,
+          latestVersion: Number(latest.snapshot_version),
+          sourceEnvironmentName: String(latest.source_environment_name),
+          sourceChannelName: String(latest.source_channel_name),
+          categoryCount: Number(latest.category_count),
+          productCount: Number(latest.product_count),
+          variantCount: Number(latest.variant_count),
+        }),
+      ],
+    });
+    await transaction.execute({
+      sql: "DELETE FROM favorites WHERE resource_type = 'snapshot' AND resource_key = ?",
+      args: [getSnapshotFavoriteKey(userId, name)],
+    });
+    const result = await transaction.execute({
+      sql: "DELETE FROM catalog_snapshots WHERE user_id = ? AND name = ? COLLATE NOCASE",
+      args: [userId, name],
+    });
+    await transaction.commit();
+    return result.rowsAffected;
+  } finally {
+    transaction.close();
+  }
 }
 
 export async function removeCatalogSnapshotVersion(userId: string, id: number) {
@@ -1415,6 +1682,54 @@ export async function getCatalogSnapshotEventsByName(
     snapshotName: String(row.snapshot_name),
     snapshotId: Number(row.snapshot_id),
     snapshotVersion: Number(row.snapshot_version),
+    payloadJson: String(row.payload_json),
+    createdAt: toIsoDate(row.created_at),
+  }));
+}
+
+export async function getCatalogSnapshotEvents(
+  userId: string,
+): Promise<CatalogSnapshotEvent[]> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT id, event_type, snapshot_name, snapshot_id, snapshot_version,
+             payload_json, created_at
+      FROM catalog_snapshot_events
+      WHERE user_id = ?
+      ORDER BY id DESC
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    eventType: String(row.event_type) as CatalogSnapshotEvent["eventType"],
+    snapshotName: String(row.snapshot_name),
+    snapshotId: Number(row.snapshot_id),
+    snapshotVersion: Number(row.snapshot_version),
+    payloadJson: String(row.payload_json),
+    createdAt: toIsoDate(row.created_at),
+  }));
+}
+
+export async function getApplicationEvents(userId: string): Promise<ApplicationEvent[]> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT id, event_type, resource_type, resource_id, resource_name,
+             payload_json, created_at
+      FROM application_events
+      WHERE user_id = ?
+      ORDER BY id DESC
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    eventType: String(row.event_type) as ApplicationEvent["eventType"],
+    resourceType: String(row.resource_type) as ApplicationEvent["resourceType"],
+    resourceId: row.resource_id == null ? null : Number(row.resource_id),
+    resourceName: String(row.resource_name),
     payloadJson: String(row.payload_json),
     createdAt: toIsoDate(row.created_at),
   }));

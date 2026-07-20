@@ -3,8 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { renameSnapshot } from "@/app/(app)/snapshots/rename-actions";
+import { PublishedIcon } from "@/components/action-icons";
 
-export function SnapshotInlineName({ snapshotId, name }: { snapshotId: number; name: string }) {
+export function SnapshotInlineName({
+  snapshotId,
+  name,
+  published = false,
+}: {
+  snapshotId: number;
+  name: string;
+  published?: boolean;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [currentName, setCurrentName] = useState(name);
@@ -102,6 +111,12 @@ export function SnapshotInlineName({ snapshotId, name }: { snapshotId: number; n
             title="Double-click to rename"
           >
             {currentName}
+            {published ? (
+              <>
+                <PublishedIcon className="ml-2 inline-block align-[-0.08em] text-blue-600 dark:text-blue-300" />
+                <span className="sr-only"> Published snapshot</span>
+              </>
+            ) : null}
           </button>
         </h1>
       )}

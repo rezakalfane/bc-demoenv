@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
 import { requireAppUser } from "@/lib/auth";
-import { getActiveSnapshotOperations, getCatalogSnapshotSeries } from "@/lib/db";
+import {
+  getActiveSnapshotOperations,
+  getCatalogSnapshotSeries,
+  getFavoriteResourceKeys,
+  getSnapshotFavoriteKey,
+} from "@/lib/db";
 import { CatalogOperationProgress } from "@/components/catalog-operation-progress";
 import { PublishedIcon } from "@/components/action-icons";
 import { SnapshotLiveUpdates } from "@/components/snapshot-live-updates";
 import { isSnapshotRealtimeConfigured } from "@/lib/snapshot-realtime";
+import { FavoriteButton } from "@/components/favorite-button";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +34,10 @@ function formatBytes(value: number) {
 
 export default async function SnapshotsPage() {
   const user = await requireAppUser();
-  const [snapshots, activeOperations] = await Promise.all([
+  const [snapshots, activeOperations, favoriteKeys] = await Promise.all([
     getCatalogSnapshotSeries(user.id),
     getActiveSnapshotOperations(user.id),
+    getFavoriteResourceKeys(user.id, "snapshot"),
   ]);
   const pendingSnapshots = activeOperations.map((operation) => {
     let payload: Record<string, unknown> = {};
@@ -43,12 +50,21 @@ export default async function SnapshotsPage() {
       originPath: typeof payload.originPath === "string" ? payload.originPath : undefined,
     };
   });
-  const sortedSnapshots = snapshots.toSorted((left, right) => {
+  const sortedSnapshots = snapshots
+    .map((snapshot) => ({
+      ...snapshot,
+      isFavorite: favoriteKeys.has(
+        getSnapshotFavoriteKey(snapshot.ownerUserId, snapshot.name),
+      ),
+    }))
+    .toSorted((left, right) => {
+    const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
+    if (favoriteOrder !== 0) return favoriteOrder;
     const publicationOrder = Number(Boolean(right.publishedSnapshotId)) - Number(Boolean(left.publishedSnapshotId));
     if (publicationOrder !== 0) return publicationOrder;
     const nameOrder = left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
     return nameOrder !== 0 ? nameOrder : left.id - right.id;
-  });
+    });
   const sharedOwnerIds = [...new Set(
     sortedSnapshots
       .filter((snapshot) => !snapshot.isOwner)
@@ -116,32 +132,39 @@ export default async function SnapshotsPage() {
                 key={snapshot.id}
                 className={`flex min-h-72 flex-col rounded-3xl border bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:bg-white/4 ${snapshot.publishedSnapshotId ? "border-blue-500/45 dark:border-blue-400/40" : "border-black/10 dark:border-white/10"}`}
               >
-                <div className="min-w-0">
-                  <h2 className="break-words text-lg font-semibold tracking-tight">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="break-words text-lg font-semibold tracking-tight">
                     <Link
                       href={`/snapshots/${snapshot.id}`}
                       className="block rounded-sm transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:hover:text-emerald-300"
                     >
-                      <span className="inline-flex items-center gap-2">
+                      <span>
                         {snapshot.name}
                         {snapshot.publishedSnapshotId ? (
-                          <><PublishedIcon className="text-blue-600 dark:text-blue-300" /><span className="sr-only">Published snapshot</span></>
+                          <><PublishedIcon className="ml-2 inline-block align-[-0.08em] text-blue-600 dark:text-blue-300" /><span className="sr-only"> Published snapshot</span></>
                         ) : null}
                       </span>
                     </Link>
-                  </h2>
-                  <p className="mt-1 truncate text-xs text-black/40 dark:text-white/40">
-                    {snapshot.sourceEnvironmentName} ·{" "}
-                    {snapshot.sourceChannelName}
-                  </p>
-                  {!snapshot.isOwner ? (
-                    <div className="mt-2 text-[11px] text-blue-700 dark:text-blue-300">
-                      <p className="font-semibold uppercase tracking-[0.14em]">Published catalog · read only</p>
-                      <p className="mt-1 normal-case tracking-normal text-black/45 dark:text-white/45">
-                        Published by {publisherEmails.get(snapshot.ownerUserId) ?? "email unavailable"}
-                      </p>
-                    </div>
-                  ) : null}
+                    </h2>
+                    <p className="mt-1 truncate text-xs text-black/40 dark:text-white/40">
+                      {snapshot.sourceEnvironmentName} ·{" "}
+                      {snapshot.sourceChannelName}
+                    </p>
+                    {!snapshot.isOwner ? (
+                      <div className="mt-2 text-[11px] text-blue-700 dark:text-blue-300">
+                        <p className="font-semibold uppercase tracking-[0.14em]">Published catalog · read only</p>
+                        <p className="mt-1 normal-case tracking-normal text-black/45 dark:text-white/45">
+                          Published by {publisherEmails.get(snapshot.ownerUserId) ?? "email unavailable"}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                  <FavoriteButton
+                    target={{ type: "snapshot", snapshotId: snapshot.id }}
+                    initialFavorite={snapshot.isFavorite}
+                    label={snapshot.name}
+                  />
                 </div>
 
                 <dl className="mt-6 grid grid-cols-2 gap-3 text-sm">

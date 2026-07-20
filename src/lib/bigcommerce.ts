@@ -1,6 +1,9 @@
 import "server-only";
 
 import {
+  getChannelFavoriteKey,
+  getEnvironmentFavoriteKey,
+  getFavoriteResourceKeys,
   getBigCommerceEnvironmentConnection,
   getBigCommerceEnvironmentConnections,
   type BigCommerceEnvironmentConnection,
@@ -50,6 +53,7 @@ export type EnvironmentDashboard = {
   name: string;
   storeHash: string;
   status: "connected" | "partial" | "unavailable";
+  isFavorite: boolean;
   metrics: Record<MetricKey, EnvironmentMetric>;
 };
 
@@ -59,6 +63,12 @@ export type EnvironmentChannel = {
   platform: string;
   type: string;
   status: string;
+  isListableFromUi: boolean | null;
+  isVisible: boolean | null;
+  dateCreated: string | null;
+  dateModified: string | null;
+  siteId: number | null;
+  isFavorite: boolean;
   urls: string[];
   urlError: string | null;
 };
@@ -71,7 +81,10 @@ export type EnvironmentDetails = {
   error: string | null;
 };
 
-type ChannelSummary = Omit<EnvironmentChannel, "urls" | "urlError">;
+type ChannelSummary = Omit<
+  EnvironmentChannel,
+  "siteId" | "isFavorite" | "urls" | "urlError"
+>;
 
 function getApiErrorMessage(
   status: number,
@@ -119,6 +132,14 @@ function isPublicUrl(value: unknown): value is string {
 
 function readString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === "string" && value ? value : null;
+}
+
+function readOptionalBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
 }
 
 async function fetchActiveChannels(
@@ -194,6 +215,22 @@ async function fetchActiveChannels(
             platform: "platform" in entry ? readString(entry.platform) : "",
             type,
             status,
+            isListableFromUi:
+              "is_listable_from_ui" in entry
+                ? readOptionalBoolean(entry.is_listable_from_ui)
+                : null,
+            isVisible:
+              "is_visible" in entry
+                ? readOptionalBoolean(entry.is_visible)
+                : null,
+            dateCreated:
+              "date_created" in entry
+                ? readOptionalString(entry.date_created)
+                : null,
+            dateModified:
+              "date_modified" in entry
+                ? readOptionalString(entry.date_modified)
+                : null,
           },
         ];
       }),
@@ -304,7 +341,13 @@ async function loadChannelSite(
     );
 
     if (response.status === 404) {
-      return { ...channel, urls: [], urlError: null };
+      return {
+        ...channel,
+        siteId: null,
+        isFavorite: false,
+        urls: [],
+        urlError: null,
+      };
     }
 
     if (!response.ok) {
@@ -349,15 +392,23 @@ async function loadChannelSite(
       : isPublicUrl(fallbackUrl)
         ? fallbackUrl
         : null;
+    const siteIdValue =
+      typeof site === "object" && site !== null && "id" in site
+        ? Number(site.id)
+        : Number.NaN;
 
     return {
       ...channel,
+      siteId: Number.isSafeInteger(siteIdValue) ? siteIdValue : null,
+      isFavorite: false,
       urls: url ? [url] : [],
       urlError: null,
     };
   } catch (error) {
     return {
       ...channel,
+      siteId: null,
+      isFavorite: false,
       urls: [],
       urlError: getRequestErrorMessage(error),
     };
@@ -414,6 +465,7 @@ async function loadEnvironmentChannels(
 
 async function loadEnvironmentDashboard(
   environment: BigCommerceEnvironmentConnection,
+  isFavorite: boolean,
 ): Promise<EnvironmentDashboard> {
   const entries = await Promise.all(
     metricDefinitions.map((definition) => loadMetric(environment, definition)),
@@ -429,6 +481,7 @@ async function loadEnvironmentDashboard(
     id: environment.id,
     name: environment.name,
     storeHash: environment.storeHash,
+    isFavorite,
     status:
       availableCount === entries.length
         ? "connected"
@@ -441,7 +494,10 @@ async function loadEnvironmentDashboard(
 
 export async function getEnvironmentDashboards() {
   const user = await requireAppUser();
-  const environments = await getBigCommerceEnvironmentConnections(user.id);
+  const [environments, favoriteKeys] = await Promise.all([
+    getBigCommerceEnvironmentConnections(user.id),
+    getFavoriteResourceKeys(user.id, "environment"),
+  ]);
   const dashboards: EnvironmentDashboard[] = [];
 
   for (
@@ -450,10 +506,21 @@ export async function getEnvironmentDashboards() {
     index += ENVIRONMENT_CONCURRENCY
   ) {
     const batch = environments.slice(index, index + ENVIRONMENT_CONCURRENCY);
-    dashboards.push(...(await Promise.all(batch.map(loadEnvironmentDashboard))));
+    dashboards.push(
+      ...(await Promise.all(
+        batch.map((environment) =>
+          loadEnvironmentDashboard(
+            environment,
+            favoriteKeys.has(getEnvironmentFavoriteKey(environment.id)),
+          ),
+        ),
+      )),
+    );
   }
 
   return dashboards.sort((left, right) => {
+    const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
+    if (favoriteOrder !== 0) return favoriteOrder;
     const nameOrder = left.name.localeCompare(right.name, undefined, {
       sensitivity: "base",
     });
@@ -463,14 +530,29 @@ export async function getEnvironmentDashboards() {
 
 export async function getEnvironmentDetails(environmentId: number) {
   const user = await requireAppUser();
-  const environment = await getBigCommerceEnvironmentConnection(
-    user.id,
-    environmentId,
-  );
+  const [environment, favoriteKeys] = await Promise.all([
+    getBigCommerceEnvironmentConnection(user.id, environmentId),
+    getFavoriteResourceKeys(user.id, "channel"),
+  ]);
 
   if (!environment) {
     return null;
   }
 
-  return loadEnvironmentChannels(environment);
+  const details = await loadEnvironmentChannels(environment);
+  return {
+    ...details,
+    channels: details.channels
+      .map((channel) => ({
+        ...channel,
+        isFavorite: favoriteKeys.has(
+          getChannelFavoriteKey(environmentId, channel.id),
+        ),
+      }))
+      .sort((left, right) => {
+        const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
+        if (favoriteOrder !== 0) return favoriteOrder;
+        return channelNameCollator.compare(left.name, right.name);
+      }),
+  };
 }
