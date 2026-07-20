@@ -2,6 +2,21 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Browse catalogs in captured locales
+
+### Prompt
+
+> when a snapshot or catalog contains more than one locale, display a locale selector next to the currency, and display translations
+>
+> perfect validate
+
+### Summary
+
+- Added a locale selector beside the currency for live channel and snapshot catalogs with multiple locales.
+- Loaded live BigCommerce translations server-side and reused immutable captured translations while browsing snapshots.
+- Translated category names plus product names and descriptions with original-value fallback, preserved the locale through category links, and formatted prices for the selected locale.
+- Validated the implementation with TypeScript, lint, whitespace, and a production build before documenting, branching, committing, merging, and pushing the phase.
+
 ## 2026-07-20 — Mark localized snapshots automatically
 
 ### Prompt

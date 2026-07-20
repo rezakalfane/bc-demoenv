@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate locale-aware catalog browsing
+
+- **Date:** 2026-07-20
+- **Source:** `feature/catalog-locale-browser`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated locale selection and translated product/category browsing for live channels and immutable snapshots after TypeScript, lint, whitespace, and production-build validation.
+
+### Commit — Add locale-aware catalog browsing
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/catalog-locale-browser`
+- **Type:** Feature commit
+
+- Added a locale selector beside catalog currency when more than one channel locale is available.
+- Loaded paginated BigCommerce product and category translations for live channels and parsed captured translations from snapshot manifests.
+- Applied translated names and descriptions with original catalog fallback, locale-aware price formatting, and locale-preserving category navigation.
+- Updated README, implementation details, prompt History, and Changelog.
+
 ### Merge — Integrate computed localized snapshot tags
 
 - **Date:** 2026-07-20

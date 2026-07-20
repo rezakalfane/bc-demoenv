@@ -10,6 +10,7 @@ import { SnapshotRestore } from "@/components/snapshot-restore";
 import { CatalogHistory } from "@/components/catalog-history";
 import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
+import { CatalogLocaleSelector } from "@/components/catalog-locale-selector";
 import { requireAppUser } from "@/lib/auth";
 import { getChannelCatalog } from "@/lib/bigcommerce-catalog";
 import {
@@ -44,7 +45,10 @@ export default async function ChannelPage({
   searchParams,
 }: {
   params: Promise<{ environmentId: string; channelId: string }>;
-  searchParams: Promise<{ category?: string | string[] }>;
+  searchParams: Promise<{
+    category?: string | string[];
+    locale?: string | string[];
+  }>;
 }) {
   const [{ environmentId, channelId }, query] = await Promise.all([
     params,
@@ -56,6 +60,9 @@ export default async function ChannelPage({
     ? query.category[0]
     : query.category;
   const parsedCategoryId = Number(requestedCategory);
+  const requestedLocale = Array.isArray(query.locale)
+    ? query.locale[0]
+    : query.locale;
 
   if (
     !Number.isSafeInteger(parsedEnvironmentId) ||
@@ -68,7 +75,7 @@ export default async function ChannelPage({
 
   const user = await requireAppUser();
   const [catalog, snapshotSuggestions, allSnapshots, restoreDestinations, history, channelFavoriteKeys, snapshotFavoriteKeys] = await Promise.all([
-    getChannelCatalog(parsedEnvironmentId, parsedChannelId),
+    getChannelCatalog(parsedEnvironmentId, parsedChannelId, requestedLocale),
     getLatestCatalogSnapshotSeries(user.id),
     getCatalogSnapshots(user.id),
     getCatalogRestoreDestinations(),
@@ -81,7 +88,7 @@ export default async function ChannelPage({
     notFound();
   }
 
-  const priceFormatter = new Intl.NumberFormat("en", {
+  const priceFormatter = new Intl.NumberFormat(catalog.activeLocale ?? "en", {
     style: "currency",
     currency: catalog.currency,
   });
@@ -226,6 +233,7 @@ export default async function ChannelPage({
                   categories={catalog.categories}
                   basePath={basePath}
                   selectedCategoryId={selectedCategory?.id ?? null}
+                  locale={catalog.activeLocale ?? undefined}
                 />
               )}
             </aside>
@@ -243,9 +251,15 @@ export default async function ChannelPage({
                     </span>
                   ) : null}
                 </h2>
-                <p className="text-xs text-black/40 dark:text-white/40">
-                  {catalog.currency} prices
-                </p>
+                <div className="flex shrink-0 items-center gap-2 text-xs text-black/40 dark:text-white/40">
+                  <span>{catalog.currency} prices</span>
+                  {catalog.locales.length > 1 && catalog.activeLocale ? (
+                    <CatalogLocaleSelector
+                      locales={catalog.locales}
+                      activeLocale={catalog.activeLocale}
+                    />
+                  ) : null}
+                </div>
               </div>
 
               {catalog.productsError ? (

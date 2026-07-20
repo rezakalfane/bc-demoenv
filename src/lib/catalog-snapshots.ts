@@ -3,6 +3,13 @@ import "server-only";
 import { requireAppUser } from "@/lib/auth";
 import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
 import {
+  applyCatalogTranslations,
+  getSnapshotLocaleTranslations,
+  parseCatalogLocales,
+  selectCatalogLocale,
+  type CatalogLocale,
+} from "@/lib/catalog-localization";
+import {
   hasCapturedTranslations,
   SNAPSHOT_RESTORE_GROUPS,
   type CapturedConfigurationGroup,
@@ -155,6 +162,8 @@ export type CatalogSnapshotView = {
   categories: CatalogCategory[];
   products: CatalogProduct[];
   currency: string;
+  locales: CatalogLocale[];
+  activeLocale: string | null;
   availableRestoreGroups: SnapshotRestoreGroup[];
   hasTranslations: boolean;
   error: string | null;
@@ -2290,6 +2299,7 @@ function parsePreviewProducts(value: unknown) {
 
 export async function getCatalogSnapshotView(
   snapshotId: number,
+  requestedLocale?: string | null,
 ): Promise<CatalogSnapshotView | null> {
   const user = await requireAppUser();
   const snapshot = await getAccessibleCatalogSnapshot(user.id, snapshotId);
@@ -2320,6 +2330,31 @@ export async function getCatalogSnapshotView(
       : [];
     const currency = readString(preview.currency).toUpperCase();
     const configuration = asRecord(manifest?.configuration);
+    const typedConfiguration = manifest?.configuration as
+      | CapturedSnapshotConfiguration
+      | undefined;
+    const localizationResources = typedConfiguration?.localization?.resources;
+    const locales = parseCatalogLocales(
+      localizationResources?.channelLocales?.data,
+    );
+    const activeLocale = selectCatalogLocale(locales, requestedLocale);
+    const translations = activeLocale && locales.length > 1
+      ? applyCatalogTranslations(
+          categories,
+          parsePreviewProducts(preview.products),
+          getSnapshotLocaleTranslations(
+            localizationResources?.categoryTranslations?.data,
+            activeLocale.code,
+          ),
+          getSnapshotLocaleTranslations(
+            localizationResources?.productTranslations?.data,
+            activeLocale.code,
+          ),
+        )
+      : {
+          categories,
+          products: parsePreviewProducts(preview.products),
+        };
     const availableRestoreGroups = SNAPSHOT_RESTORE_GROUPS.flatMap((group) =>
       group.id === "catalog" || asRecord(configuration?.[group.id])
         ? [group.id]
@@ -2330,12 +2365,14 @@ export async function getCatalogSnapshotView(
       summary: snapshot,
       versions,
       isOwner,
-      categories,
-      products: parsePreviewProducts(preview.products),
+      categories: translations.categories,
+      products: translations.products,
       currency: /^[A-Z]{3}$/.test(currency) ? currency : "USD",
+      locales,
+      activeLocale: activeLocale?.code ?? null,
       availableRestoreGroups,
       hasTranslations: hasCapturedTranslations(
-        manifest?.configuration as CapturedSnapshotConfiguration | undefined,
+        typedConfiguration,
       ),
       error: null,
     };
@@ -2347,6 +2384,8 @@ export async function getCatalogSnapshotView(
       categories: [],
       products: [],
       currency: "USD",
+      locales: [],
+      activeLocale: null,
       availableRestoreGroups: ["catalog"],
       hasTranslations: false,
       error: "This snapshot payload is invalid or uses an unsupported format.",
