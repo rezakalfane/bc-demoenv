@@ -1,9 +1,11 @@
 import "server-only";
 
-import { createClient, type Client } from "@libsql/client";
+import { createClient, type Client, type InStatement } from "@libsql/client";
 import { decryptSecret, encryptSecret } from "@/lib/secret-encryption";
 import {
+  hasCapturedTranslations,
   SNAPSHOT_RESTORE_GROUPS,
+  type CapturedSnapshotConfiguration,
   type SnapshotRestoreGroup,
 } from "@/lib/snapshot-configuration";
 
@@ -198,6 +200,45 @@ function getClient() {
   return client;
 }
 
+function isTransientDatabaseReadError(error: unknown) {
+  const message = error instanceof Error
+    ? `${error.name}: ${error.message} ${String(error.cause ?? "")}`
+    : String(error);
+
+  return /(?:\b50[234]\b|server_error|network error|fetch failed|econnreset|etimedout|socket hang up)/i.test(
+    message,
+  );
+}
+
+async function executeDatabaseReadWithRetry(
+  statement: InStatement,
+) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await getClient().execute(statement);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientDatabaseReadError(error) || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 150 * 2 ** attempt));
+    }
+  }
+
+  throw lastError;
+}
+
+function payloadHasCapturedTranslations(payloadJson: string) {
+  try {
+    const payload = JSON.parse(payloadJson) as {
+      configuration?: CapturedSnapshotConfiguration;
+    };
+    return hasCapturedTranslations(payload.configuration) ? 1 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function ensureSchema() {
   schemaReady ??= (async () => {
     const db = getClient();
@@ -261,6 +302,7 @@ async function ensureSchema() {
         image_count INTEGER NOT NULL,
         metafield_count INTEGER NOT NULL,
         payload_bytes INTEGER NOT NULL,
+        has_translations INTEGER NOT NULL DEFAULT 0 CHECK(has_translations IN (0, 1)),
         payload_json TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -288,6 +330,40 @@ async function ensureSchema() {
       await db.execute(
         "ALTER TABLE catalog_snapshots ADD COLUMN published_at TEXT",
       );
+    }
+
+    const hasTranslations = snapshotColumns.rows.some(
+      (column) => column.name === "has_translations",
+    );
+
+    if (!hasTranslations) {
+      await db.execute(
+        "ALTER TABLE catalog_snapshots ADD COLUMN has_translations INTEGER",
+      );
+      await db.execute(`
+        UPDATE catalog_snapshots
+        SET has_translations = CASE WHEN json_valid(payload_json) AND (
+          EXISTS (
+            SELECT 1
+            FROM json_each(
+              payload_json,
+              '$.configuration.localization.resources.productTranslations.data'
+            ) AS product_translation_locale
+            WHERE json_type(product_translation_locale.value, '$.data.edges') = 'array'
+              AND json_array_length(product_translation_locale.value, '$.data.edges') > 0
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM json_each(
+              payload_json,
+              '$.configuration.localization.resources.categoryTranslations.data'
+            ) AS category_translation_locale
+            WHERE json_type(category_translation_locale.value, '$.data.edges') = 'array'
+              AND json_array_length(category_translation_locale.value, '$.data.edges') > 0
+          )
+        ) THEN 1 ELSE 0 END
+        WHERE has_translations IS NULL
+      `);
     }
 
     await db.execute("DROP INDEX IF EXISTS catalog_snapshots_user_name_idx");
@@ -474,7 +550,10 @@ async function ensureSchema() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (operation_id, product_index)
     )`);
-  })();
+  })().catch((error) => {
+    schemaReady = undefined;
+    throw error;
+  });
 
   return schemaReady;
 }
@@ -1383,34 +1462,10 @@ const catalogSnapshotColumns = `
   image_count,
   metafield_count,
   payload_bytes,
+  has_translations,
   published_at,
   created_at,
   updated_at
-`;
-
-const catalogSnapshotHasTranslationsSql = `
-  CASE WHEN json_valid(payload_json) AND (
-    EXISTS (
-      SELECT 1
-      FROM json_tree(
-        payload_json,
-        '$.configuration.localization.resources.productTranslations.data'
-      ) AS product_translation_tree
-      WHERE product_translation_tree.key = 'edges'
-        AND product_translation_tree.type = 'array'
-        AND json_array_length(product_translation_tree.value) > 0
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM json_tree(
-        payload_json,
-        '$.configuration.localization.resources.categoryTranslations.data'
-      ) AS category_translation_tree
-      WHERE category_translation_tree.key = 'edges'
-        AND category_translation_tree.type = 'array'
-        AND json_array_length(category_translation_tree.value) > 0
-    )
-  ) THEN 1 ELSE 0 END
 `;
 
 export async function getCatalogSnapshots(
@@ -1468,14 +1523,13 @@ export async function getCatalogSnapshotSeries(
   userId: string,
 ): Promise<CatalogSnapshotSeriesSummary[]> {
   await ensureSchema();
-  const ownedResult = await getClient().execute({
+  const ownedResult = await executeDatabaseReadWithRetry({
     sql: `
       SELECT ${catalogSnapshotColumns},
-             ${catalogSnapshotHasTranslationsSql} AS has_translations,
              version_count, published_snapshot_id, published_version
       FROM (
         SELECT
-          ${catalogSnapshotColumns}, payload_json,
+          ${catalogSnapshotColumns},
           COUNT(*) OVER (
             PARTITION BY name COLLATE NOCASE
           ) AS version_count,
@@ -1498,10 +1552,9 @@ export async function getCatalogSnapshotSeries(
     args: [userId],
   });
 
-  const sharedResult = await getClient().execute({
+  const sharedResult = await executeDatabaseReadWithRetry({
     sql: `
       SELECT ${catalogSnapshotColumns},
-             ${catalogSnapshotHasTranslationsSql} AS has_translations,
              1 AS version_count,
              id AS published_snapshot_id, snapshot_version AS published_version
       FROM catalog_snapshots
@@ -1966,12 +2019,14 @@ export async function addCatalogSnapshot(
         image_count,
         metafield_count,
         payload_bytes,
+        has_translations,
         payload_json
       )
       SELECT
         ?,
         ?,
         COALESCE(MAX(version_number), 0) + 1,
+        ?,
         ?,
         ?,
         ?,
@@ -2011,6 +2066,7 @@ export async function addCatalogSnapshot(
       input.imageCount,
       input.metafieldCount,
       input.payloadBytes,
+      payloadHasCapturedTranslations(input.payloadJson),
       input.payloadJson,
       userId,
       input.name,
@@ -2065,11 +2121,11 @@ export async function completeCatalogSnapshotCapture(
           source_environment_id, source_environment_name, source_store_hash,
           source_channel_id, source_channel_name, category_count,
           product_count, variant_count, image_count, metafield_count,
-          payload_bytes, payload_json
+          payload_bytes, has_translations, payload_json
         )
         SELECT
           ?, ?, COALESCE(MAX(version_number), 0) + 1, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?
         FROM (
           SELECT snapshot_version AS version_number
           FROM catalog_snapshots
@@ -2096,6 +2152,7 @@ export async function completeCatalogSnapshotCapture(
         input.imageCount,
         input.metafieldCount,
         input.payloadBytes,
+        payloadHasCapturedTranslations(input.payloadJson),
         input.payloadJson,
         userId,
         input.name,

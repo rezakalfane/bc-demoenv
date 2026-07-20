@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate persisted localized snapshot metadata
+
+- **Date:** 2026-07-20
+- **Source:** `fix/persist-localized-snapshot-metadata`
+- **Target:** `main`
+- **Type:** Non-fast-forward fix merge
+
+Integrated capture-time localization metadata, a one-time legacy backfill, and resilient Turso snapshot-series reads after TypeScript, lint, whitespace, production-build, and configured-database validation.
+
+### Commit — Persist localized snapshot metadata
+
+- **Date:** 2026-07-20
+- **Branch:** `fix/persist-localized-snapshot-metadata`
+- **Type:** Fix commit
+
+- Persisted `has_translations` per immutable snapshot version during direct and durable capture finalization.
+- Backfilled existing versions once and removed recursive full-manifest JSON scans from the Snapshots index.
+- Added transient Turso read retries and reset failed schema initialization so brief gateway failures can recover.
+- Updated README, implementation details, database schema, prompt History, and Changelog.
+
 ### Merge — Integrate locale-aware catalog browsing
 
 - **Date:** 2026-07-20
