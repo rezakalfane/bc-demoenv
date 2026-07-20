@@ -4,6 +4,27 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate snapshot version comparison
+
+- **Date:** 2026-07-20
+- **Source:** `feature/snapshot-version-diff`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the authenticated, server-side snapshot version diff viewer with stable catalog/configuration identity matching and bounded record-level previews after TypeScript, lint, and whitespace validation.
+
+### Commit — Add snapshot version comparison
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/snapshot-version-diff`
+- **Type:** Feature commit
+
+- Added an authenticated Snapshot detail action for directional comparison between two immutable versions in the same series.
+- Added server-side stable-identity diffing for categories, products, variants, images, category/product/variant metafields, and captured configuration.
+- Added aggregate added/removed/changed/unchanged counts plus expandable, bounded record-level change previews.
+- Kept full manifests server-side and reused the existing tenant/publication access predicate before parsing or comparing payloads.
+- Updated README, implementation details, prompt History, and Changelog.
+
 ### Merge — Integrate Workflow observability and detailed traces
 
 - **Date:** 2026-07-20

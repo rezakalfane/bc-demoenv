@@ -4,6 +4,7 @@ import { CatalogCategoryTree } from "@/components/catalog-category-tree";
 import { CatalogProductCard } from "@/components/catalog-product-card";
 import { SnapshotRestore } from "@/components/snapshot-restore";
 import { SnapshotVersionHistory } from "@/components/snapshot-version-history";
+import { SnapshotVersionDiff } from "@/components/snapshot-version-diff";
 import { SnapshotDelete } from "@/components/snapshot-delete";
 import { SnapshotCreateVersion } from "@/components/snapshot-create-version";
 import { SnapshotSettingsInspector } from "@/components/snapshot-settings-inspector";
@@ -211,6 +212,11 @@ export default async function SnapshotPage({
                   snapshotName={snapshot.summary.name}
                 />
                 <SnapshotVersionHistory
+                  name={snapshot.summary.name}
+                  currentSnapshotId={snapshot.summary.id}
+                  versions={snapshot.versions}
+                />
+                <SnapshotVersionDiff
                   name={snapshot.summary.name}
                   currentSnapshotId={snapshot.summary.id}
                   versions={snapshot.versions}
