@@ -97,34 +97,39 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
     const operationId = operation.operationId;
     const poll = async () => {
       if (!operationId) return;
-      const response = await fetch(`/api/catalog-operations/${operationId}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const next = await response.json() as { status: string; currentStep: string; stepIndex: number; totalSteps: number; snapshotId: number | null; error: string | null };
-      setRemote(next);
-      if (next.status === "completed") {
-        const isAtCaptureOrigin = operation.originPath
-          ? pathname === operation.originPath
-          : snapshotId !== undefined
-            ? operation.snapshotId === snapshotId
-            : environmentId !== undefined && channelId !== undefined &&
-              operation.environmentId === environmentId &&
-              operation.channelId === channelId;
-        if (
-          redirectToCreatedSnapshot &&
-          isAtCaptureOrigin &&
-          operation.kind === "snapshot" &&
-          next.snapshotId
-        ) {
+      try {
+        const response = await fetch(`/api/catalog-operations/${operationId}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const next = await response.json() as { status: string; currentStep: string; stepIndex: number; totalSteps: number; snapshotId: number | null; error: string | null };
+        setRemote(next);
+        if (next.status === "completed") {
+          const isAtCaptureOrigin = operation.originPath
+            ? pathname === operation.originPath
+            : snapshotId !== undefined
+              ? operation.snapshotId === snapshotId
+              : environmentId !== undefined && channelId !== undefined &&
+                operation.environmentId === environmentId &&
+                operation.channelId === channelId;
+          if (
+            redirectToCreatedSnapshot &&
+            isAtCaptureOrigin &&
+            operation.kind === "snapshot" &&
+            next.snapshotId
+          ) {
+            finishCatalogOperation();
+            router.push(`/snapshots/${next.snapshotId}`);
+            return;
+          }
+          router.refresh();
+          window.setTimeout(finishCatalogOperation, 4000);
+        } else if (next.status === "cancelled") {
           finishCatalogOperation();
-          router.push(`/snapshots/${next.snapshotId}`);
-          return;
+          if (redirectOnCancelTo) router.push(redirectOnCancelTo);
+          else router.refresh();
         }
-        router.refresh();
-        window.setTimeout(finishCatalogOperation, 4000);
-      } else if (next.status === "cancelled") {
-        finishCatalogOperation();
-        if (redirectOnCancelTo) router.push(redirectOnCancelTo);
-        else router.refresh();
+      } catch {
+        // A stopped or restarting server is transient; keep the current progress
+        // visible and let the next polling interval resume from the same operation.
       }
     };
     void poll();

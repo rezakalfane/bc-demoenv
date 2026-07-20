@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b100d">
+    <title>Server unavailable · BigCommerce Demo Env</title>
+    <style>
+      :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; color: #f4f7f5; background: radial-gradient(circle at 15% 0%, rgb(16 185 129 / 10%), transparent 28rem), #0b100d; }
+      main { width: min(92vw, 38rem); padding: 2rem; border: 1px solid rgb(255 255 255 / 12%); border-radius: 1.5rem; background: rgb(20 25 22 / 92%); box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 35%); }
+      .brand { display: flex; align-items: center; gap: .75rem; color: #6ee7b7; font-size: .78rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+      .logo { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: .75rem; color: white; background: #10b981; font-weight: 800; letter-spacing: 0; }
+      h1 { margin: 1.5rem 0 .65rem; font-size: clamp(1.8rem, 5vw, 2.65rem); line-height: 1.05; letter-spacing: -.04em; }
+      p { margin: 0; color: rgb(244 247 245 / 62%); line-height: 1.6; }
+      .status { display: flex; align-items: center; gap: .65rem; margin-top: 1.6rem; padding: .9rem 1rem; border: 1px solid rgb(16 185 129 / 22%); border-radius: .9rem; color: #a7f3d0; background: rgb(16 185 129 / 8%); font-size: .9rem; }
+      .pulse { width: .65rem; height: .65rem; flex: none; border-radius: 999px; background: #34d399; box-shadow: 0 0 0 0 rgb(52 211 153 / 35%); animation: pulse 1.6s infinite; }
+      .actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.5rem; }
+      button { min-height: 2.5rem; padding: 0 1rem; border: 1px solid rgb(110 231 183 / 28%); border-radius: .75rem; color: #a7f3d0; background: rgb(16 185 129 / 10%); font: inherit; font-size: .9rem; font-weight: 700; cursor: pointer; }
+      button:hover { background: rgb(16 185 129 / 17%); }
+      small { color: rgb(244 247 245 / 42%); }
+      @keyframes pulse { 70% { box-shadow: 0 0 0 .45rem rgb(52 211 153 / 0%); } 100% { box-shadow: 0 0 0 0 rgb(52 211 153 / 0%); } }
+      @media (max-width: 34rem) { main { padding: 1.4rem; } .actions { align-items: stretch; flex-direction: column-reverse; } button { width: 100%; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand"><span class="logo">BC</span><span>BigCommerce Demo Env</span></div>
+      <h1>The server is unavailable</h1>
+      <p>Your requested page is preserved. This screen will reconnect automatically and reload the same page as soon as the application is available again.</p>
+      <div class="status" role="status" aria-live="polite"><span class="pulse" aria-hidden="true"></span><span id="status">Waiting for the server…</span></div>
+      <div class="actions">
+        <small id="attempt">Checking automatically</small>
+        <button id="retry" type="button">Try again now</button>
+      </div>
+    </main>
+    <script>
+      (() => {
+        const status = document.getElementById("status");
+        const attempt = document.getElementById("attempt");
+        const retry = document.getElementById("retry");
+        let checking = false;
+        let timer;
+
+        const check = async () => {
+          if (checking) return;
+          checking = true;
+          status.textContent = "Checking the server…";
+          attempt.textContent = `Last check ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+          try {
+            const response = await fetch(window.location.href, {
+              method: "HEAD",
+              cache: "no-store",
+              headers: { "X-BC-DemoEnv-Healthcheck": "1" },
+            });
+            if (response.status < 500) {
+              status.textContent = "Server available. Reloading…";
+              window.location.reload();
+              return;
+            }
+          } catch {
+            // The next scheduled check will retry.
+          } finally {
+            checking = false;
+          }
+          status.textContent = "Waiting for the server…";
+          window.clearTimeout(timer);
+          timer = window.setTimeout(check, 2500);
+        };
+
+        retry.addEventListener("click", check);
+        window.addEventListener("online", check);
+        timer = window.setTimeout(check, 700);
+      })();
+    </script>
+  </body>
+</html>

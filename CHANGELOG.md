@@ -4,6 +4,27 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate offline recovery and Operations table polish
+
+- **Date:** 2026-07-20
+- **Source:** `feature/offline-recovery`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the branded network-first offline shell, automatic exact-route recovery, transient operation-poll resilience, and stable compact Operations table columns after TypeScript, lint, whitespace, service-worker syntax, and live stop/restart verification.
+
+### Commit — Add graceful offline recovery
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/offline-recovery`
+- **Type:** Feature commit
+
+- Added a generic service-worker-cached offline shell without caching authenticated pages, API responses, RSC payloads, credentials, or catalog data.
+- Preserved failed navigation URLs and automatically reloaded the same page when a 2.5-second availability probe detected the returning server.
+- Treated catalog-operation polling connection failures as transient so local server stops no longer create an unhandled Next.js runtime overlay.
+- Stabilized Operations table column allocations, truncated long progress labels, and stacked dates above times for compact scanning.
+- Updated README, implementation details, prompt History, and Changelog.
+
 ### Merge — Integrate resumable snapshot capture
 
 - **Date:** 2026-07-20

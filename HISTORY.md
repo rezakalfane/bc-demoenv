@@ -2,6 +2,36 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Add graceful offline recovery
+
+### Prompt
+
+> Is it possible to have some kind of better offline error page when I stop the server, and reload the right page once it's started again?
+>
+> perfect, working fine
+
+### Summary
+
+- Added a generic service-worker-cached server-unavailable shell that appears for failed document navigations after one successful application load.
+- Preserved the exact requested application URL while offline, probed the server every 2.5 seconds, and automatically reloaded that route when the Next.js server returned.
+- Kept authenticated pages, RSC responses, API payloads, credentials, and catalog data out of the offline cache.
+- Converted catalog-operation progress polling connection failures into quiet transient retries instead of an unhandled Next.js development error overlay.
+- Verified the fallback by stopping the local server, reloading a nested environment route, restarting the server, and observing automatic restoration of that same page.
+
+## 2026-07-20 — Refine the Operations table layout
+
+### Prompt
+
+> in operations, keep the progress column same width (cut text if necessary)
+>
+> can you improve the table layout, maybe put date and time on two lines?
+
+### Summary
+
+- Retained a fixed allocation for the progress/result column and truncated long current-step labels with their complete value available as a tooltip.
+- Applied a stable table layout and explicit widths across identifiers, operation metadata, targets, progress, update time, duration, and actions.
+- Split operation timestamps into stacked date and time lines and vertically aligned the remaining cells for a denser, more readable ledger.
+
 ## 2026-07-20 — Resume snapshot capture after a local server restart
 
 ### Prompt
