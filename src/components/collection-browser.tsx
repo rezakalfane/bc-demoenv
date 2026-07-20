@@ -20,6 +20,7 @@ export type CollectionColumn = {
 export type CollectionBrowserItem = {
   id: string;
   searchText: string;
+  tags?: string[];
   isShared?: boolean;
   card: ReactNode;
   cells: ReactNode[];
@@ -35,6 +36,7 @@ export async function CollectionBrowser({
   tableClassName = "min-w-[880px]",
   emptyMessage = "No items match your search.",
   allowSharedToggle = false,
+  filterTags = [],
 }: {
   collectionId: string;
   ariaLabel: string;
@@ -45,6 +47,7 @@ export async function CollectionBrowser({
   tableClassName?: string;
   emptyMessage?: string;
   allowSharedToggle?: boolean;
+  filterTags?: string[];
 }) {
   const user = await requireAppUser();
   const preference = await getCollectionViewPreference(user.id, collectionId);
@@ -64,6 +67,7 @@ export async function CollectionBrowser({
         allowSharedToggle={allowSharedToggle}
         initialView={initialView}
         initialShowShared={initialShowShared}
+        filterTags={filterTags}
       />
 
       <div
@@ -78,6 +82,7 @@ export async function CollectionBrowser({
             className="contents"
             data-collection-entry
             data-search-text={item.searchText.toLocaleLowerCase("en-US")}
+            data-tags={JSON.stringify(item.tags ?? [])}
             data-shared={item.isShared ? "true" : "false"}
           >
             <Fragment>{item.card}</Fragment>
@@ -112,6 +117,7 @@ export async function CollectionBrowser({
                   hidden={!initialShowShared && item.isShared}
                   data-collection-entry
                   data-search-text={item.searchText.toLocaleLowerCase("en-US")}
+                  data-tags={JSON.stringify(item.tags ?? [])}
                   data-shared={item.isShared ? "true" : "false"}
                   className="align-middle transition hover:bg-black/[0.025] dark:hover:bg-white/[0.025]"
                 >

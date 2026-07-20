@@ -2,6 +2,32 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Add custom snapshot series tags
+
+### Prompt
+
+> Allow to add or remove custom tags after the computed ones (with a + icon), these tags can then be used to filter snapshots in the Snapshots list. autocomplete existing tags in the database
+>
+> tags are not version related, right? it's global to the snapshot
+>
+> you should be able to select multiple tags
+>
+> you should be able to select multiple tags in snapshots list
+>
+> add a slight horizontal spacing between tags
+>
+> It takes time before more tags can be added, can it be done async?
+>
+> Perfect you can validate that phase
+
+### Summary
+
+- Added case-insensitive, tenant-scoped tags keyed to a snapshot owner/name series, so every immutable version shares the same custom labels.
+- Added inline add/remove controls after computed badges, autocomplete from existing database tags, ownership checks, and automatic rename/deletion reconciliation.
+- Made tag writes optimistic and independently concurrent so another tag can be edited immediately; only the affected tag rolls back if its background save fails.
+- Exposed tags on owned and published read-only snapshot cards and tables, with a spaced multi-select picker that applies AND matching across selected tags.
+- Documented the new `catalog_snapshot_tags` table, tenancy model, and browsing behavior.
+
 ## 2026-07-20 — Compare immutable snapshot versions
 
 ### Prompt

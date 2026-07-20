@@ -164,6 +164,14 @@ export function getSnapshotFavoriteKey(ownerUserId: string, name: string) {
   return `snapshot:${ownerUserId}:${getCatalogSnapshotCaptureKey(name)}`;
 }
 
+export function getCatalogSnapshotSeriesKey(ownerUserId: string, name: string) {
+  return `${ownerUserId}:${getCatalogSnapshotCaptureKey(name)}`;
+}
+
+export function normalizeCatalogSnapshotTag(tag: string) {
+  return tag.trim().replace(/\s+/g, " ");
+}
+
 let client: Client | undefined;
 let schemaReady: Promise<void> | undefined;
 
@@ -309,6 +317,19 @@ async function ensureSchema() {
     `);
     await db.execute(
       "CREATE INDEX IF NOT EXISTS catalog_snapshot_events_user_name_idx ON catalog_snapshot_events(user_id, snapshot_name, id DESC)",
+    );
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS catalog_snapshot_tags (
+        user_id TEXT NOT NULL,
+        snapshot_name TEXT NOT NULL COLLATE NOCASE,
+        tag TEXT NOT NULL COLLATE NOCASE CHECK(length(tag) BETWEEN 1 AND 32),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, snapshot_name, tag)
+      )
+    `);
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS catalog_snapshot_tags_user_tag_idx ON catalog_snapshot_tags(user_id, tag COLLATE NOCASE)",
     );
 
     await db.execute(`
@@ -1469,6 +1490,158 @@ export async function getCatalogSnapshotSeries(
   })).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
+export async function getAccessibleCatalogSnapshotTagSeries(userId: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT tags.user_id, tags.snapshot_name, tags.tag
+      FROM catalog_snapshot_tags AS tags
+      WHERE tags.user_id = ? OR EXISTS (
+        SELECT 1
+        FROM catalog_snapshots AS snapshots
+        WHERE snapshots.user_id = tags.user_id
+          AND snapshots.name = tags.snapshot_name COLLATE NOCASE
+          AND snapshots.published_at IS NOT NULL
+      )
+      ORDER BY tags.tag COLLATE NOCASE ASC
+    `,
+    args: [userId],
+  });
+  const tagsBySeries = new Map<string, string[]>();
+  for (const row of result.rows) {
+    const ownerUserId = String(row.user_id);
+    const snapshotName = String(row.snapshot_name);
+    const key = getCatalogSnapshotSeriesKey(ownerUserId, snapshotName);
+    const tags = tagsBySeries.get(key) ?? [];
+    tags.push(String(row.tag));
+    tagsBySeries.set(key, tags);
+  }
+  return tagsBySeries;
+}
+
+export async function getCatalogSnapshotTags(ownerUserId: string, name: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT tag
+      FROM catalog_snapshot_tags
+      WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE
+      ORDER BY tag COLLATE NOCASE ASC
+    `,
+    args: [ownerUserId, name],
+  });
+  return result.rows.map((row) => String(row.tag));
+}
+
+export async function getCatalogSnapshotTagSuggestions(userId: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT tag
+      FROM catalog_snapshot_tags
+      WHERE user_id = ?
+      GROUP BY tag COLLATE NOCASE
+      ORDER BY tag COLLATE NOCASE ASC
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => String(row.tag));
+}
+
+export async function addCatalogSnapshotTag(
+  userId: string,
+  snapshotId: number,
+  requestedTag: string,
+) {
+  await ensureSchema();
+  const tag = normalizeCatalogSnapshotTag(requestedTag);
+  if (tag.length < 1 || tag.length > 32) {
+    return { error: "Tags must contain between 1 and 32 characters.", tags: [] } as const;
+  }
+
+  const transaction = await getClient().transaction("write");
+  try {
+    const snapshotResult = await transaction.execute({
+      sql: "SELECT name FROM catalog_snapshots WHERE user_id = ? AND id = ? LIMIT 1",
+      args: [userId, snapshotId],
+    });
+    const snapshot = snapshotResult.rows[0];
+    if (!snapshot) {
+      await transaction.rollback();
+      return { error: "Snapshot not found.", tags: [] } as const;
+    }
+    const name = String(snapshot.name);
+    const existingResult = await transaction.execute({
+      sql: "SELECT 1 FROM catalog_snapshot_tags WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE AND tag = ? COLLATE NOCASE LIMIT 1",
+      args: [userId, name, tag],
+    });
+    if (existingResult.rows.length > 0) {
+      const tagsResult = await transaction.execute({
+        sql: "SELECT tag FROM catalog_snapshot_tags WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE ORDER BY tag COLLATE NOCASE ASC",
+        args: [userId, name],
+      });
+      await transaction.commit();
+      return { error: null, tags: tagsResult.rows.map((row) => String(row.tag)) } as const;
+    }
+    const countResult = await transaction.execute({
+      sql: "SELECT COUNT(*) AS count FROM catalog_snapshot_tags WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE",
+      args: [userId, name],
+    });
+    if (Number(countResult.rows[0]?.count ?? 0) >= 12) {
+      await transaction.rollback();
+      return { error: "A snapshot can have up to 12 custom tags.", tags: [] } as const;
+    }
+    await transaction.execute({
+      sql: "INSERT INTO catalog_snapshot_tags (user_id, snapshot_name, tag) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+      args: [userId, name, tag],
+    });
+    const tagsResult = await transaction.execute({
+      sql: "SELECT tag FROM catalog_snapshot_tags WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE ORDER BY tag COLLATE NOCASE ASC",
+      args: [userId, name],
+    });
+    await transaction.commit();
+    return { error: null, tags: tagsResult.rows.map((row) => String(row.tag)) } as const;
+  } finally {
+    transaction.close();
+  }
+}
+
+export async function removeCatalogSnapshotTag(
+  userId: string,
+  snapshotId: number,
+  requestedTag: string,
+) {
+  await ensureSchema();
+  const tag = normalizeCatalogSnapshotTag(requestedTag);
+  if (!tag) return { error: "Invalid tag.", tags: [] } as const;
+
+  const transaction = await getClient().transaction("write");
+  try {
+    const snapshotResult = await transaction.execute({
+      sql: "SELECT name FROM catalog_snapshots WHERE user_id = ? AND id = ? LIMIT 1",
+      args: [userId, snapshotId],
+    });
+    const snapshot = snapshotResult.rows[0];
+    if (!snapshot) {
+      await transaction.rollback();
+      return { error: "Snapshot not found.", tags: [] } as const;
+    }
+    const name = String(snapshot.name);
+    await transaction.execute({
+      sql: "DELETE FROM catalog_snapshot_tags WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE AND tag = ? COLLATE NOCASE",
+      args: [userId, name, tag],
+    });
+    const tagsResult = await transaction.execute({
+      sql: "SELECT tag FROM catalog_snapshot_tags WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE ORDER BY tag COLLATE NOCASE ASC",
+      args: [userId, name],
+    });
+    await transaction.commit();
+    return { error: null, tags: tagsResult.rows.map((row) => String(row.tag)) } as const;
+  } finally {
+    transaction.close();
+  }
+}
+
 export async function getLatestCatalogSnapshotSeries(
   userId: string,
 ): Promise<CatalogSnapshotSummary[]> {
@@ -1684,6 +1857,10 @@ export async function renameCatalogSnapshotSeries(
     });
     await transaction.execute({
       sql: `UPDATE catalog_snapshot_events SET snapshot_name = ? WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE`,
+      args: [name, userId, previousName],
+    });
+    await transaction.execute({
+      sql: `UPDATE catalog_snapshot_tags SET snapshot_name = ? WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE`,
       args: [name, userId, previousName],
     });
     await transaction.execute({
@@ -1968,6 +2145,10 @@ export async function removeCatalogSnapshotSeries(userId: string, name: string) 
     await transaction.execute({
       sql: "DELETE FROM favorites WHERE resource_type = 'snapshot' AND resource_key = ?",
       args: [getSnapshotFavoriteKey(userId, name)],
+    });
+    await transaction.execute({
+      sql: "DELETE FROM catalog_snapshot_tags WHERE user_id = ? AND snapshot_name = ? COLLATE NOCASE",
+      args: [userId, name],
     });
     const result = await transaction.execute({
       sql: "DELETE FROM catalog_snapshots WHERE user_id = ? AND name = ? COLLATE NOCASE",
