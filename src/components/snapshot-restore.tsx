@@ -491,7 +491,7 @@ export function SnapshotRestore({
             ? "Add a reachable BigCommerce environment and channel first."
             : undefined
         }
-        className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] leading-none font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+        className="inline-flex h-6 items-center justify-center gap-1 rounded-md bg-emerald-600 px-2.5 text-[10px] leading-none font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
       >
         <RestoreIcon />
         Restore Snapshot

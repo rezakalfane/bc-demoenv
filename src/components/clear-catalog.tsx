@@ -83,7 +83,7 @@ export function ClearCatalog({ environmentId, channelId, channelName }: {
         type="button"
         disabled={isActionInProgress}
         onClick={() => { setConfirmation(""); setIsOpen(true); }}
-        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/8 px-3 py-1.5 text-[11px] leading-none font-semibold text-red-800 transition hover:bg-red-500/14 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-200"
+        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-red-500/30 bg-red-500/8 px-2.5 text-[10px] leading-none font-semibold text-red-800 transition hover:bg-red-500/14 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-200"
       >
         <TrashIcon />
         Clear catalog

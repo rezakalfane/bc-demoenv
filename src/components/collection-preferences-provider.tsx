@@ -12,6 +12,7 @@ import {
 export type ClientCollectionPreference = {
   viewMode: "cards" | "table";
   showShared: boolean;
+  sidebarCollapsed: boolean;
 };
 
 type CollectionPreferencesContextValue = {
@@ -25,6 +26,7 @@ type CollectionPreferencesContextValue = {
 const defaultPreference: ClientCollectionPreference = {
   viewMode: "cards",
   showShared: true,
+  sidebarCollapsed: false,
 };
 
 const CollectionPreferencesContext =
@@ -66,6 +68,7 @@ export function useCollectionPreference(collectionId: string) {
   const context = useContext(CollectionPreferencesContext);
   return {
     preference: context?.preferences[collectionId] ?? defaultPreference,
+    hasPreference: Boolean(context?.preferences[collectionId]),
     updatePreference: context?.updatePreference ?? (() => undefined),
   };
 }

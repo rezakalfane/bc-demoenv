@@ -11,9 +11,8 @@ const navigationItems = [
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
-export function AppNavigation() {
+export function AppNavigation({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname();
-  const compact = pathname === "/operations" || pathname.startsWith("/operations/");
 
   return (
     <nav aria-label="Main navigation" className="space-y-1">

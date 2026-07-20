@@ -144,7 +144,7 @@ export function SnapshotVersionHistory({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center justify-center gap-1.5 rounded-md bg-neutral-950 px-3 py-1.5 text-[11px] leading-none font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
+        className="inline-flex h-6 items-center justify-center gap-1 rounded-md bg-neutral-950 px-2.5 text-[10px] leading-none font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
       >
         <VersionsIcon />
         Choose version

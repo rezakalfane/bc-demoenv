@@ -3,6 +3,13 @@ import { CollectionToolbar } from "@/components/collection-toolbar";
 import { requireAppUser } from "@/lib/auth";
 import { getCollectionViewPreference } from "@/lib/db";
 
+const FOUR_COLUMN_COLLECTIONS = new Set([
+  "dashboard-environments",
+  "settings-environments",
+  "environment-channels",
+  "snapshot-series",
+]);
+
 export type CollectionColumn = {
   key: string;
   label: string;
@@ -25,6 +32,7 @@ export async function CollectionBrowser({
   columns,
   searchPlaceholder,
   cardsClassName = "grid gap-5 md:grid-cols-2 xl:grid-cols-3",
+  tableClassName = "min-w-[880px]",
   emptyMessage = "No items match your search.",
   allowSharedToggle = false,
 }: {
@@ -34,6 +42,7 @@ export async function CollectionBrowser({
   columns: CollectionColumn[];
   searchPlaceholder: string;
   cardsClassName?: string;
+  tableClassName?: string;
   emptyMessage?: string;
   allowSharedToggle?: boolean;
 }) {
@@ -60,7 +69,7 @@ export async function CollectionBrowser({
       <div
         data-collection-cards
         hidden={initialView !== "cards" || initialVisibleItems.length === 0}
-        className={cardsClassName}
+        className={`${FOUR_COLUMN_COLLECTIONS.has(collectionId) ? "collection-four-column-cards " : ""}${cardsClassName}`}
       >
         {items.map((item) => (
           <div
@@ -82,7 +91,7 @@ export async function CollectionBrowser({
         className="overflow-hidden rounded-2xl border border-black/8 bg-white/55 dark:border-white/8 dark:bg-white/3"
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] border-collapse text-left text-xs">
+          <table className={`w-full border-collapse text-left text-xs ${tableClassName}`}>
             <thead className="border-b border-black/8 bg-black/[0.025] dark:border-white/8 dark:bg-white/[0.025]">
               <tr>
                 {columns.map((column) => (

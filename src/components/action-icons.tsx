@@ -1,8 +1,8 @@
 import type { SVGProps } from "react";
 
 const iconProps: SVGProps<SVGSVGElement> = {
-  width: 10,
-  height: 10,
+  width: 9,
+  height: 9,
   viewBox: "0 0 24 24",
   fill: "none",
   stroke: "currentColor",

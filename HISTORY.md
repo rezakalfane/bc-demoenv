@@ -2,6 +2,130 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Align toolbar favorite controls
+
+### Prompt
+
+> That doesn't seem very aligned...Should we use the same kind of button for the favorite action as the other ones?
+
+### Summary
+
+- Changed compact Catalog and Snapshot favorite actions from circular controls to the same rounded-rectangle silhouette used by adjacent toolbar buttons.
+- Preserved the exact 24-pixel icon-only size and amber favorite state while leaving favorite controls on cards circular.
+
+## 2026-07-20 — Standardize catalog action controls at 24 pixels
+
+### Prompt
+
+> Let's make all of these buttons in Catalog and Snapshot view 24 pixels
+
+### Summary
+
+- Standardized every Catalog and Snapshot page toolbar action to an exact 24-pixel height.
+- Kept the compact 10-pixel labels and 9-pixel action icons aligned with the existing 24-pixel favorite control.
+- Applied the shared dimensions to capture, restore, clear, create-version, inspect, choose-version, history, and delete actions without changing modal controls.
+
+## 2026-07-20 — Clear stale activity indicators globally
+
+### Prompt
+
+> Even after a task has been finished, activity monitor is still there in the different pages until I can to the detail page where I can see the progress bar "completed" before it disappear.
+
+### Summary
+
+- Connected the authenticated layout's global operation observer to the browser's active-operation state so terminal workflows clear activity indicators without requiring a channel or snapshot detail-page visit.
+- Cleared completed, failed, and cancelled tasks only when their operation ID matches the locally tracked task, preventing a late result from dismissing a newer workflow.
+- Refreshed the current route after global cleanup so Dashboard, environment, channel, and snapshot surfaces immediately reconcile their server-derived state.
+
+## 2026-07-20 — Fix notification-panel stacking
+
+### Prompt
+
+> Looks like there is some zindex issue with the notification pop up which should be above
+
+### Summary
+
+- Moved the persistent notification panel into a document-body portal so the sidebar's backdrop-filter stacking context can no longer place page content above it.
+- Preserved its visual relationship with the bell by calculating a fixed viewport position on open and updating it during scrolling and resizing.
+- Extended outside-click detection across both the sidebar bell and portaled panel.
+
+## 2026-07-20 — Anchor toast notifications to the page
+
+### Prompt
+
+> Maybe toat notifications would be better at the top right on the page
+
+### Summary
+
+- Moved the transient toast layer through a document-body portal so it is consistently fixed to the page viewport's top-right.
+- Kept the notification bell and persistent inbox in the sidebar while preventing its backdrop filter from becoming the toast positioning context.
+
+## 2026-07-20 — Add a global notification center
+
+### Prompt
+
+> Let's add a notification icon (where would be the best place) that can show latest notifications, and a way to remove them with a little x icon. When displaying a notificaation in a pop-over, it should be automatically removed after 30 seconds. all notifications will go in that notification panel when clicking the notification icon (with a bade with number of notifications awaiting to be deleted), with a delete all action in the panel
+
+### Summary
+
+- Placed a global notification bell in the authenticated sidebar header, keeping it reachable in both expanded navigation and the collapsed icon rail.
+- Added a badge showing the number of retained operation notifications and an accessible popover with recent completion, failure, and manual-action details plus direct resource links.
+- Added individual × deletion and a **Delete all** action while retaining inbox entries until explicit cleanup.
+- Split transient and persistent behavior: new notifications still appear as dismissible popups that expire after 30 seconds, while the per-user inbox persists locally and synchronizes across browser tabs.
+
+## 2026-07-20 — Expand collapsed-shell card grids
+
+### Prompt
+
+> When menu is collapsed, I think we can go up to 4 columns for the card views
+
+### Summary
+
+- Expanded Dashboard environments, Settings environments, channel lists, and snapshot-series card grids to four columns on wide screens when the user's global sidebar is collapsed.
+- Applied the same responsive rule to card-mode loading skeletons so loading and loaded layouts remain aligned.
+- Preserved the existing live and captured product grids, which already use their own denser five-column layout.
+
+## 2026-07-20 — Make sidebar collapse global and refine action sizing
+
+### Prompt
+
+> Instead of making it per page preference, make the menu collapse global per user... icons and buttons display is still wrong
+
+### Summary
+
+- Moved sidebar collapse persistence to one tenant-scoped `app-shell` preference shared by every authenticated page, while carrying forward an existing collapsed page choice for users who had already saved one.
+- Kept card/table and shared-snapshot preferences scoped by page type and continued exposing the active page's saved view mode to its loading skeleton.
+- Returned snapshot and channel detail toolbars to a compact visual scale with smaller labels, icons, padding, and a dedicated 24-pixel favorite control.
+
+## 2026-07-20 — Match skeletons to persisted list mode
+
+### Prompt
+
+> Skeletons are not working as expected anymore. For lists, it should display a list skeleton, but displays a card skeleton all the time
+
+### Summary
+
+- Fixed streamed and prefetched loading boundaries so they no longer depend on a client context lookup that can temporarily fall back to card mode.
+- Exposed the current page type's persisted display mode on the authenticated app shell and made loading skeleton variants respond synchronously through CSS.
+- Kept both card and compact-table skeleton structures lightweight and available to the route boundary while displaying only the saved page-type variant.
+
+## 2026-07-20 — Refine product tables, actions, and page width
+
+### Prompt
+
+> can you adjust columns sizes so there is no horizontal scroll in the products table?
+
+> Also, buttons sizes have chnaged are doens't look as good as before, Maybe it's because of the favorite button which should be smaller?
+
+> Also can you generalize the full width + menu collaspe implemented in the Operations table, but with a button arrow (and persist that preferences for each user, per page type)?
+
+### Summary
+
+- Removed the shared table's forced minimum width from live and captured product browsers and assigned fixed percentage widths to Product, Description, Categories, and Price, with wrapping and line clamping to keep the table within its catalog panel.
+- Reduced card favorite controls to a 28-pixel circle and detail-page favorites to 24 pixels so they do not increase the compact action row's perceived height.
+- Added an accessible desktop arrow control that toggles the application between its full navigation and a full-width icon rail on every page.
+- Persisted one global sidebar state per user through a reserved application-shell preference, independent from the page-type collection display preferences.
+
 ## 2026-07-20 — Persist collection display preferences
 
 ### Prompt
