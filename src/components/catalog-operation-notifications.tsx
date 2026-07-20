@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  finishCatalogOperation,
+  readCatalogOperation,
+} from "@/components/catalog-operation-progress";
 
 type OperationStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 type OperationKind = "snapshot" | "restore" | "clear";
@@ -37,9 +43,16 @@ type CompletionNotification = OperationFeedItem & {
   expiresAt: number;
 };
 
+type PanelPosition = {
+  top: number;
+  left: number;
+  width: number;
+};
+
 const INITIAL_LOOKBACK_MS = 15 * 60 * 1000;
 const POLL_INTERVAL_MS = 10_000;
 const NOTIFICATION_TIMEOUT_MS = 30_000;
+const MAX_INBOX_NOTIFICATIONS = 50;
 
 function notificationStorageKey(userId: string, suffix: string) {
   return `bc-demoenv:operation-notifications:${userId}:${suffix}`;
@@ -66,6 +79,36 @@ function writeSeenIds(userId: string, seenIds: Set<number>) {
     );
   } catch {
     // Notifications still work for the current page when storage is unavailable.
+  }
+}
+
+function readInbox(userId: string) {
+  try {
+    const value = JSON.parse(
+      window.localStorage.getItem(notificationStorageKey(userId, "inbox")) || "[]",
+    );
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is CompletionNotification => (
+      typeof item === "object"
+      && item !== null
+      && typeof item.id === "number"
+      && typeof item.title === "string"
+      && typeof item.description === "string"
+      && (item.tone === "success" || item.tone === "danger" || item.tone === "attention")
+    )).slice(0, MAX_INBOX_NOTIFICATIONS);
+  } catch {
+    return [];
+  }
+}
+
+function writeInbox(userId: string, notifications: CompletionNotification[]) {
+  try {
+    window.localStorage.setItem(
+      notificationStorageKey(userId, "inbox"),
+      JSON.stringify(notifications.slice(0, MAX_INBOX_NOTIFICATIONS)),
+    );
+  } catch {
+    // The current tab retains its in-memory inbox when storage is unavailable.
   }
 }
 
@@ -161,13 +204,63 @@ function StatusIcon({ tone }: { tone: CompletionNotification["tone"] }) {
   return <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m7 12 3 3 7-7" /><circle cx="12" cy="12" r="9" /></svg>;
 }
 
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+      <path d="M10 21h4" />
+    </svg>
+  );
+}
+
+function notificationStyles(tone: CompletionNotification["tone"], compact = false) {
+  if (tone === "danger") {
+    return compact
+      ? "border-red-500/20 bg-red-500/7 text-red-800 dark:text-red-200"
+      : "border-red-500/35 bg-red-950 text-red-50";
+  }
+  if (tone === "attention") {
+    return compact
+      ? "border-amber-500/20 bg-amber-500/7 text-amber-800 dark:text-amber-200"
+      : "border-amber-400/35 bg-amber-950 text-amber-50";
+  }
+  return compact
+    ? "border-emerald-500/20 bg-emerald-500/7 text-emerald-800 dark:text-emerald-200"
+    : "border-emerald-400/35 bg-emerald-950 text-emerald-50";
+}
+
 export function CatalogOperationNotifications({ userId }: { userId: string }) {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<CompletionNotification[]>([]);
+  const [toastNotifications, setToastNotifications] = useState<CompletionNotification[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [panelPosition, setPanelPosition] = useState<PanelPosition>({ top: 80, left: 16, width: 352 });
+  const [inboxLoaded, setInboxLoaded] = useState(false);
   const observedActiveIds = useRef(new Set<number>());
   const seenIds = useRef<Set<number> | null>(null);
   const lastCheckedAt = useRef<number | null>(null);
   const polling = useRef(false);
   const disposed = useRef(false);
+  const centerRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  const getPanelPosition = useCallback((): PanelPosition => {
+    const rect = centerRef.current?.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const mobile = viewportWidth < 1024;
+    const width = mobile ? Math.max(viewportWidth - 32, 0) : Math.min(352, viewportWidth - 32);
+    const preferredLeft = mobile ? 16 : (rect?.right ?? 16) + 12;
+    return {
+      top: Math.max(16, (rect?.bottom ?? 68) + 12),
+      left: Math.max(16, Math.min(preferredLeft, viewportWidth - width - 16)),
+      width,
+    };
+  }, []);
+
+  const removeNotification = useCallback((notificationId: number) => {
+    setNotifications((current) => current.filter((item) => item.id !== notificationId));
+    setToastNotifications((current) => current.filter((item) => item.id !== notificationId));
+  }, []);
 
   const poll = useCallback(async () => {
     if (polling.current) return;
@@ -184,10 +277,20 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
       }
 
       const nextNotifications: CompletionNotification[] = [];
+      let finishedLocalOperationId: number | null = null;
+      const localOperation = readCatalogOperation();
       for (const operation of feed.operations) {
         if (operation.status === "queued" || operation.status === "running") {
           observedActiveIds.current.add(operation.id);
           continue;
+        }
+        if (
+          localOperation?.operationId === operation.id
+          && (operation.status === "completed"
+            || operation.status === "failed"
+            || operation.status === "cancelled")
+        ) {
+          finishedLocalOperationId = operation.id;
         }
         if (operation.status !== "completed" && operation.status !== "failed") continue;
         if (seenIds.current.has(operation.id)) continue;
@@ -201,9 +304,20 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
         nextNotifications.push(toNotification(operation, now));
       }
 
+      if (
+        finishedLocalOperationId !== null
+        && finishCatalogOperation(finishedLocalOperationId)
+      ) {
+        router.refresh();
+      }
+
       if (nextNotifications.length > 0) {
         writeSeenIds(userId, seenIds.current);
         setNotifications((current) => [
+          ...nextNotifications,
+          ...current.filter((item) => !nextNotifications.some((next) => next.id === item.id)),
+        ].slice(0, MAX_INBOX_NOTIFICATIONS));
+        setToastNotifications((current) => [
           ...nextNotifications,
           ...current.filter((item) => !nextNotifications.some((next) => next.id === item.id)),
         ].slice(0, 5));
@@ -222,7 +336,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
     } finally {
       polling.current = false;
     }
-  }, [userId]);
+  }, [router, userId]);
 
   useEffect(() => {
     disposed.current = false;
@@ -253,66 +367,209 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
   }, [poll]);
 
   useEffect(() => {
-    if (notifications.length === 0) return;
+    let cancelled = false;
+    window.queueMicrotask(() => {
+      if (cancelled) return;
+      setNotifications(readInbox(userId));
+      setInboxLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!inboxLoaded) return;
+    writeInbox(userId, notifications);
+  }, [inboxLoaded, notifications, userId]);
+
+  useEffect(() => {
+    const inboxKey = notificationStorageKey(userId, "inbox");
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === inboxKey) setNotifications(readInbox(userId));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!centerRef.current?.contains(target) && !panelRef.current?.contains(target)) {
+        setIsOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const updatePosition = () => setPanelPosition(getPanelPosition());
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [getPanelPosition, isOpen]);
+
+  useEffect(() => {
+    if (toastNotifications.length === 0) return;
     const now = Date.now();
-    const nextExpiry = Math.min(...notifications.map((notification) => notification.expiresAt));
+    const nextExpiry = Math.min(...toastNotifications.map((notification) => notification.expiresAt));
     const timeout = window.setTimeout(() => {
       const expiredAt = Date.now();
-      setNotifications((current) => current.filter(
+      setToastNotifications((current) => current.filter(
         (notification) => notification.expiresAt > expiredAt,
       ));
     }, Math.max(nextExpiry - now, 0));
     return () => window.clearTimeout(timeout);
-  }, [notifications]);
-
-  if (notifications.length === 0) return null;
+  }, [toastNotifications]);
 
   return (
-    <aside
-      className="pointer-events-none fixed top-4 right-4 z-[100] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3"
-      aria-label="Catalog operation notifications"
-      aria-live="polite"
-    >
-      {notifications.map((notification) => {
-        const styles = notification.tone === "danger"
-          ? "border-red-500/35 bg-red-950 text-red-50"
-          : notification.tone === "attention"
-            ? "border-amber-400/35 bg-amber-950 text-amber-50"
-            : "border-emerald-400/35 bg-emerald-950 text-emerald-50";
-        return (
-          <div
-            key={notification.id}
-            className={`pointer-events-auto rounded-2xl border p-4 shadow-2xl shadow-black/30 ${styles}`}
+    <>
+      <div ref={centerRef} className="notification-center relative shrink-0">
+        <button
+          type="button"
+          aria-label={`Notifications${notifications.length > 0 ? `, ${notifications.length} awaiting deletion` : ""}`}
+          aria-expanded={isOpen}
+          aria-controls="notification-center-panel"
+          title="Notifications"
+          onClick={() => {
+            if (!isOpen) setPanelPosition(getPanelPosition());
+            setIsOpen((current) => !current);
+          }}
+          className="relative flex size-8 items-center justify-center rounded-xl border border-black/8 bg-white/55 text-black/50 transition hover:border-emerald-500/30 hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-white/8 dark:bg-white/5 dark:text-white/50 dark:hover:text-emerald-300"
+        >
+          <BellIcon />
+          {notifications.length > 0 ? (
+            <span className="absolute -top-1.5 -right-1.5 flex min-w-4.5 items-center justify-center rounded-full border-2 border-background bg-red-500 px-1 text-[9px] leading-3.5 font-bold text-white tabular-nums">
+              {notifications.length > 99 ? "99+" : notifications.length}
+            </span>
+          ) : null}
+        </button>
+
+      </div>
+
+      {isOpen && typeof document !== "undefined"
+        ? createPortal(
+          <section
+            ref={panelRef}
+            id="notification-center-panel"
+            role="dialog"
+            aria-label="Notifications"
+            style={panelPosition}
+            className="fixed z-[120] overflow-hidden rounded-2xl border border-black/10 bg-background shadow-2xl shadow-black/25 dark:border-white/10"
           >
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 shrink-0"><StatusIcon tone={notification.tone} /></span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{notification.title}</p>
-                <p className="mt-1 line-clamp-3 text-xs leading-5 text-current/70">
-                  {notification.description}
+            <div className="flex items-center justify-between gap-3 border-b border-black/8 px-4 py-3 dark:border-white/8">
+              <div>
+                <p className="text-sm font-semibold">Notifications</p>
+                <p className="text-[11px] text-black/45 dark:text-white/45">
+                  {notifications.length === 0 ? "Nothing awaiting deletion" : `${notifications.length} awaiting deletion`}
                 </p>
-                {notification.href && notification.linkLabel ? (
-                  <Link
-                    href={notification.href}
-                    onClick={() => setNotifications((current) => current.filter((item) => item.id !== notification.id))}
-                    className="mt-3 inline-flex rounded-lg border border-current/25 px-2.5 py-1.5 text-xs font-semibold transition hover:bg-white/10"
-                  >
-                    {notification.linkLabel} →
-                  </Link>
-                ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => setNotifications((current) => current.filter((item) => item.id !== notification.id))}
-                className="flex size-7 shrink-0 items-center justify-center rounded-full text-current/65 transition hover:bg-white/10 hover:text-current"
-                aria-label={`Dismiss ${notification.title}`}
-              >
-                <span aria-hidden="true">×</span>
-              </button>
+              {notifications.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotifications([]);
+                    setToastNotifications([]);
+                  }}
+                  className="rounded-md border border-black/10 px-2.5 py-1 text-[10px] font-semibold text-black/55 transition hover:bg-black/5 hover:text-black dark:border-white/10 dark:text-white/55 dark:hover:bg-white/8 dark:hover:text-white"
+                >
+                  Delete all
+                </button>
+              ) : null}
             </div>
-          </div>
-        );
-      })}
-    </aside>
+
+            {notifications.length === 0 ? (
+              <div className="px-5 py-8 text-center">
+                <span className="mx-auto flex size-9 items-center justify-center rounded-full bg-black/5 text-black/35 dark:bg-white/6 dark:text-white/35"><BellIcon /></span>
+                <p className="mt-3 text-xs text-black/45 dark:text-white/45">New operation results will appear here.</p>
+              </div>
+            ) : (
+              <div className="max-h-[min(28rem,calc(100vh-8rem))] overflow-y-auto p-2">
+                {notifications.map((notification) => (
+                  <article key={notification.id} className={`mb-2 rounded-xl border p-3 last:mb-0 ${notificationStyles(notification.tone, true)}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-0.5 shrink-0"><StatusIcon tone={notification.tone} /></span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold">{notification.title}</p>
+                        <p className="mt-1 line-clamp-3 text-[11px] leading-4 text-current/65">{notification.description}</p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <time dateTime={notification.updatedAt} className="text-[10px] text-current/50">
+                            {new Date(notification.updatedAt).toLocaleString()}
+                          </time>
+                          {notification.href && notification.linkLabel ? (
+                            <Link href={notification.href} onClick={() => setIsOpen(false)} className="shrink-0 text-[10px] font-semibold hover:underline">
+                              {notification.linkLabel} →
+                            </Link>
+                          ) : null}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeNotification(notification.id)}
+                        className="flex size-6 shrink-0 items-center justify-center rounded-full text-current/50 transition hover:bg-black/6 hover:text-current dark:hover:bg-white/8"
+                        aria-label={`Delete ${notification.title}`}
+                        title="Delete notification"
+                      >
+                        <span aria-hidden="true">×</span>
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>,
+          document.body,
+        )
+        : null}
+
+      {toastNotifications.length > 0 && typeof document !== "undefined"
+        ? createPortal(
+          <aside
+            className="pointer-events-none fixed top-4 right-4 z-[100] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3"
+            aria-label="Catalog operation notification popups"
+            aria-live="polite"
+          >
+            {toastNotifications.map((notification) => (
+              <div key={notification.id} className={`pointer-events-auto rounded-2xl border p-4 shadow-2xl shadow-black/30 ${notificationStyles(notification.tone)}`}>
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 shrink-0"><StatusIcon tone={notification.tone} /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{notification.title}</p>
+                    <p className="mt-1 line-clamp-3 text-xs leading-5 text-current/70">{notification.description}</p>
+                    {notification.href && notification.linkLabel ? (
+                      <Link href={notification.href} onClick={() => setToastNotifications((current) => current.filter((item) => item.id !== notification.id))} className="mt-3 inline-flex rounded-lg border border-current/25 px-2.5 py-1.5 text-xs font-semibold transition hover:bg-white/10">
+                        {notification.linkLabel} →
+                      </Link>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setToastNotifications((current) => current.filter((item) => item.id !== notification.id))}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-current/65 transition hover:bg-white/10 hover:text-current"
+                    aria-label={`Dismiss ${notification.title} popup`}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </aside>,
+          document.body,
+        )
+        : null}
+    </>
   );
 }

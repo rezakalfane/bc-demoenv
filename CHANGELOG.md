@@ -4,6 +4,28 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate global app-shell and operation-feedback polish
+
+- **Date:** 2026-07-20
+- **Source:** `feature/app-shell-operation-polish`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the global persisted sidebar mode, responsive four-column card layouts, collection-aware loading skeletons, notification center and viewport toasts, automatic terminal-operation cleanup, and standardized Catalog/Snapshot action toolbars after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Polish the app shell and operation feedback
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/app-shell-operation-polish`
+- **Type:** Feature commit
+
+- Made sidebar collapse a tenant-scoped global preference with a persistent arrow control and expanded wide-screen card grids to four columns when collapsed.
+- Corrected card/table loading skeletons so they follow each page type's persisted collection mode.
+- Added a sidebar notification center with retained per-user results, badge counts, individual deletion, Delete all, and document-body portals for both the panel and 30-second viewport toasts.
+- Cleared matching completed, failed, and cancelled operation state globally so activity indicators and disabled actions reconcile without visiting a detail page.
+- Standardized Catalog and Snapshot toolbar actions at 24 pixels and aligned the compact favorite action with the neighboring rounded controls.
+- Updated README, implementation details, prompt History, and Changelog.
+
 ### Merge — Integrate persisted page-type collection preferences
 
 - **Date:** 2026-07-20

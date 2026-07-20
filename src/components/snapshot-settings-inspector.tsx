@@ -135,7 +135,7 @@ export function SnapshotSettingsInspector({
       <button
         type="button"
         onClick={openInspector}
-        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-black/10 bg-white/60 px-3 py-1.5 text-[11px] leading-none font-semibold transition hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-black/10 bg-white/60 px-2.5 text-[10px] leading-none font-semibold transition hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
       >
         <InspectIcon />
         Inspect settings

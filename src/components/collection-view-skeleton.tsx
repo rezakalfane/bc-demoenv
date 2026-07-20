@@ -1,7 +1,3 @@
-"use client";
-
-import { useCollectionPreference } from "@/components/collection-preferences-provider";
-
 function ToolbarSkeleton({ extraButton = false }: { extraButton?: boolean }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
@@ -76,20 +72,26 @@ export function CollectionViewSkeleton({
   cardClassName?: string;
   sharedToggle?: boolean;
 }) {
-  const { preference } = useCollectionPreference(collectionId);
+  const supportsFourColumns = [
+    "dashboard-environments",
+    "settings-environments",
+    "environment-channels",
+    "snapshot-series",
+  ].includes(collectionId);
 
   return (
     <div className="animate-pulse">
       <ToolbarSkeleton extraButton={sharedToggle} />
-      {preference.viewMode === "table" ? (
+      <div className="collection-view-skeleton-table">
         <TableSkeleton columns={tableColumns} rows={tableRows} />
-      ) : (
-        <div className={cardsClassName}>
+      </div>
+      <div className="collection-view-skeleton-cards">
+        <div className={`${supportsFourColumns ? "collection-four-column-cards " : ""}${cardsClassName}`}>
           {Array.from({ length: cardCount }, (_, index) => (
             <div key={index} className={cardClassName} />
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }

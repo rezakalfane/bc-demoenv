@@ -59,7 +59,7 @@ export function SnapshotDelete({
         type="button"
         disabled={isActionInProgress}
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center justify-center gap-1.5 rounded-md border border-red-500/35 bg-red-500/7 px-3 py-1.5 text-[11px] leading-none font-semibold text-red-700 transition hover:bg-red-500/14 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-300"
+        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-red-500/35 bg-red-500/7 px-2.5 text-[10px] leading-none font-semibold text-red-700 transition hover:bg-red-500/14 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-300"
       >
         <TrashIcon />
         Delete snapshot

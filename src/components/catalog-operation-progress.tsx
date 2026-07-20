@@ -19,9 +19,14 @@ export function startCatalogOperation(operation: CatalogOperation) {
   window.dispatchEvent(new Event("catalog-operation-change"));
 }
 
-export function finishCatalogOperation() {
+export function finishCatalogOperation(operationId?: number) {
+  if (operationId !== undefined) {
+    const current = readCatalogOperation();
+    if (current?.operationId !== operationId) return false;
+  }
   window.localStorage.removeItem(CATALOG_OPERATION_KEY);
   window.dispatchEvent(new Event("catalog-operation-change"));
+  return true;
 }
 
 export function catalogOperationIsActive() {

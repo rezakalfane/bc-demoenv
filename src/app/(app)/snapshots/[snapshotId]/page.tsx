@@ -187,6 +187,7 @@ export default async function SnapshotPage({
                 target={{ type: "snapshot", snapshotId: snapshot.summary.id }}
                 initialFavorite={isFavorite}
                 label={snapshot.summary.name}
+                compact
               />
               {snapshot.isOwner ? (
                 <>
@@ -335,21 +336,22 @@ export default async function SnapshotPage({
                   ariaLabel={`${snapshot.summary.name} products`}
                   searchPlaceholder="Search captured products…"
                   cardsClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
+                  tableClassName="table-fixed"
                   columns={[
-                    { key: "name", label: "Product", className: "max-w-64" },
-                    { key: "description", label: "Description", className: "max-w-md" },
-                    { key: "categories", label: "Categories" },
-                    { key: "price", label: "Price", align: "right" },
+                    { key: "name", label: "Product", className: "w-[30%]" },
+                    { key: "description", label: "Description", className: "w-[48%]" },
+                    { key: "categories", label: "Categories", className: "w-[10%]" },
+                    { key: "price", label: "Price", align: "right", className: "w-[12%]" },
                   ]}
                   items={products.map((product) => ({
                     id: String(product.id),
                     searchText: `${product.id} ${product.name} ${product.description} ${product.price ?? ""}`,
                     card: <CatalogProductCard product={product} priceFormatter={priceFormatter} />,
                     cells: [
-                      <span key="name" className="font-semibold">{product.name}</span>,
-                      <span key="description" className="line-clamp-2 text-black/50 dark:text-white/50">{product.description || "No description available."}</span>,
+                      <span key="name" className="line-clamp-2 break-words font-semibold">{product.name}</span>,
+                      <span key="description" className="line-clamp-2 break-words text-black/50 dark:text-white/50">{product.description || "No description available."}</span>,
                       product.categoryIds.length,
-                      <span key="price" className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{product.price === null ? "—" : priceFormatter.format(product.price)}</span>,
+                      <span key="price" className="whitespace-nowrap font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{product.price === null ? "—" : priceFormatter.format(product.price)}</span>,
                     ],
                   }))}
                 />

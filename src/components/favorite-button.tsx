@@ -11,8 +11,8 @@ function StarIcon({ filled }: { filled: boolean }) {
   return (
     <svg
       aria-hidden="true"
-      width="15"
-      height="15"
+      width="13"
+      height="13"
       viewBox="0 0 24 24"
       fill={filled ? "currentColor" : "none"}
       stroke="currentColor"
@@ -29,10 +29,12 @@ export function FavoriteButton({
   target,
   initialFavorite,
   label,
+  compact = false,
 }: {
   target: FavoriteTarget;
   initialFavorite: boolean;
   label: string;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [favorite, setOptimisticFavorite] = useOptimistic(
@@ -50,7 +52,7 @@ export function FavoriteButton({
       aria-pressed={favorite}
       title={actionLabel}
       disabled={pending}
-      className={`inline-flex size-8 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60 ${
+      className={`inline-flex shrink-0 items-center justify-center self-center border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60 ${compact ? "size-6 rounded-md" : "size-7 rounded-full"} ${
         favorite
           ? "border-amber-500/35 bg-amber-500/12 text-amber-600 hover:bg-amber-500/18 dark:text-amber-300"
           : "border-black/10 bg-white/60 text-black/35 hover:border-amber-500/35 hover:text-amber-600 dark:border-white/10 dark:bg-white/5 dark:text-white/35 dark:hover:text-amber-300"

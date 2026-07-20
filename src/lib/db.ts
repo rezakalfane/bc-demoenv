@@ -106,6 +106,7 @@ export type CollectionViewMode = "cards" | "table";
 export type CollectionViewPreference = {
   viewMode: CollectionViewMode;
   showShared: boolean;
+  sidebarCollapsed: boolean;
 };
 
 export type CatalogOperation = {
@@ -340,10 +341,23 @@ async function ensureSchema() {
         collection_id TEXT NOT NULL CHECK(length(collection_id) BETWEEN 1 AND 120),
         view_mode TEXT NOT NULL DEFAULT 'cards' CHECK(view_mode IN ('cards', 'table')),
         show_shared INTEGER NOT NULL DEFAULT 1 CHECK(show_shared IN (0, 1)),
+        sidebar_collapsed INTEGER NOT NULL DEFAULT 0 CHECK(sidebar_collapsed IN (0, 1)),
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, collection_id)
       )
     `);
+    const collectionPreferenceColumns = await db.execute(
+      "PRAGMA table_info(collection_view_preferences)",
+    );
+    if (
+      !collectionPreferenceColumns.rows.some(
+        (column) => String(column.name) === "sidebar_collapsed",
+      )
+    ) {
+      await db.execute(
+        "ALTER TABLE collection_view_preferences ADD COLUMN sidebar_collapsed INTEGER NOT NULL DEFAULT 0 CHECK(sidebar_collapsed IN (0, 1))",
+      );
+    }
 
     await db.execute(`CREATE TABLE IF NOT EXISTS catalog_operations (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, kind TEXT NOT NULL,
@@ -691,7 +705,7 @@ export async function getCollectionViewPreference(
   await ensureSchema();
   const result = await getClient().execute({
     sql: `
-      SELECT view_mode, show_shared
+      SELECT view_mode, show_shared, sidebar_collapsed
       FROM collection_view_preferences
       WHERE user_id = ? AND collection_id = ?
       LIMIT 1
@@ -702,6 +716,7 @@ export async function getCollectionViewPreference(
   return {
     viewMode: row?.view_mode === "table" ? "table" : "cards",
     showShared: row?.show_shared == null ? true : Number(row.show_shared) === 1,
+    sidebarCollapsed: Number(row?.sidebar_collapsed) === 1,
   };
 }
 
@@ -709,21 +724,32 @@ export async function getCollectionViewPreferences(userId: string) {
   await ensureSchema();
   const result = await getClient().execute({
     sql: `
-      SELECT collection_id, view_mode, show_shared
+      SELECT collection_id, view_mode, show_shared, sidebar_collapsed
       FROM collection_view_preferences
       WHERE user_id = ?
     `,
     args: [userId],
   });
-  return Object.fromEntries(
+  const preferences = Object.fromEntries(
     result.rows.map((row) => [
       String(row.collection_id),
       {
         viewMode: row.view_mode === "table" ? "table" : "cards",
         showShared: Number(row.show_shared) === 1,
+        sidebarCollapsed: Number(row.sidebar_collapsed) === 1,
       } satisfies CollectionViewPreference,
     ]),
   );
+  if (!preferences["app-shell"]) {
+    preferences["app-shell"] = {
+      viewMode: "cards",
+      showShared: true,
+      sidebarCollapsed: result.rows.some(
+        (row) => Number(row.sidebar_collapsed) === 1,
+      ),
+    };
+  }
+  return preferences;
 }
 
 export async function setCollectionViewMode(
@@ -759,6 +785,24 @@ export async function setCollectionSharedVisibility(
         updated_at = CURRENT_TIMESTAMP
     `,
     args: [userId, collectionId, showShared ? 1 : 0],
+  });
+}
+
+export async function setCollectionSidebarCollapsed(
+  userId: string,
+  collectionId: string,
+  sidebarCollapsed: boolean,
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO collection_view_preferences (user_id, collection_id, sidebar_collapsed)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id, collection_id) DO UPDATE SET
+        sidebar_collapsed = excluded.sidebar_collapsed,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    args: [userId, collectionId, sidebarCollapsed ? 1 : 0],
   });
 }
 

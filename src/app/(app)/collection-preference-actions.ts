@@ -3,6 +3,7 @@
 import { requireAppUser } from "@/lib/auth";
 import {
   setCollectionSharedVisibility,
+  setCollectionSidebarCollapsed,
   setCollectionViewMode,
   type CollectionViewMode,
 } from "@/lib/db";
@@ -34,5 +35,17 @@ export async function saveCollectionSharedVisibility(
     return { error: "Invalid collection preference." };
   }
   await setCollectionSharedVisibility(user.id, collectionId, showShared);
+  return { error: null };
+}
+
+export async function saveCollectionSidebarCollapsed(
+  collectionId: string,
+  sidebarCollapsed: boolean,
+) {
+  const user = await requireAppUser();
+  if (!isValidCollectionId(collectionId) || typeof sidebarCollapsed !== "boolean") {
+    return { error: "Invalid page layout preference." };
+  }
+  await setCollectionSidebarCollapsed(user.id, collectionId, sidebarCollapsed);
   return { error: null };
 }
