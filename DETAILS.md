@@ -122,6 +122,8 @@ Important uniqueness rules and indexes are:
 
 BigCommerce access tokens are encrypted with AES-256-GCM before storage. The application returns only the final four characters to the Settings UI and binds each encrypted value to its owning Clerk user. Reads, updates, deletes, and Dashboard credential lookups also include the Clerk user ID, so one user cannot access another user's settings. Dashboard API requests run only on the server and are never cached.
 
+Settings credential diagnostics use the same tenant-scoped, server-only credential lookup and never return the decrypted token to the browser. **Test access** sends bounded, read-only requests to representative Catalog, Channels, Sites, storefront settings, Customers, Content, Shipping, Tax, Inventory, Pricing, Themes, and B2B Edition endpoints. BigCommerce store tokens do not expose a trustworthy scope-list response, so the report infers missing read scopes from `403` responses, distinguishes invalid credentials and rate limiting, and lists `404`/unsupported resources separately as unavailable for the tested store or channel type. APIs that are inapplicable—such as Stencil theme access on a Catalyst channel—do not make an otherwise valid credential appear broken. Modify permissions are never exercised: restore and clear capabilities explicitly remain **Write not tested** and name the modify scopes required.
+
 Snapshot payloads contain catalog data and public image links, but never BigCommerce access tokens.
 
 ## BigCommerce access scopes

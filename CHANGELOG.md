@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate BigCommerce credential diagnostics
+
+- **Date:** 2026-07-20
+- **Source:** `feature/credential-diagnostics`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated read-only credential capability probes, B2B and missing-scope reporting, the Restore-style diagnostics modal, and responsive three-column environment cards after live endpoint, TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add BigCommerce credential diagnostics
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/credential-diagnostics`
+- **Type:** Feature commit
+
+- Added tenant-scoped, server-only read probes for core BigCommerce catalog and configuration APIs with explicit response classification.
+- Added operation readiness, inferred missing scopes, B2B availability by active channel, unsupported API reporting, and honest unverified-write status.
+- Added a pending Test access control and a responsive, accessible scope-report modal rendered through a body portal with the established Restore modal shell.
+- Changed saved environment cards to a responsive three-column layout and updated README, implementation details, and prompt History.
+
 ### Merge — Integrate global catalog-operation notifications
 
 - **Date:** 2026-07-20
