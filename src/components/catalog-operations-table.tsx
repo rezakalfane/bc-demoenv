@@ -29,6 +29,8 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
   timeStyle: "short",
 });
+const dateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+const timeFormatter = new Intl.DateTimeFormat("en", { timeStyle: "short" });
 const numberFormatter = new Intl.NumberFormat("en");
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
@@ -60,6 +62,24 @@ function formatDuration(durationMs: number) {
   if (totalMinutes < 60) return `${totalMinutes}m ${totalSeconds % 60}s`;
   const hours = Math.floor(totalMinutes / 60);
   return `${hours}h ${totalMinutes % 60}m`;
+}
+
+function DateTimeStack({
+  value,
+  className = "",
+}: {
+  value: string;
+  className?: string;
+}) {
+  const date = new Date(value);
+  return (
+    <time dateTime={value} className={`block leading-tight ${className}`}>
+      <span className="block whitespace-nowrap">{dateFormatter.format(date)}</span>
+      <span className="mt-1 block whitespace-nowrap text-[11px] opacity-70">
+        {timeFormatter.format(date)}
+      </span>
+    </time>
+  );
 }
 
 function hasAttention(operation: CatalogOperationListItem) {
@@ -431,12 +451,12 @@ export function CatalogOperationsTable({
               <col className="w-[4%]" />
               <col className="w-[10%]" />
               <col className="w-[8%]" />
-              <col className="w-[14%]" />
-              <col className="w-[12%]" />
-              <col className="w-[25%]" />
+              <col className="w-[13%]" />
               <col className="w-[11%]" />
-              <col className="w-[6%]" />
+              <col className="w-[24%]" />
               <col className="w-[10%]" />
+              <col className="w-[8%]" />
+              <col className="w-[12%]" />
             </colgroup>
             <thead className="border-b border-black/8 bg-black/[0.025] dark:border-white/8 dark:bg-white/[0.025]">
               <tr>
@@ -460,15 +480,15 @@ export function CatalogOperationsTable({
                     setSelectedKey(operation.activityKey);
                   }}
                   title="Double-click to view details"
-                  className="align-top transition hover:bg-black/[0.025] dark:hover:bg-white/[0.025]"
+                  className="align-middle transition hover:bg-black/[0.025] dark:hover:bg-white/[0.025]"
                 >
                   <td className="px-3 py-3 font-mono text-black/40 dark:text-white/40">#{operation.id}</td>
-                  <td className="px-3 py-3"><span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${kindStyles[operation.kind]}`}>{operation.title}</span><time dateTime={operation.createdAt} className="mt-1.5 block whitespace-nowrap text-[11px] text-black/35 dark:text-white/35">{dateTimeFormatter.format(new Date(operation.createdAt))}</time></td>
+                  <td className="px-3 py-3"><span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold ${kindStyles[operation.kind]}`}>{operation.title}</span><DateTimeStack value={operation.createdAt} className="mt-1.5 text-[11px] text-black/35 dark:text-white/35" /></td>
                   <td className="px-3 py-3"><OperationStatusBadge operation={operation} />{hasAttention(operation) ? <span className="mt-1.5 block text-[11px] font-medium text-amber-700 dark:text-amber-300">Needs attention</span> : null}</td>
                   <td className="max-w-52 px-3 py-3"><p className="truncate font-medium">{operation.environmentName}</p><p className="mt-1 truncate text-black/45 dark:text-white/45">{operation.channelName}</p></td>
                   <td className="max-w-48 px-3 py-3"><p className="truncate font-medium">{operation.snapshotName}</p>{operation.snapshotVersion ? <p className="mt-1 text-black/45 dark:text-white/45">Version {operation.snapshotVersion}</p> : null}</td>
                   <td className="overflow-hidden px-3 py-3" title={operation.currentStep}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-3"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-black/50 dark:text-white/50">{dateTimeFormatter.format(new Date(operation.updatedAt))}</td>
+                  <td className="px-3 py-3 text-black/50 dark:text-white/50"><DateTimeStack value={operation.updatedAt} /></td>
                   <td className="whitespace-nowrap px-3 py-3 font-medium">{formatDuration(operation.durationMs)}</td>
                   <td className="px-3 py-3"><div className="flex items-center justify-end gap-2"><button type="button" onClick={() => setSelectedKey(operation.activityKey)} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">Details</button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300">Open →</Link> : null}</div></td>
                 </tr>
