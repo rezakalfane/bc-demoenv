@@ -235,6 +235,10 @@ The root layout registers a same-origin service worker whose only cached resourc
 
 The Operations page merges the complete `catalog_operations` Workflow ledger, `catalog_snapshot_events`, and the lightweight `application_events` audit stream with mandatory Clerk user predicates. It covers snapshot capture, restore, clear, rename, publish, unpublish, version deletion, whole-series deletion, and environment creation/deletion. Existing live environments created before the audit migration are represented from their tenant-owned creation timestamps; historical deleted resources cannot be reconstructed. New environment and whole-snapshot mutations write their audit event atomically with the resource mutation, retaining safe names, identifiers, counts, and timestamps after deletion without storing access tokens or snapshot payloads. A narrow Client Component receives the serializable display model for local sorting, filtering, and detail-modal interactions; encrypted credentials and raw access tokens never cross the Server Component boundary. Visibility-aware route refreshes discover operations started elsewhere and run more frequently while work is active, without discarding the user's table filters. The table uses a fixed layout, bounded progress/result text, and two-line date/time cells so long current-step labels or timestamps cannot resize neighboring columns. Manual-action URLs are validated as HTTPS BigCommerce Control Panel links before they are exposed. The detail view includes persisted progress, result counters, restore groups, warnings, errors, Workflow IDs, resource IDs, and direct tenant-safe application links. Operations uses the same arrow-controlled, globally persisted sidebar layout as every other authenticated page.
 
+The Workflows subpage is an authenticated observability projection over tenant-owned `catalog_operations` rows and available Vercel Workflow runtime metadata. It never enumerates another user's runs. The table can search, filter, sort, refresh, cancel an active run, retry a failed or cancelled operation as a new run, copy its run ID, and return to the affected channel or snapshot. Operations link directly to their exact workflow detail using the operation ID. Runtime names are normalized for display while the original compiler-generated name remains available under Technical details. Application status remains authoritative when archived local runtime metadata is no longer available.
+
+The visual trace combines native durable steps with application-level macro stages inferred from persisted checkpoint cursors, step indexes, and exact progress messages. Snapshot configuration capture expands into Channel & storefront settings, Checkout & customer experience, Pricing & currencies, Shipping, Tax, B2B Edition, and Inventory/localization/presentation. Clear expands into Initialize, Unassign products, Remove channel categories, and Verify catalog is clear. A terminal failure or cancellation is therefore attached to the active macro stage rather than incorrectly marking a later product or finalization phase. These macro stages improve application diagnostics without claiming to be separate Vercel `"use step"` spans; the original runtime workflow name and native run remain inspectable separately.
+
 ### Snapshot capture Workflow
 
 ```mermaid
@@ -244,6 +248,7 @@ flowchart TD
     categories -- Yes --> categoryBatch["captureCategoryBatchStep<br/>Capture next 10 categories and checkpoint<br/>maxRetries: 4"]
     categoryBatch --> categories
     categories -- No --> completeInit["completeSnapshotInitializationStep<br/>Capture supporting configuration and product IDs<br/>maxRetries: 2"]
+    completeInit -. Application trace .-> settings["Configuration macro stages<br/>Storefront → Experience → Pricing → Shipping<br/>→ Tax → B2B → Localization & inventory"]
     completeInit --> remaining{"Products remaining?"}
     remaining -- Yes --> productBatch["captureProductBatchStep<br/>Capture next 30 products and checkpoint<br/>maxRetries: 4"]
     productBatch --> remaining
@@ -291,6 +296,7 @@ flowchart TD
 flowchart TD
     start([Start catalog clear]) --> initialize["initializeCatalogOperationStep<br/>Validate payload and mark running<br/>maxRetries: 2"]
     initialize --> clear["clearCatalogStep<br/>Unassign channel products, remove categories,<br/>then verify BigCommerce state<br/>maxRetries: 3"]
+    clear -. Application trace .-> clearMacros["Clear macro stages<br/>Unassign products → Remove channel categories<br/>→ Verify catalog is clear"]
     clear --> complete["completeClearOperationStep<br/>Persist counts and completed status<br/>maxRetries: 2"]
     complete --> success([Catalog cleared])
 

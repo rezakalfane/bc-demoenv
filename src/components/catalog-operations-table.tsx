@@ -304,11 +304,18 @@ function OperationDetailsModal({
         </div>
 
         <footer className="flex items-center justify-between gap-3 border-t border-black/8 px-6 py-4 sm:px-7 dark:border-white/8">
-          {operation.resourceHref ? (
-            <Link href={operation.resourceHref} onClick={onClose} className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200">
-              {operation.resourceLabel} →
-            </Link>
-          ) : <span />}
+          <div className="flex flex-wrap items-center gap-4">
+            {operation.workflowRunId ? (
+              <Link href={`/operations/workflows?operation=${operation.id}`} onClick={onClose} className="text-sm font-semibold text-sky-700 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200">
+                Open workflow →
+              </Link>
+            ) : null}
+            {operation.resourceHref ? (
+              <Link href={operation.resourceHref} onClick={onClose} className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200">
+                {operation.resourceLabel} →
+              </Link>
+            ) : null}
+          </div>
           <button type="button" onClick={onClose} className="rounded-xl border border-black/10 px-4 py-2 text-sm font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">
             Close
           </button>
@@ -490,7 +497,7 @@ export function CatalogOperationsTable({
                   <td className="overflow-hidden px-3 py-3" title={operation.currentStep}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-3"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
                   <td className="px-3 py-3 text-black/50 dark:text-white/50"><DateTimeStack value={operation.updatedAt} /></td>
                   <td className="whitespace-nowrap px-3 py-3 font-medium">{formatDuration(operation.durationMs)}</td>
-                  <td className="px-3 py-3"><div className="flex items-center justify-end gap-2"><button type="button" onClick={() => setSelectedKey(operation.activityKey)} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">Details</button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300">Open →</Link> : null}</div></td>
+                  <td className="px-3 py-3"><div className="flex items-center justify-end gap-2">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} className="rounded-md border border-sky-500/25 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300">Workflow</Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">Details</button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300">Open →</Link> : null}</div></td>
                 </tr>
               ))}
             </tbody>

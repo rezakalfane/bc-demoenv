@@ -4,6 +4,28 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate Workflow observability and detailed traces
+
+- **Date:** 2026-07-20
+- **Source:** `feature/workflow-observability`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the tenant-scoped Workflows explorer, runtime diagnostics and controls, operation deep links, normalized display names, and checkpoint-aware snapshot/clear macro traces after TypeScript, lint, whitespace, and Mermaid validation.
+
+### Commit — Add Workflow observability and detailed traces
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/workflow-observability`
+- **Type:** Feature commit
+
+- Added a searchable and filterable Workflows page with visual execution traces, application/runtime status, heartbeat and duration diagnostics, safe resource links, and technical run metadata.
+- Added refresh, cancellation, retry, run-ID copy, and operation-to-workflow navigation controls.
+- Converted compiler-generated runtime identifiers into friendly display names while retaining their raw values for debugging.
+- Expanded snapshot configuration capture into storefront, experience, pricing, shipping, tax, B2B, and localization/inventory macro stages.
+- Expanded clear operations into product-unassignment, category-removal, and verification macro stages with phase-accurate terminal status.
+- Updated README, implementation details, Mermaid workflow diagrams, prompt History, and Changelog.
+
 ### Merge — Integrate offline recovery and Operations table polish
 
 - **Date:** 2026-07-20
