@@ -101,6 +101,13 @@ export type ApplicationEvent = {
 
 export type FavoriteResourceType = "environment" | "channel" | "snapshot";
 
+export type CollectionViewMode = "cards" | "table";
+
+export type CollectionViewPreference = {
+  viewMode: CollectionViewMode;
+  showShared: boolean;
+};
+
 export type CatalogOperation = {
   id: number; userId: string; kind: "snapshot" | "restore" | "clear";
   environmentId: number | null; channelId: number | null; snapshotId: number | null;
@@ -326,6 +333,17 @@ async function ensureSchema() {
     await db.execute(
       "CREATE INDEX IF NOT EXISTS favorites_user_type_idx ON favorites(user_id, resource_type, created_at DESC)",
     );
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS collection_view_preferences (
+        user_id TEXT NOT NULL,
+        collection_id TEXT NOT NULL CHECK(length(collection_id) BETWEEN 1 AND 120),
+        view_mode TEXT NOT NULL DEFAULT 'cards' CHECK(view_mode IN ('cards', 'table')),
+        show_shared INTEGER NOT NULL DEFAULT 1 CHECK(show_shared IN (0, 1)),
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, collection_id)
+      )
+    `);
 
     await db.execute(`CREATE TABLE IF NOT EXISTS catalog_operations (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, kind TEXT NOT NULL,
@@ -664,6 +682,84 @@ export async function getFavoriteResourceKeys(
     args: [userId, resourceType],
   });
   return new Set(result.rows.map((row) => String(row.resource_key)));
+}
+
+export async function getCollectionViewPreference(
+  userId: string,
+  collectionId: string,
+): Promise<CollectionViewPreference> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT view_mode, show_shared
+      FROM collection_view_preferences
+      WHERE user_id = ? AND collection_id = ?
+      LIMIT 1
+    `,
+    args: [userId, collectionId],
+  });
+  const row = result.rows[0];
+  return {
+    viewMode: row?.view_mode === "table" ? "table" : "cards",
+    showShared: row?.show_shared == null ? true : Number(row.show_shared) === 1,
+  };
+}
+
+export async function getCollectionViewPreferences(userId: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT collection_id, view_mode, show_shared
+      FROM collection_view_preferences
+      WHERE user_id = ?
+    `,
+    args: [userId],
+  });
+  return Object.fromEntries(
+    result.rows.map((row) => [
+      String(row.collection_id),
+      {
+        viewMode: row.view_mode === "table" ? "table" : "cards",
+        showShared: Number(row.show_shared) === 1,
+      } satisfies CollectionViewPreference,
+    ]),
+  );
+}
+
+export async function setCollectionViewMode(
+  userId: string,
+  collectionId: string,
+  viewMode: CollectionViewMode,
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO collection_view_preferences (user_id, collection_id, view_mode)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id, collection_id) DO UPDATE SET
+        view_mode = excluded.view_mode,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    args: [userId, collectionId, viewMode],
+  });
+}
+
+export async function setCollectionSharedVisibility(
+  userId: string,
+  collectionId: string,
+  showShared: boolean,
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO collection_view_preferences (user_id, collection_id, show_shared)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id, collection_id) DO UPDATE SET
+        show_shared = excluded.show_shared,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    args: [userId, collectionId, showShared ? 1 : 0],
+  });
 }
 
 export async function toggleFavoriteResource(

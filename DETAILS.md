@@ -78,6 +78,14 @@ erDiagram
         TEXT created_at
     }
 
+    COLLECTION_VIEW_PREFERENCES {
+        TEXT user_id PK
+        TEXT collection_id PK
+        TEXT view_mode
+        INTEGER show_shared
+        TEXT updated_at
+    }
+
     CATALOG_OPERATIONS {
         INTEGER id PK
         TEXT user_id
@@ -138,6 +146,7 @@ Important uniqueness rules and indexes are:
 - Only one queued or running operation can exist for a non-null `(user_id, kind, operation_key)` tuple.
 - Capture-product rows use the composite primary key `(operation_id, product_index)`.
 - Favorites use the composite primary key `(user_id, resource_type, resource_key)`. Environment keys use the tenant-owned database ID, channel keys combine environment and BigCommerce channel IDs, and snapshot keys combine the owner Clerk ID with the normalized series name so a favorite survives new immutable versions. Snapshot rename and deletion reconcile those keys for every viewer.
+- Collection view preferences use `(user_id, collection_id)` as their composite primary key. Collection IDs represent page types—Dashboard environments, Settings environments, environment channel lists, the Snapshots index, live channel products, and captured snapshot products—rather than individual environment, channel, or snapshot IDs. Each record stores card/table mode and shared-snapshot visibility for that page type.
 
 ## Security and tenancy
 
@@ -149,7 +158,7 @@ Snapshot payloads contain catalog data and public image links, but never BigComm
 
 Favorites are private presentation metadata. Every favorite lookup and toggle includes the current Clerk user ID; the Server Action also verifies ownership of environments and channels or current access to an owned/published snapshot before accepting the mutation. Favorite status never grants access to a resource that is no longer otherwise visible.
 
-Collection browsing keeps resource rendering on the server. A narrow Client Component toolbar controls sibling Server-rendered cards and compact table rows through stable data attributes. Dashboard environments, saved Settings environments, channel lists, snapshot series, and live/captured product browsers expose the same left-aligned instant search and right-aligned 32-pixel card/table controls. Filtering operates only on the already-authorized display model received from the Server Component; credentials, snapshot payloads, and raw BigCommerce responses never cross this boundary. Compact tables preserve primary navigation and resource actions while horizontal overflow keeps dense columns usable on small screens. Snapshot collections add a separate eye control that hides or reveals shared read-only series without affecting owned snapshots or in-progress captures.
+Collection browsing keeps resource rendering on the server. A narrow Client Component toolbar controls sibling Server-rendered cards and compact table rows through stable data attributes. Dashboard environments, saved Settings environments, channel lists, snapshot series, and live/captured product browsers expose the same left-aligned instant search and right-aligned 32-pixel card/table controls. Filtering operates only on the already-authorized display model received from the Server Component; credentials, snapshot payloads, and raw BigCommerce responses never cross this boundary. Compact tables preserve primary navigation and resource actions while horizontal overflow keeps dense columns usable on small screens. Snapshot collections add a separate eye control that hides or reveals shared read-only series without affecting owned snapshots or in-progress captures. Card/table selection and shared-snapshot visibility are persisted by page type through authenticated Server Actions in `collection_view_preferences`; switching one live channel catalog changes the preference for every live channel catalog, while snapshot catalogs and other page types remain independent. Each write and initial read derives the Clerk user ID server-side, and the saved initial state is rendered on the server to avoid a layout flash. The persistent app layout carries that authorized preference map through client navigation, allowing Dashboard, environment, Snapshots, and product loading boundaries to render card or compact-table skeletons that match the selected mode. Search text remains intentionally transient.
 
 ## BigCommerce access scopes
 

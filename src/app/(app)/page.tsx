@@ -7,6 +7,7 @@ import {
 import { CatalogActivityBadge } from "@/components/catalog-operation-progress";
 import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
+import { CollectionViewSkeleton } from "@/components/collection-view-skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -119,16 +120,7 @@ function EnvironmentCard({ environment }: { environment: EnvironmentDashboard })
 }
 
 function DashboardSkeleton() {
-  return (
-    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
-      {[0, 1, 2].map((item) => (
-        <div
-          key={item}
-          className="h-72 animate-pulse rounded-3xl border border-black/8 bg-black/3 dark:border-white/8 dark:bg-white/3"
-        />
-      ))}
-    </div>
-  );
+  return <div aria-hidden="true"><CollectionViewSkeleton collectionId="dashboard-environments" tableColumns={8} /></div>;
 }
 
 async function EnvironmentGrid() {

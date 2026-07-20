@@ -331,7 +331,7 @@ export default async function SnapshotPage({
                 </div>
               ) : (
                 <CollectionBrowser
-                  collectionId={`snapshot-${snapshot.summary.id}-products`}
+                  collectionId="snapshot-products"
                   ariaLabel={`${snapshot.summary.name} products`}
                   searchPlaceholder="Search captured products…"
                   cardsClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"

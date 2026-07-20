@@ -2,6 +2,24 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Persist collection display preferences
+
+### Prompt
+
+> Can you persist each list / card / shared snapshots view preferences for each user?
+
+> When in list mode, skeleton should also show a list skeleton, not cards skeleton
+
+> Card / list / toggle preferences are not per catalog, snapshot, etc. but per page type only!
+
+### Summary
+
+- Added tenant-scoped Turso collection preferences keyed by Clerk user and stable collection identifier.
+- Persisted card/table selection independently by page type: Dashboard, Settings, environment channel lists, Snapshots, live channel catalogs, and captured snapshot catalogs. Preferences do not vary by individual environment, channel, or snapshot.
+- Persisted the Snapshots shared-series visibility choice while keeping search text transient.
+- Server-rendered each collection in its saved initial state and used authenticated Server Actions for subsequent updates, avoiding cross-tenant reads and reload-time layout flicker.
+- Added preference-aware loading states so Dashboard, channel, snapshot, and live/captured product collections use compact skeleton rows in table mode and card placeholders in card mode.
+
 ## 2026-07-20 — Add searchable card and table collection views
 
 ### Prompt

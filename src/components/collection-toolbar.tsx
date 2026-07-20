@@ -1,6 +1,13 @@
 "use client";
 
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState, useTransition } from "react";
+import {
+  saveCollectionSharedVisibility,
+  saveCollectionViewMode,
+} from "@/app/(app)/collection-preference-actions";
+import { useCollectionPreference } from "@/components/collection-preferences-provider";
+
+type CollectionView = "cards" | "table";
 
 function CardsIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>;
@@ -24,17 +31,56 @@ export function CollectionToolbar({
   searchPlaceholder,
   itemCount,
   allowSharedToggle,
+  initialView,
+  initialShowShared,
 }: {
   collectionId: string;
   ariaLabel: string;
   searchPlaceholder: string;
   itemCount: number;
   allowSharedToggle: boolean;
+  initialView: CollectionView;
+  initialShowShared: boolean;
 }) {
-  const [view, setView] = useState<"cards" | "table">("cards");
+  const [view, setView] = useState<CollectionView>(initialView);
   const [query, setQuery] = useState("");
-  const [showShared, setShowShared] = useState(true);
+  const [showShared, setShowShared] = useState(initialShowShared);
+  const [saveError, setSaveError] = useState("");
+  const [, startTransition] = useTransition();
+  const { updatePreference } = useCollectionPreference(collectionId);
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("en-US"));
+
+  function selectView(nextView: CollectionView) {
+    setView(nextView);
+    updatePreference(collectionId, { viewMode: nextView });
+    setSaveError("");
+    startTransition(async () => {
+      try {
+        const result = await saveCollectionViewMode(collectionId, nextView);
+        if (result.error) setSaveError(result.error);
+      } catch {
+        setSaveError("The display preference could not be saved.");
+      }
+    });
+  }
+
+  function toggleShared() {
+    const nextShowShared = !showShared;
+    setShowShared(nextShowShared);
+    updatePreference(collectionId, { showShared: nextShowShared });
+    setSaveError("");
+    startTransition(async () => {
+      try {
+        const result = await saveCollectionSharedVisibility(
+          collectionId,
+          nextShowShared,
+        );
+        if (result.error) setSaveError(result.error);
+      } catch {
+        setSaveError("The shared snapshot preference could not be saved.");
+      }
+    });
+  }
 
   useEffect(() => {
     const root = document.getElementById(collectionId);
@@ -73,10 +119,11 @@ export function CollectionToolbar({
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-1.5" role="toolbar" aria-label={`${ariaLabel} display options`}>
-        {allowSharedToggle ? <button type="button" aria-label={showShared ? "Hide shared snapshots" : "Show shared snapshots"} aria-pressed={showShared} title={showShared ? "Hide shared snapshots" : "Show shared snapshots"} className={`${buttonClass(showShared)} mr-1 text-blue-600 dark:text-blue-300`} onClick={() => setShowShared((current) => !current)}><SharedIcon visible={showShared} /></button> : null}
-        <button type="button" aria-label="Cards view" aria-pressed={view === "cards"} title="Cards view" className={buttonClass(view === "cards")} onClick={() => setView("cards")}><CardsIcon /></button>
-        <button type="button" aria-label="Compact table view" aria-pressed={view === "table"} title="Compact table view" className={buttonClass(view === "table")} onClick={() => setView("table")}><TableIcon /></button>
+        {allowSharedToggle ? <button type="button" aria-label={showShared ? "Hide shared snapshots" : "Show shared snapshots"} aria-pressed={showShared} title={showShared ? "Hide shared snapshots" : "Show shared snapshots"} className={`${buttonClass(showShared)} mr-1 text-blue-600 dark:text-blue-300`} onClick={toggleShared}><SharedIcon visible={showShared} /></button> : null}
+        <button type="button" aria-label="Cards view" aria-pressed={view === "cards"} title="Cards view" className={buttonClass(view === "cards")} onClick={() => selectView("cards")}><CardsIcon /></button>
+        <button type="button" aria-label="Compact table view" aria-pressed={view === "table"} title="Compact table view" className={buttonClass(view === "table")} onClick={() => selectView("table")}><TableIcon /></button>
       </div>
+      <p className="sr-only" role="status" aria-live="polite">{saveError}</p>
     </div>
   );
 }

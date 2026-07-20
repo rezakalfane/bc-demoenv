@@ -4,6 +4,48 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate persisted page-type collection preferences
+
+- **Date:** 2026-07-20
+- **Source:** `feature/persisted-page-view-preferences`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated tenant-scoped, page-type card/table preferences, persisted shared-snapshot visibility, server-rendered initial collection state, and preference-aware card/table loading skeletons after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Persist page-type collection preferences
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/persisted-page-view-preferences`
+- **Type:** Feature commit
+
+- Added tenant-scoped Turso display preferences with authenticated Server Actions and server-rendered initial state.
+- Scoped preferences by page type so all environment channel lists, live channel catalogs, and captured snapshot catalogs share their respective modes without coupling unrelated page types.
+- Persisted shared-snapshot visibility for the Snapshots index and kept search text transient.
+- Added preference-aware Dashboard, environment, Snapshots, and product-browser loading skeletons that match card or compact-table mode.
+- Updated README, implementation details, database-schema documentation, prompt History, and Changelog.
+
+### Merge — Integrate searchable collection views
+
+- **Date:** 2026-07-20
+- **Source:** `feature/searchable-collection-views`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the shared collection toolbar, instant resource filtering, compact table alternatives, and shared-snapshot visibility control across Dashboard, Settings, channels, Snapshots, and product browsers after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add searchable collection views
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/searchable-collection-views`
+- **Type:** Feature commit
+
+- Added a reusable accessible collection browser with instant search and consistent card/table controls.
+- Added compact table views while retaining existing cards, resource navigation, diagnostics, favorite controls, and operation progress.
+- Added a Snapshots-only control to show or hide shared read-only series.
+- Kept resource rendering and sensitive data access on the server with only toolbar state crossing the client boundary.
+- Updated README, implementation details, and reverse-chronological prompt History.
+
 ### Merge — Integrate operations, favorites, and channel-card improvements
 
 - **Date:** 2026-07-20

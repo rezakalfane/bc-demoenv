@@ -1,3 +1,5 @@
+import { CollectionViewSkeleton } from "@/components/collection-view-skeleton";
+
 export default function SnapshotLoading() {
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-10" aria-hidden="true">
@@ -6,14 +8,14 @@ export default function SnapshotLoading() {
         <div className="mt-9 h-10 w-72 rounded-lg bg-black/5 dark:bg-white/8" />
         <div className="mt-12 grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div className="h-96 rounded-2xl bg-black/4 dark:bg-white/5" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-            {Array.from({ length: 10 }, (_, index) => (
-              <div
-                key={index}
-                className="h-64 rounded-2xl bg-black/4 dark:bg-white/5"
-              />
-            ))}
-          </div>
+          <CollectionViewSkeleton
+            collectionId="snapshot-products"
+            cardCount={10}
+            tableColumns={4}
+            tableRows={10}
+            cardsClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
+            cardClassName="h-64 rounded-2xl bg-black/4 dark:bg-white/5"
+          />
         </div>
       </div>
     </div>
