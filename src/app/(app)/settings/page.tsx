@@ -8,10 +8,60 @@ import {
   getBigCommerceEnvironments,
   getEnvironmentFavoriteKey,
   getFavoriteResourceKeys,
+  type BigCommerceEnvironment,
 } from "@/lib/db";
 import { FavoriteButton } from "@/components/favorite-button";
+import { CollectionBrowser } from "@/components/collection-browser";
 
 export const dynamic = "force-dynamic";
+
+function SavedEnvironmentCard({
+  environment,
+  isFavorite,
+}: {
+  environment: BigCommerceEnvironment;
+  isFavorite: boolean;
+}) {
+  return (
+    <article className="flex h-full flex-col rounded-3xl border border-black/10 bg-white/65 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.04)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="font-semibold">{environment.name}</h3>
+          <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <div>
+              <dt className="text-xs text-black/40 dark:text-white/40">Store hash</dt>
+              <dd className="mt-0.5 font-mono">{environment.storeHash}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-black/40 dark:text-white/40">Access token</dt>
+              <dd className="mt-0.5 font-mono">••••••••{environment.accessTokenHint}</dd>
+            </div>
+          </dl>
+        </div>
+        <div className="shrink-0">
+          <FavoriteButton
+            target={{ type: "environment", environmentId: environment.id }}
+            initialFavorite={isFavorite}
+            label={environment.name}
+          />
+        </div>
+      </div>
+
+      <EnvironmentAccessDiagnostics environment={environment} />
+
+      <div className="mt-auto flex items-start justify-between gap-4 border-t border-black/8 pt-4 dark:border-white/8">
+        <details className="group min-w-0 flex-1">
+          <summary className="cursor-pointer list-none text-sm font-medium text-black/50 transition hover:text-black dark:text-white/50 dark:hover:text-white">
+            <span className="group-open:hidden">Edit environment</span>
+            <span className="hidden group-open:inline">Close editor</span>
+          </summary>
+          <div className="mt-5"><EnvironmentForm environment={environment} /></div>
+        </details>
+        <DeleteEnvironmentForm environment={environment} />
+      </div>
+    </article>
+  );
+}
 
 export default async function SettingsPage() {
   const user = await requireAppUser();
@@ -87,62 +137,36 @@ export default async function SettingsPage() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {sortedEnvironments.map((environment) => (
-                <article
-                  key={environment.id}
-                  className="flex h-full flex-col rounded-3xl border border-black/10 bg-white/65 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.04)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <h3 className="font-semibold">{environment.name}</h3>
-                      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                        <div>
-                          <dt className="text-xs text-black/40 dark:text-white/40">
-                            Store hash
-                          </dt>
-                          <dd className="mt-0.5 font-mono">
-                            {environment.storeHash}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs text-black/40 dark:text-white/40">
-                            Access token
-                          </dt>
-                          <dd className="mt-0.5 font-mono">
-                            ••••••••{environment.accessTokenHint}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                    <div className="shrink-0">
-                      <FavoriteButton
-                        target={{ type: "environment", environmentId: environment.id }}
-                        initialFavorite={favoriteKeys.has(
-                          getEnvironmentFavoriteKey(environment.id),
-                        )}
-                        label={environment.name}
-                      />
-                    </div>
-                  </div>
-
-                  <EnvironmentAccessDiagnostics environment={environment} />
-
-                  <div className="mt-auto flex items-start justify-between gap-4 border-t border-black/8 pt-4 dark:border-white/8">
-                    <details className="group min-w-0 flex-1">
-                      <summary className="cursor-pointer list-none text-sm font-medium text-black/50 transition hover:text-black dark:text-white/50 dark:hover:text-white">
-                        <span className="group-open:hidden">Edit environment</span>
-                        <span className="hidden group-open:inline">Close editor</span>
-                      </summary>
-                      <div className="mt-5">
-                        <EnvironmentForm environment={environment} />
-                      </div>
-                    </details>
-                    <DeleteEnvironmentForm environment={environment} />
-                  </div>
-                </article>
-              ))}
-            </div>
+            <CollectionBrowser
+              collectionId="settings-environments"
+              ariaLabel="Saved environments"
+              searchPlaceholder="Search saved environments…"
+              cardsClassName="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+              columns={[
+                { key: "name", label: "Environment", className: "max-w-56" },
+                { key: "hash", label: "Store hash" },
+                { key: "token", label: "Access token" },
+                { key: "diagnostics", label: "Diagnostics" },
+                { key: "remove", label: "Remove", align: "right" },
+                { key: "favorite", label: "Favorite", align: "right" },
+              ]}
+              items={sortedEnvironments.map((environment) => {
+                const isFavorite = favoriteKeys.has(getEnvironmentFavoriteKey(environment.id));
+                return {
+                  id: String(environment.id),
+                  searchText: `${environment.name} ${environment.storeHash} ${environment.accessTokenHint}`,
+                  card: <SavedEnvironmentCard environment={environment} isFavorite={isFavorite} />,
+                  cells: [
+                    <span key="name" className="font-semibold">{environment.name}</span>,
+                    <span key="hash" className="font-mono text-black/55 dark:text-white/55">{environment.storeHash}</span>,
+                    <span key="token" className="font-mono text-black/55 dark:text-white/55">••••{environment.accessTokenHint}</span>,
+                    <EnvironmentAccessDiagnostics key="diagnostics" environment={environment} compact />,
+                    <div key="remove" className="flex justify-end"><DeleteEnvironmentForm environment={environment} /></div>,
+                    <div key="favorite" className="flex justify-end"><FavoriteButton target={{ type: "environment", environmentId: environment.id }} initialFavorite={isFavorite} label={environment.name} /></div>,
+                  ],
+                };
+              })}
+            />
           )}
         </section>
       </div>

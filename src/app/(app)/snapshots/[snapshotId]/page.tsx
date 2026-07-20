@@ -25,6 +25,7 @@ import {
 import { PublishedIcon } from "@/components/action-icons";
 import { SnapshotInlineName } from "@/components/snapshot-inline-name";
 import { FavoriteButton } from "@/components/favorite-button";
+import { CollectionBrowser } from "@/components/collection-browser";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -329,15 +330,29 @@ export default async function SnapshotPage({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-                  {products.map((product) => (
-                    <CatalogProductCard
-                      key={product.id}
-                      product={product}
-                      priceFormatter={priceFormatter}
-                    />
-                  ))}
-                </div>
+                <CollectionBrowser
+                  collectionId={`snapshot-${snapshot.summary.id}-products`}
+                  ariaLabel={`${snapshot.summary.name} products`}
+                  searchPlaceholder="Search captured products…"
+                  cardsClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
+                  columns={[
+                    { key: "name", label: "Product", className: "max-w-64" },
+                    { key: "description", label: "Description", className: "max-w-md" },
+                    { key: "categories", label: "Categories" },
+                    { key: "price", label: "Price", align: "right" },
+                  ]}
+                  items={products.map((product) => ({
+                    id: String(product.id),
+                    searchText: `${product.id} ${product.name} ${product.description} ${product.price ?? ""}`,
+                    card: <CatalogProductCard product={product} priceFormatter={priceFormatter} />,
+                    cells: [
+                      <span key="name" className="font-semibold">{product.name}</span>,
+                      <span key="description" className="line-clamp-2 text-black/50 dark:text-white/50">{product.description || "No description available."}</span>,
+                      product.categoryIds.length,
+                      <span key="price" className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{product.price === null ? "—" : priceFormatter.format(product.price)}</span>,
+                    ],
+                  }))}
+                />
               )}
             </section>
           </div>

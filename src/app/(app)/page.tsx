@@ -6,6 +6,7 @@ import {
 } from "@/lib/bigcommerce";
 import { CatalogActivityBadge } from "@/components/catalog-operation-progress";
 import { FavoriteButton } from "@/components/favorite-button";
+import { CollectionBrowser } from "@/components/collection-browser";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,21 @@ const statusLabels = {
   partial: "Partial data",
   unavailable: "Unavailable",
 };
+
+function EnvironmentStatus({ environment }: { environment: EnvironmentDashboard }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyles[environment.status]}`}
+    >
+      {statusLabels[environment.status]}
+    </span>
+  );
+}
+
+function EnvironmentMetric({ environment, metricKey }: { environment: EnvironmentDashboard; metricKey: typeof metricKeys[number] }) {
+  const value = environment.metrics[metricKey].value;
+  return value === null ? "—" : numberFormatter.format(value);
+}
 
 function EnvironmentCard({ environment }: { environment: EnvironmentDashboard }) {
   const firstError = metricKeys
@@ -96,11 +112,7 @@ function EnvironmentCard({ environment }: { environment: EnvironmentDashboard })
         >
           Manage environment →
         </Link>
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyles[environment.status]}`}
-        >
-          {statusLabels[environment.status]}
-        </span>
+        <EnvironmentStatus environment={environment} />
       </div>
     </article>
   );
@@ -140,11 +152,39 @@ async function EnvironmentGrid() {
   }
 
   return (
-    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-      {environments.map((environment) => (
-        <EnvironmentCard key={environment.id} environment={environment} />
-      ))}
-    </div>
+    <CollectionBrowser
+      collectionId="dashboard-environments"
+      ariaLabel="Store environments"
+      searchPlaceholder="Search environments…"
+      columns={[
+        { key: "name", label: "Environment", className: "max-w-56" },
+        { key: "hash", label: "Store hash" },
+        { key: "channels", label: "Channels", align: "right" },
+        { key: "categories", label: "Categories", align: "right" },
+        { key: "products", label: "Products", align: "right" },
+        { key: "variants", label: "Variants", align: "right" },
+        { key: "status", label: "Status" },
+        { key: "favorite", label: "Favorite", align: "right" },
+      ]}
+      items={environments.map((environment) => ({
+        id: String(environment.id),
+        searchText: `${environment.name} ${environment.storeHash} ${statusLabels[environment.status]}`,
+        card: <EnvironmentCard environment={environment} />,
+        cells: [
+          <Link key="name" href={`/environments/${environment.id}`} className="inline-flex max-w-full items-center gap-2 font-semibold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-200">
+            <span className="truncate">{environment.name}</span>
+            <CatalogActivityBadge environmentId={environment.id} />
+          </Link>,
+          <span key="hash" className="font-mono text-black/55 dark:text-white/55">{environment.storeHash}</span>,
+          <EnvironmentMetric key="channels" environment={environment} metricKey="channels" />,
+          <EnvironmentMetric key="categories" environment={environment} metricKey="categories" />,
+          <EnvironmentMetric key="products" environment={environment} metricKey="products" />,
+          <EnvironmentMetric key="variants" environment={environment} metricKey="variants" />,
+          <EnvironmentStatus key="status" environment={environment} />,
+          <div key="favorite" className="flex justify-end"><FavoriteButton target={{ type: "environment", environmentId: environment.id }} initialFavorite={environment.isFavorite} label={environment.name} /></div>,
+        ],
+      }))}
+    />
   );
 }
 

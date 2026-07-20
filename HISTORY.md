@@ -2,6 +2,19 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Add searchable card and table collection views
+
+### Prompt
+
+> Everywhere we display cards, add a tool bar above (aligned right, same icon and button size as in Catalog or Snapshot pages) where we can switch between cards view, and compact table view (same compactness as Operations table). Also add a Search box aligned left to quickly filter elements. For Snapshots, also add an icon to show / hide shared Snapshots
+
+### Summary
+
+- Added a reusable accessible collection browser with left-aligned instant search, result counts, and right-aligned 32-pixel card/table controls.
+- Added compact table views to Dashboard environments, Settings environments, channel lists, snapshot series, and live/captured product browsers while retaining their existing cards and actions.
+- Added a Snapshots-only visibility control for shared read-only series; owned snapshots and active captures remain visible.
+- Kept API, database work, cards, and table rows in Server Components; only the toolbar and its display controls cross the client boundary.
+
 ## 2026-07-20 — Refine favorite and publication controls
 
 ### Prompt
