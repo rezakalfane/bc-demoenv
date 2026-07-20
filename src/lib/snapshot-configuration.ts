@@ -89,6 +89,33 @@ export type CapturedSnapshotConfiguration = Partial<
   Record<Exclude<SnapshotRestoreGroup, "catalog">, CapturedConfigurationGroup>
 >;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function containsTranslationEdges(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(containsTranslationEdges);
+  }
+
+  if (!isRecord(value)) return false;
+  if (Array.isArray(value.edges) && value.edges.length > 0) return true;
+
+  return Object.values(value).some(containsTranslationEdges);
+}
+
+export function hasCapturedTranslations(
+  configuration: CapturedSnapshotConfiguration | null | undefined,
+) {
+  const localization = configuration?.localization;
+  if (!localization) return false;
+
+  return ["productTranslations", "categoryTranslations"].some((resourceName) => {
+    const resource = localization.resources[resourceName];
+    return resource ? containsTranslationEdges(resource.data) : false;
+  });
+}
+
 const validRestoreGroups = new Set<string>(
   SNAPSHOT_RESTORE_GROUPS
     .filter((group) => group.id !== "channel")

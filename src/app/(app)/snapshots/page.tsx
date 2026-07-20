@@ -38,6 +38,16 @@ function formatBytes(value: number) {
 
 type SnapshotListItem = CatalogSnapshotSeriesSummary & { isFavorite: boolean; tags: string[] };
 
+function withComputedSnapshotTags(tags: string[], hasTranslations: boolean) {
+  if (!hasTranslations) return tags;
+  if (tags.some((tag) => tag.localeCompare("localized", "en-US", { sensitivity: "base" }) === 0)) {
+    return tags;
+  }
+  return [...tags, "localized"].toSorted((left, right) =>
+    left.localeCompare(right, undefined, { sensitivity: "base" }),
+  );
+}
+
 function SnapshotSeriesCard({
   snapshot,
   publisherEmail,
@@ -121,9 +131,12 @@ export default async function SnapshotsPage() {
       isFavorite: favoriteKeys.has(
         getSnapshotFavoriteKey(snapshot.ownerUserId, snapshot.name),
       ),
-      tags: tagsBySeries.get(
-        getCatalogSnapshotSeriesKey(snapshot.ownerUserId, snapshot.name),
-      ) ?? [],
+      tags: withComputedSnapshotTags(
+        tagsBySeries.get(
+          getCatalogSnapshotSeriesKey(snapshot.ownerUserId, snapshot.name),
+        ) ?? [],
+        snapshot.hasTranslations,
+      ),
     }))
     .toSorted((left, right) => {
     const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);

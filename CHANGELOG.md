@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate computed localized snapshot tags
+
+- **Date:** 2026-07-20
+- **Source:** `feature/localized-snapshot-tag`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated version-aware computed localization tags for snapshot details, cards, tables, search, and multi-tag filtering after TypeScript, lint, whitespace, production-build, and SQLite JSON-query validation.
+
+### Commit — Add computed localized snapshot tags
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/localized-snapshot-tag`
+- **Type:** Feature commit
+
+- Derived a read-only `localized` tag only when a visible snapshot manifest contains captured product or category translation records.
+- Added the computed tag to owned and published snapshot summaries, detail badges, search, and multi-select filtering.
+- Reserved the computed name so it cannot be added as a custom database tag and excluded legacy collisions from custom-tag suggestions and results.
+- Updated README, implementation details, prompt History, and Changelog.
+
 ### Merge — Integrate snapshot series tags
 
 - **Date:** 2026-07-20
