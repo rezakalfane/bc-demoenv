@@ -60,6 +60,24 @@ erDiagram
         TEXT created_at
     }
 
+    APPLICATION_EVENTS {
+        INTEGER id PK
+        TEXT user_id
+        TEXT event_type
+        TEXT resource_type
+        INTEGER resource_id
+        TEXT resource_name
+        TEXT payload_json
+        TEXT created_at
+    }
+
+    FAVORITES {
+        TEXT user_id PK
+        TEXT resource_type PK
+        TEXT resource_key PK
+        TEXT created_at
+    }
+
     CATALOG_OPERATIONS {
         INTEGER id PK
         TEXT user_id
@@ -105,8 +123,10 @@ erDiagram
 
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_SNAPSHOTS : "source for"
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_OPERATIONS : "targeted by"
+    BIGCOMMERCE_ENVIRONMENTS o|..o{ FAVORITES : "may be favored as"
     CATALOG_SNAPSHOTS o|..o{ CATALOG_SNAPSHOT_EVENTS : "described by"
     CATALOG_SNAPSHOTS o|..o{ CATALOG_OPERATIONS : "used by"
+    CATALOG_SNAPSHOTS o|..o{ FAVORITES : "series may be favored as"
     CATALOG_OPERATIONS ||..o| CATALOG_SNAPSHOT_CAPTURE_STATE : "checkpoints"
     CATALOG_OPERATIONS ||..o{ CATALOG_SNAPSHOT_CAPTURE_PRODUCTS : "stages products"
 ```
@@ -117,6 +137,7 @@ Important uniqueness rules and indexes are:
 - Snapshot `(user_id, name, snapshot_version)` tuples are unique, and only one version per case-insensitive user/name series can be published.
 - Only one queued or running operation can exist for a non-null `(user_id, kind, operation_key)` tuple.
 - Capture-product rows use the composite primary key `(operation_id, product_index)`.
+- Favorites use the composite primary key `(user_id, resource_type, resource_key)`. Environment keys use the tenant-owned database ID, channel keys combine environment and BigCommerce channel IDs, and snapshot keys combine the owner Clerk ID with the normalized series name so a favorite survives new immutable versions. Snapshot rename and deletion reconcile those keys for every viewer.
 
 ## Security and tenancy
 
@@ -125,6 +146,8 @@ BigCommerce access tokens are encrypted with AES-256-GCM before storage. The app
 Settings credential diagnostics use the same tenant-scoped, server-only credential lookup and never return the decrypted token to the browser. **Test access** sends bounded, read-only requests to representative Catalog, Channels, Sites, storefront settings, Customers, Content, Shipping, Tax, Inventory, Pricing, Themes, and B2B Edition endpoints. BigCommerce store tokens do not expose a trustworthy scope-list response, so the report infers missing read scopes from `403` responses, distinguishes invalid credentials and rate limiting, and lists `404`/unsupported resources separately as unavailable for the tested store or channel type. APIs that are inapplicable—such as Stencil theme access on a Catalyst channel—do not make an otherwise valid credential appear broken. Modify permissions are never exercised: restore and clear capabilities explicitly remain **Write not tested** and name the modify scopes required.
 
 Snapshot payloads contain catalog data and public image links, but never BigCommerce access tokens.
+
+Favorites are private presentation metadata. Every favorite lookup and toggle includes the current Clerk user ID; the Server Action also verifies ownership of environments and channels or current access to an owned/published snapshot before accepting the mutation. Favorite status never grants access to a resource that is no longer otherwise visible.
 
 ## BigCommerce access scopes
 
@@ -190,7 +213,9 @@ Large snapshot captures are initialized once, checkpointed in Turso, and process
 
 Restore and clear operations also start registered Vercel Workflow runs instead of relying on a browser request or a Next.js `after()` callback. Their Workflow run IDs are stored with the tenant-owned operation row in Turso, allowing the API to reconcile run state after navigation, reload, deployment, or a Function restart. Restore checkpoints the selected catalog/configuration groups as retryable steps; clear safely re-reads the remaining channel assignments and categories when a step is retried. Cancellation stops the Workflow run and updates the same operation row used by the channel, environment, dashboard, snapshot, and History views.
 
-The authenticated layout owns a global completion-notification observer, so leaving a channel or snapshot page does not detach the browser from its background work. A tenant-scoped recent-operation endpoint reconciles active Workflow runs and exposes terminal status, affected IDs, result labels, errors, and only the count of recorded manual actions. The browser polls while the application is visible and immediately rechecks when a catalog operation starts, another tab changes the active operation, or the tab regains visibility. Completed captures link to their new immutable snapshot; restore and clear notifications link to the affected channel. Failed operations remain actionable through the same resource link, while a completed restore with manual work uses an attention state and directs the user to channel History for the full validated action and external Control Panel link. Seen terminal operation IDs and the last successful check are kept per Clerk user in local storage, preventing duplicate notifications across route changes while still catching a completion that occurred after the user's previous check.
+The authenticated layout owns a global completion-notification observer, so leaving a channel or snapshot page does not detach the browser from its background work. A tenant-scoped recent-operation endpoint reconciles active Workflow runs and exposes terminal status, affected IDs, result labels, errors, and only the count of recorded manual actions. The browser polls while the application is visible and immediately rechecks when a catalog operation starts, another tab changes the active operation, or the tab regains visibility. Completed captures link to their new immutable snapshot; restore and clear notifications link to the affected channel. Failed operations remain actionable through the same resource link, while a completed restore with manual work uses an attention state and directs the user to channel History for the full validated action and external Control Panel link. Each notification receives an independent absolute 30-second expiry and can still be dismissed manually or by following its link. Seen terminal operation IDs and the last successful check are kept per Clerk user in local storage, preventing duplicate notifications across route changes while still catching a completion that occurred after the user's previous check.
+
+The Operations page merges the complete `catalog_operations` Workflow ledger, `catalog_snapshot_events`, and the lightweight `application_events` audit stream with mandatory Clerk user predicates. It covers snapshot capture, restore, clear, rename, publish, unpublish, version deletion, whole-series deletion, and environment creation/deletion. Existing live environments created before the audit migration are represented from their tenant-owned creation timestamps; historical deleted resources cannot be reconstructed. New environment and whole-snapshot mutations write their audit event atomically with the resource mutation, retaining safe names, identifiers, counts, and timestamps after deletion without storing access tokens or snapshot payloads. A narrow Client Component receives the serializable display model for local sorting, filtering, and detail-modal interactions; encrypted credentials and raw access tokens never cross the Server Component boundary. Visibility-aware route refreshes discover operations started elsewhere and run more frequently while work is active, without discarding the user's table filters. Manual-action URLs are validated as HTTPS BigCommerce Control Panel links before they are exposed. The detail view includes persisted progress, result counters, restore groups, warnings, errors, Workflow IDs, resource IDs, and direct tenant-safe application links. On desktop, the Operations route collapses the shared sidebar into an accessible icon rail and removes the application's usual maximum width so the dense table can use the available viewport; all other routes retain the full navigation.
 
 ### Snapshot capture Workflow
 

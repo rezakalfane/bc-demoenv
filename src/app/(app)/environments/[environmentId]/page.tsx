@@ -2,11 +2,44 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getEnvironmentDetails } from "@/lib/bigcommerce";
 import { CatalogActivityBadge } from "@/components/catalog-operation-progress";
+import { FavoriteButton } from "@/components/favorite-button";
 
 export const dynamic = "force-dynamic";
 
-function formatChannelMetadata(values: string[]) {
-  return values.filter(Boolean).join(" · ");
+const dateFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+});
+
+const platformLabels: Record<string, string> = {
+  bigcommerce: "BigCommerce",
+  catalyst: "Catalyst",
+  custom: "Custom",
+  next: "Next.js",
+};
+
+function formatLabel(value: string) {
+  const normalizedValue = value.trim().toLowerCase();
+  return (
+    platformLabels[normalizedValue] ??
+    normalizedValue.replaceAll("_", " ").replace(/\b\w/g, (letter) =>
+      letter.toUpperCase(),
+    )
+  );
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : dateFormatter.format(date);
+}
+
+function statusClasses(status: string) {
+  return status.toLowerCase() === "active"
+    ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
+    : "bg-amber-500/12 text-amber-700 dark:text-amber-300";
 }
 
 function ChannelUrl({ url }: { url: string }) {
@@ -48,7 +81,7 @@ export default async function EnvironmentPage({
 
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-12">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-6xl">
         <Link
           href="/"
           className="inline-flex rounded-sm text-sm font-medium text-black/45 transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:text-white/45 dark:hover:text-emerald-300"
@@ -110,35 +143,100 @@ export default async function EnvironmentPage({
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {environment.channels.map((channel) => {
-                const metadata = formatChannelMetadata([
-                  channel.type,
-                  channel.platform,
-                  channel.status,
-                ]);
+                const catalogHref = `/environments/${environment.id}/channels/${channel.id}`;
+                const modifiedDate = formatDate(channel.dateModified);
+                const createdDate = formatDate(channel.dateCreated);
 
                 return (
                   <article
                     key={channel.id}
-                    className="rounded-2xl border border-black/10 bg-white/70 p-5 shadow-[0_12px_35px_rgba(0,0,0,0.035)] backdrop-blur dark:border-white/10 dark:bg-white/4"
+                    className="flex min-h-80 flex-col rounded-3xl border border-black/10 bg-white/70 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4"
                   >
-                    <h3 className="font-semibold tracking-tight">
-                      <Link
-                        href={`/environments/${environment.id}/channels/${channel.id}`}
-                        className="rounded-sm transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:hover:text-emerald-300"
-                      >
-                        <span className="inline-flex items-center gap-3">{channel.name}<CatalogActivityBadge environmentId={environment.id} channelId={channel.id} /></span>
-                      </Link>
-                    </h3>
-                    {metadata ? (
-                      <p className="mt-1 text-xs capitalize text-black/40 dark:text-white/40">
-                        {metadata}
-                      </p>
-                    ) : null}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-semibold tracking-tight">
+                          <Link
+                            href={catalogHref}
+                            className="rounded-sm transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:hover:text-emerald-300"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span className="line-clamp-2">{channel.name}</span>
+                              <CatalogActivityBadge
+                                environmentId={environment.id}
+                                channelId={channel.id}
+                              />
+                            </span>
+                          </Link>
+                        </h3>
+                        <p className="mt-1 text-xs text-black/40 dark:text-white/40">
+                          {formatLabel(channel.type)} · {formatLabel(channel.platform)}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClasses(channel.status)}`}
+                        >
+                          {formatLabel(channel.status)}
+                        </span>
+                        <FavoriteButton
+                          target={{
+                            type: "channel",
+                            environmentId: environment.id,
+                            channelId: channel.id,
+                          }}
+                          initialFavorite={channel.isFavorite}
+                          label={channel.name}
+                        />
+                      </div>
+                    </div>
+
+                    <dl className="mt-5 grid grid-cols-2 gap-2.5 text-sm">
+                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
+                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
+                          Channel ID
+                        </dt>
+                        <dd className="mt-1 font-mono text-xs font-semibold tabular-nums">
+                          {channel.id}
+                        </dd>
+                      </div>
+                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
+                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
+                          Site ID
+                        </dt>
+                        <dd className="mt-1 font-mono text-xs font-semibold tabular-nums">
+                          {channel.siteId ?? "—"}
+                        </dd>
+                      </div>
+                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
+                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
+                          Merchant UI
+                        </dt>
+                        <dd className="mt-1 text-xs font-semibold">
+                          {channel.isVisible === null
+                            ? "Not reported"
+                            : channel.isVisible
+                              ? "Visible"
+                              : "Hidden"}
+                        </dd>
+                      </div>
+                      <div className="rounded-2xl border border-black/8 bg-black/2.5 p-3 dark:border-white/8 dark:bg-white/3">
+                        <dt className="text-[11px] font-medium text-black/40 dark:text-white/40">
+                          Product listings
+                        </dt>
+                        <dd className="mt-1 text-xs font-semibold">
+                          {channel.isListableFromUi === null
+                            ? "Not reported"
+                            : channel.isListableFromUi
+                              ? "Available"
+                              : "Unavailable"}
+                        </dd>
+                      </div>
+                    </dl>
 
                     {channel.urls.length > 0 ? (
-                      <div className="mt-4 grid gap-2 lg:grid-cols-2">
+                      <div className="mt-4">
                         {channel.urls.map((url) => (
                           <ChannelUrl key={url} url={url} />
                         ))}
@@ -150,12 +248,21 @@ export default async function EnvironmentPage({
                       </p>
                     )}
 
-                    <Link
-                      href={`/environments/${environment.id}/channels/${channel.id}`}
-                      className="mt-4 inline-flex rounded-sm text-xs font-semibold text-emerald-700 transition hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200"
-                    >
-                      View catalog →
-                    </Link>
+                    <div className="mt-auto flex items-end justify-between gap-4 pt-5">
+                      <p className="text-[11px] leading-4 text-black/35 dark:text-white/35">
+                        {modifiedDate
+                          ? `Updated ${modifiedDate}`
+                          : createdDate
+                            ? `Created ${createdDate}`
+                            : "Live channel details"}
+                      </p>
+                      <Link
+                        href={catalogHref}
+                        className="inline-flex shrink-0 rounded-sm text-xs font-semibold text-emerald-700 transition hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200"
+                      >
+                        View catalog →
+                      </Link>
+                    </div>
                   </article>
                 );
               })}

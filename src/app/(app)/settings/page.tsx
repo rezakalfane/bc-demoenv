@@ -4,13 +4,31 @@ import {
 } from "@/components/environment-form";
 import { EnvironmentAccessDiagnostics } from "@/components/environment-access-diagnostics";
 import { requireAppUser } from "@/lib/auth";
-import { getBigCommerceEnvironments } from "@/lib/db";
+import {
+  getBigCommerceEnvironments,
+  getEnvironmentFavoriteKey,
+  getFavoriteResourceKeys,
+} from "@/lib/db";
+import { FavoriteButton } from "@/components/favorite-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const user = await requireAppUser();
-  const environments = await getBigCommerceEnvironments(user.id);
+  const [environments, favoriteKeys] = await Promise.all([
+    getBigCommerceEnvironments(user.id),
+    getFavoriteResourceKeys(user.id, "environment"),
+  ]);
+  const sortedEnvironments = environments.toSorted((left, right) => {
+    const favoriteOrder =
+      Number(favoriteKeys.has(getEnvironmentFavoriteKey(right.id))) -
+      Number(favoriteKeys.has(getEnvironmentFavoriteKey(left.id)));
+    if (favoriteOrder !== 0) return favoriteOrder;
+    const nameOrder = left.name.localeCompare(right.name, undefined, {
+      sensitivity: "base",
+    });
+    return nameOrder !== 0 ? nameOrder : left.id - right.id;
+  });
 
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-12">
@@ -70,10 +88,10 @@ export default async function SettingsPage() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {environments.map((environment) => (
+              {sortedEnvironments.map((environment) => (
                 <article
                   key={environment.id}
-                  className="rounded-3xl border border-black/10 bg-white/65 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.04)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4"
+                  className="flex h-full flex-col rounded-3xl border border-black/10 bg-white/65 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.04)] backdrop-blur sm:p-6 dark:border-white/10 dark:bg-white/4"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
@@ -97,20 +115,31 @@ export default async function SettingsPage() {
                         </div>
                       </dl>
                     </div>
-                    <DeleteEnvironmentForm environment={environment} />
+                    <div className="shrink-0">
+                      <FavoriteButton
+                        target={{ type: "environment", environmentId: environment.id }}
+                        initialFavorite={favoriteKeys.has(
+                          getEnvironmentFavoriteKey(environment.id),
+                        )}
+                        label={environment.name}
+                      />
+                    </div>
                   </div>
 
                   <EnvironmentAccessDiagnostics environment={environment} />
 
-                  <details className="group mt-5 border-t border-black/8 pt-4 dark:border-white/8">
-                    <summary className="cursor-pointer list-none text-sm font-medium text-black/50 transition hover:text-black dark:text-white/50 dark:hover:text-white">
-                      <span className="group-open:hidden">Edit environment</span>
-                      <span className="hidden group-open:inline">Close editor</span>
-                    </summary>
-                    <div className="mt-5">
-                      <EnvironmentForm environment={environment} />
-                    </div>
-                  </details>
+                  <div className="mt-auto flex items-start justify-between gap-4 border-t border-black/8 pt-4 dark:border-white/8">
+                    <details className="group min-w-0 flex-1">
+                      <summary className="cursor-pointer list-none text-sm font-medium text-black/50 transition hover:text-black dark:text-white/50 dark:hover:text-white">
+                        <span className="group-open:hidden">Edit environment</span>
+                        <span className="hidden group-open:inline">Close editor</span>
+                      </summary>
+                      <div className="mt-5">
+                        <EnvironmentForm environment={environment} />
+                      </div>
+                    </details>
+                    <DeleteEnvironmentForm environment={environment} />
+                  </div>
                 </article>
               ))}
             </div>

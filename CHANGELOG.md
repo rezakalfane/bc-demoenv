@@ -4,6 +4,27 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-20
 
+### Merge — Integrate operations, favorites, and channel-card improvements
+
+- **Date:** 2026-07-20
+- **Source:** `feature/operations-favorites`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated the tenant-scoped Operations ledger, expanded lifecycle audit events, compact Operations navigation, richer three-column channel cards, resource favorites and favorite-first ordering, and the final card-control layout refinements after TypeScript, lint, whitespace, and optimized production-build verification.
+
+### Commit — Add operations ledger and resource favorites
+
+- **Date:** 2026-07-20
+- **Branch:** `feature/operations-favorites`
+- **Type:** Feature commit
+
+- Added a sortable, filterable Operations table with detailed modal inspection, double-click shortcuts, lifecycle audit events, and 30-second completion notifications.
+- Added richer responsive three-column channel cards with channel, site, visibility, listing, URL, status, and activity details.
+- Added tenant-scoped environment, channel, and snapshot-series favorites with optimistic controls and favorite-first ordering.
+- Standardized card controls with favorites in the top-right, Dashboard status and Settings removal in bottom-right footers, and inline snapshot publication markers.
+- Updated README, implementation details, schema documentation, and reverse-chronological prompt History.
+
 ### Merge — Integrate BigCommerce credential diagnostics
 
 - **Date:** 2026-07-20

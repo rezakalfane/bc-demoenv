@@ -5,6 +5,7 @@ import {
   type EnvironmentDashboard,
 } from "@/lib/bigcommerce";
 import { CatalogActivityBadge } from "@/components/catalog-operation-progress";
+import { FavoriteButton } from "@/components/favorite-button";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +43,13 @@ function EnvironmentCard({ environment }: { environment: EnvironmentDashboard })
             {environment.storeHash}
           </p>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyles[environment.status]}`}
-        >
-          {statusLabels[environment.status]}
-        </span>
+        <div className="shrink-0">
+          <FavoriteButton
+            target={{ type: "environment", environmentId: environment.id }}
+            initialFavorite={environment.isFavorite}
+            label={environment.name}
+          />
+        </div>
       </div>
 
       <dl className="mt-6 grid grid-cols-2 gap-3">
@@ -86,13 +89,18 @@ function EnvironmentCard({ environment }: { environment: EnvironmentDashboard })
         </p>
       ) : null}
 
-      <div className="mt-auto pt-5">
+      <div className="mt-auto flex items-center justify-between gap-3 pt-5">
         <Link
           href="/settings"
           className="text-xs font-medium text-black/45 transition hover:text-emerald-700 dark:text-white/45 dark:hover:text-emerald-300"
         >
           Manage environment →
         </Link>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyles[environment.status]}`}
+        >
+          {statusLabels[environment.status]}
+        </span>
       </div>
     </article>
   );

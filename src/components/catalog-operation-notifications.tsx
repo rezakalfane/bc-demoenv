@@ -34,10 +34,12 @@ type CompletionNotification = OperationFeedItem & {
   description: string;
   href: string | null;
   linkLabel: string | null;
+  expiresAt: number;
 };
 
 const INITIAL_LOOKBACK_MS = 15 * 60 * 1000;
 const POLL_INTERVAL_MS = 10_000;
+const NOTIFICATION_TIMEOUT_MS = 30_000;
 
 function notificationStorageKey(userId: string, suffix: string) {
   return `bc-demoenv:operation-notifications:${userId}:${suffix}`;
@@ -94,7 +96,7 @@ function getNotificationLink(operation: OperationFeedItem) {
   return { href: null, label: null };
 }
 
-function toNotification(operation: OperationFeedItem): CompletionNotification {
+function toNotification(operation: OperationFeedItem, shownAt: number): CompletionNotification {
   const target = operation.destinationChannelName
     ? [operation.destinationEnvironmentName, operation.destinationChannelName]
         .filter(Boolean)
@@ -117,6 +119,7 @@ function toNotification(operation: OperationFeedItem): CompletionNotification {
       description: operation.error || operation.currentStep || `The operation for ${target} failed.`,
       href: link.href,
       linkLabel: link.label,
+      expiresAt: shownAt + NOTIFICATION_TIMEOUT_MS,
     };
   }
 
@@ -128,6 +131,7 @@ function toNotification(operation: OperationFeedItem): CompletionNotification {
       description: `${operation.manualActionCount} manual action${operation.manualActionCount === 1 ? "" : "s"} remain for ${target}. Open the channel to review History.`,
       href: link.href,
       linkLabel: link.label,
+      expiresAt: shownAt + NOTIFICATION_TIMEOUT_MS,
     };
   }
 
@@ -143,6 +147,7 @@ function toNotification(operation: OperationFeedItem): CompletionNotification {
     description: `${target} is ready.`,
     href: link.href,
     linkLabel: link.label,
+    expiresAt: shownAt + NOTIFICATION_TIMEOUT_MS,
   };
 }
 
@@ -193,7 +198,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
 
         seenIds.current.add(operation.id);
         observedActiveIds.current.delete(operation.id);
-        nextNotifications.push(toNotification(operation));
+        nextNotifications.push(toNotification(operation, now));
       }
 
       if (nextNotifications.length > 0) {
@@ -246,6 +251,19 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [poll]);
+
+  useEffect(() => {
+    if (notifications.length === 0) return;
+    const now = Date.now();
+    const nextExpiry = Math.min(...notifications.map((notification) => notification.expiresAt));
+    const timeout = window.setTimeout(() => {
+      const expiredAt = Date.now();
+      setNotifications((current) => current.filter(
+        (notification) => notification.expiresAt > expiredAt,
+      ));
+    }, Math.max(nextExpiry - now, 0));
+    return () => window.clearTimeout(timeout);
+  }, [notifications]);
 
   if (notifications.length === 0) return null;
 

@@ -17,9 +17,14 @@ import { getCatalogSnapshotView } from "@/lib/catalog-snapshots";
 import { getCatalogRestoreDestinations } from "@/lib/catalog-restore";
 import { getSnapshotCatalogHistory } from "@/lib/catalog-history";
 import { requireAppUser } from "@/lib/auth";
-import { getActiveSnapshotOperations } from "@/lib/db";
+import {
+  getActiveSnapshotOperations,
+  getFavoriteResourceKeys,
+  getSnapshotFavoriteKey,
+} from "@/lib/db";
 import { PublishedIcon } from "@/components/action-icons";
 import { SnapshotInlineName } from "@/components/snapshot-inline-name";
+import { FavoriteButton } from "@/components/favorite-button";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -69,14 +74,21 @@ export default async function SnapshotPage({
     : [];
 
   const user = await requireAppUser();
-  const activeCapture = snapshot.isOwner ? (await getActiveSnapshotOperations(user.id)).find((operation) => {
+  const [favoriteKeys, activeSnapshotOperations] = await Promise.all([
+    getFavoriteResourceKeys(user.id, "snapshot"),
+    snapshot.isOwner ? getActiveSnapshotOperations(user.id) : Promise.resolve([]),
+  ]);
+  const isFavorite = favoriteKeys.has(
+    getSnapshotFavoriteKey(snapshot.summary.ownerUserId, snapshot.summary.name),
+  );
+  const activeCapture = activeSnapshotOperations.find((operation) => {
     try {
       const payload = JSON.parse(operation.payloadJson) as { name?: unknown };
       return String(payload.name ?? "").localeCompare(snapshot.summary.name, undefined, { sensitivity: "base" }) === 0;
     } catch {
       return false;
     }
-  }) : undefined;
+  });
   let activeCaptureOriginPath: string | undefined;
   if (activeCapture) {
     try {
@@ -124,15 +136,20 @@ export default async function SnapshotPage({
               </p>
               <div className="mt-2 flex min-w-0 items-center gap-3">
                 {snapshot.isOwner ? (
-                  <SnapshotInlineName key={snapshot.summary.name} snapshotId={snapshot.summary.id} name={snapshot.summary.name} />
+                  <SnapshotInlineName
+                    key={snapshot.summary.name}
+                    snapshotId={snapshot.summary.id}
+                    name={snapshot.summary.name}
+                    published={Boolean(publishedVersion)}
+                  />
                 ) : (
                   <h1 className="min-w-0 break-words text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
                     {snapshot.summary.name}
+                    {publishedVersion ? (
+                      <><PublishedIcon className="ml-2 inline-block align-[-0.08em] text-blue-600 dark:text-blue-300" /><span className="sr-only"> Published snapshot</span></>
+                    ) : null}
                   </h1>
                 )}
-                {publishedVersion ? (
-                  <><PublishedIcon className="text-blue-600 dark:text-blue-300" /><span className="sr-only">Published snapshot</span></>
-                ) : null}
                 <CatalogActivityBadge snapshotId={snapshot.summary.id} />
               </div>
               <p className="mt-3 text-sm text-black/45 dark:text-white/45">
@@ -165,6 +182,11 @@ export default async function SnapshotPage({
               <p>Updated <time dateTime={snapshot.summary.updatedAt}>{dateFormatter.format(new Date(snapshot.summary.updatedAt))}</time></p>
             </div>
             <div className="flex flex-wrap justify-end gap-1.5">
+              <FavoriteButton
+                target={{ type: "snapshot", snapshotId: snapshot.summary.id }}
+                initialFavorite={isFavorite}
+                label={snapshot.summary.name}
+              />
               {snapshot.isOwner ? (
                 <>
                 <SnapshotCreateVersion

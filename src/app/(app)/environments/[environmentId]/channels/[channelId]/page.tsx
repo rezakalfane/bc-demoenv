@@ -8,13 +8,19 @@ import { ChannelCatalogLiveState } from "@/components/channel-catalog-live-state
 import { SnapshotForm } from "@/components/snapshot-form";
 import { SnapshotRestore } from "@/components/snapshot-restore";
 import { CatalogHistory } from "@/components/catalog-history";
+import { FavoriteButton } from "@/components/favorite-button";
 import { requireAppUser } from "@/lib/auth";
 import { getChannelCatalog } from "@/lib/bigcommerce-catalog";
 import {
   filterProductsByCategory,
   findCatalogCategory,
 } from "@/lib/catalog-filter";
-import { getCatalogSnapshots, getLatestCatalogSnapshotSeries } from "@/lib/db";
+import {
+  getCatalogSnapshots,
+  getChannelFavoriteKey,
+  getFavoriteResourceKeys,
+  getLatestCatalogSnapshotSeries,
+} from "@/lib/db";
 import { getCatalogRestoreDestinations } from "@/lib/catalog-restore";
 import { getChannelCatalogHistory } from "@/lib/catalog-history";
 
@@ -58,15 +64,14 @@ export default async function ChannelPage({
     notFound();
   }
 
-  const snapshotSuggestionsPromise = requireAppUser().then((user) =>
-    getLatestCatalogSnapshotSeries(user.id),
-  );
-  const [catalog, snapshotSuggestions, allSnapshots, restoreDestinations, history] = await Promise.all([
+  const user = await requireAppUser();
+  const [catalog, snapshotSuggestions, allSnapshots, restoreDestinations, history, favoriteKeys] = await Promise.all([
     getChannelCatalog(parsedEnvironmentId, parsedChannelId),
-    snapshotSuggestionsPromise,
-    requireAppUser().then((user) => getCatalogSnapshots(user.id)),
+    getLatestCatalogSnapshotSeries(user.id),
+    getCatalogSnapshots(user.id),
     getCatalogRestoreDestinations(),
     getChannelCatalogHistory(parsedEnvironmentId, parsedChannelId),
+    getFavoriteResourceKeys(user.id, "channel"),
   ]);
 
   if (!catalog) {
@@ -89,6 +94,9 @@ export default async function ChannelPage({
     selectedCategory,
   );
   const basePath = `/environments/${catalog.environment.id}/channels/${parsedChannelId}`;
+  const isFavorite = favoriteKeys.has(
+    getChannelFavoriteKey(catalog.environment.id, parsedChannelId),
+  );
 
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-10">
@@ -121,6 +129,15 @@ export default async function ChannelPage({
               </span>
           </div>
           {!catalog.error && catalog.channel ? <div className="mt-4 flex flex-wrap justify-end gap-1.5">
+                <FavoriteButton
+                  target={{
+                    type: "channel",
+                    environmentId: catalog.environment.id,
+                    channelId: catalog.channel.id,
+                  }}
+                  initialFavorite={isFavorite}
+                  label={catalog.channel.name}
+                />
                 <SnapshotForm
                   environmentId={catalog.environment.id}
                   channelId={catalog.channel.id}

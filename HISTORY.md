@@ -2,6 +2,85 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Refine favorite and publication controls
+
+### Prompt
+
+> Move the blue star showing published version on the left of the titles. Also add a favorite icon button on the left of all buttons in catalog snapshot, channel catalog pages. Favorite icons on cards should be top right
+
+> move the blue star at the end of the title, inline
+
+> move the Remove link to bottom right of the card. move the status of the env at the bottom right of the card
+
+### Summary
+
+- Positioned the blue publication marker inline at the end of snapshot titles on both the snapshot list and snapshot detail page.
+- Added the tenant-scoped favorite toggle as the leftmost action on snapshot and channel catalog detail pages.
+- Kept resource-card favorite controls consistently positioned as the sole top-right control.
+- Moved Settings-card removal controls and Dashboard connection statuses into the bottom-right card footer, leaving the favorite star as the sole top-right control.
+
+## 2026-07-20 — Add favorites to resource cards
+
+### Prompt
+
+> Add Favorites feature on Environments, Snapshots, Channels with a small star icon easy to set/unset, so favorite items appear first in the different lists
+
+### Summary
+
+- Added a tenant-scoped Turso favorites table and authenticated Server Action for environment, channel, and accessible snapshot-series toggles.
+- Added compact accessible star controls with immediate optimistic feedback to Dashboard, Settings, channel, and Snapshots cards.
+- Sorted favorites first while retaining alphabetical channel/environment ordering and the existing snapshot publication/name ordering within favorite and non-favorite groups.
+- Made snapshot-series favorites survive new immutable versions and follow series renames; deleted environments and snapshot series clean up their related favorite keys.
+
+## 2026-07-20 — Improve the channel listing
+
+### Prompt
+
+> Can you improve the channels page with same 3 columns layout, and a bit more details about the channel?
+
+### Summary
+
+- Changed each environment's channel listing to the same responsive one-, two-, and three-column card layout used by Dashboard and Snapshots.
+- Added labeled channel and site IDs, status, platform and type, merchant UI visibility, product-listing availability, primary storefront URL, and the latest available channel date.
+- Preserved ascending channel-name ordering, one storefront URL per channel, catalog navigation, and channel-specific activity indicators.
+
+## 2026-07-20 — Add row shortcuts and notification expiry
+
+### Prompt
+
+> Double clicking on a row, open details. Add a timeout of 30 seconds for notifications
+
+### Summary
+
+- Made non-interactive areas of every Operations row open the existing details modal on double-click while preserving the dedicated Details and Open controls.
+- Added independent absolute 30-second expiry timers to background-operation notifications without changing manual dismissal, resource links, or persisted seen-operation behavior.
+
+## 2026-07-20 — Expand Operations and collapse its navigation
+
+### Prompt
+
+> Can you add version published, version unpublished, version deleted, environment added, environment deleted, snapshot deleted in the list of operations? Can you also minimize the left panel with pages, with only icons so operations table can take more space?
+
+### Summary
+
+- Unified durable catalog operations with tenant-owned snapshot lifecycle events, including publish, unpublish, version deletion, and rename records.
+- Added an application audit stream for environment addition/deletion and whole snapshot-series deletion, written atomically with mutations and retaining only safe resource metadata.
+- Extended operation filtering, sorting, table rows, and detail views for lifecycle records while preserving progress displays for background Workflows.
+- Collapsed the desktop sidebar to an accessible icon rail only on Operations and removed the usual shell width limit so the compact table can use the wider viewport.
+
+## 2026-07-20 — Add the Operations activity ledger
+
+### Prompt
+
+> Let's create a Operations page which lists in a compact and detailed, sortable and filtarable table, the list of current and previous operations (like the history on environment and snapshots)
+
+### Summary
+
+- Added a tenant-scoped Operations route and sidebar item covering current and previous snapshot capture, restore, and catalog-clear Workflow records.
+- Added a compact responsive table with search plus type, status, environment, attention, and date filters; sortable identifiers, operation, status, target, snapshot, progress, update time, and duration columns; and visibility-aware refresh while work is active.
+- Added a Restore-style detailed modal with persisted progress, exact current step, result counters, restore sections, warnings, errors, validated manual actions, technical identifiers, and direct affected-resource links.
+- Added loading feedback and documented the Operations data boundary and user experience in README and DETAILS.
+
 ## 2026-07-20 — Release credential diagnostics
 
 ### Prompt
