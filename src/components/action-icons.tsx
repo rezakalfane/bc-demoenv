@@ -46,10 +46,10 @@ export function PublishedIcon({ className = "" }: { className?: string }) {
       {...iconProps}
       width={14}
       height={14}
-      className={className}
+      className={`text-blue-600 dark:text-blue-300 ${className}`}
     >
-      <path d="M12 3 9.8 7.5 5 8.2l3.5 3.4-.8 4.8 4.3-2.3 4.3 2.3-.8-4.8L19 8.2l-4.8-.7Z" />
-      <path d="m9.7 11.2 1.5 1.5 3.3-3.5" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.7 2.5 4.1 5.5 4.1 9S14.7 18.5 12 21M12 3C9.3 5.5 7.9 8.5 7.9 12s1.4 6.5 4.1 9" />
     </svg>
   );
 }

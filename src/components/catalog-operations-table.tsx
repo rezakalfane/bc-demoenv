@@ -426,7 +426,18 @@ export function CatalogOperationsTable({
 
       <div className="mt-4 overflow-hidden rounded-2xl border border-black/8 bg-white/55 dark:border-white/8 dark:bg-white/3">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] border-collapse text-left text-xs">
+          <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-xs">
+            <colgroup>
+              <col className="w-[4%]" />
+              <col className="w-[10%]" />
+              <col className="w-[8%]" />
+              <col className="w-[14%]" />
+              <col className="w-[12%]" />
+              <col className="w-[25%]" />
+              <col className="w-[11%]" />
+              <col className="w-[6%]" />
+              <col className="w-[10%]" />
+            </colgroup>
             <thead className="border-b border-black/8 bg-black/[0.025] dark:border-white/8 dark:bg-white/[0.025]">
               <tr>
                 <th scope="col" aria-sort={sort.key === "id" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="ID" sortKey="id" sort={sort} onSort={changeSort} /></th>
@@ -434,7 +445,7 @@ export function CatalogOperationsTable({
                 <th scope="col" aria-sort={sort.key === "status" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Status" sortKey="status" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "target" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Environment / channel" sortKey="target" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "snapshot" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Snapshot" sortKey="snapshot" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "progress" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="w-60 px-3 py-3"><SortButton label="Progress / result" sortKey="progress" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "progress" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Progress / result" sortKey="progress" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "updatedAt" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Last update" sortKey="updatedAt" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "duration" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Duration" sortKey="duration" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" className="px-3 py-3 text-right font-semibold text-black/50 dark:text-white/50">Actions</th>
@@ -456,7 +467,7 @@ export function CatalogOperationsTable({
                   <td className="px-3 py-3"><OperationStatusBadge operation={operation} />{hasAttention(operation) ? <span className="mt-1.5 block text-[11px] font-medium text-amber-700 dark:text-amber-300">Needs attention</span> : null}</td>
                   <td className="max-w-52 px-3 py-3"><p className="truncate font-medium">{operation.environmentName}</p><p className="mt-1 truncate text-black/45 dark:text-white/45">{operation.channelName}</p></td>
                   <td className="max-w-48 px-3 py-3"><p className="truncate font-medium">{operation.snapshotName}</p>{operation.snapshotVersion ? <p className="mt-1 text-black/45 dark:text-white/45">Version {operation.snapshotVersion}</p> : null}</td>
-                  <td className="px-3 py-3">{operation.showProgress ? <><div className="flex items-center justify-between gap-3"><span className="truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
+                  <td className="overflow-hidden px-3 py-3" title={operation.currentStep}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-3"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-black/50 dark:text-white/50">{dateTimeFormatter.format(new Date(operation.updatedAt))}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-medium">{formatDuration(operation.durationMs)}</td>
                   <td className="px-3 py-3"><div className="flex items-center justify-end gap-2"><button type="button" onClick={() => setSelectedKey(operation.activityKey)} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">Details</button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300">Open →</Link> : null}</div></td>

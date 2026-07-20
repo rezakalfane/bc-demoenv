@@ -1,5 +1,6 @@
 import { getRun, start } from "workflow/api";
 import {
+  claimCatalogOperationWorkflowRecovery,
   getCatalogOperation,
   type CatalogOperation,
   updateCatalogOperation,
@@ -37,13 +38,79 @@ export async function startCatalogOperationWorkflow(
 
 export const startCatalogSnapshotWorkflow = startCatalogOperationWorkflow;
 
+export const CATALOG_WORKFLOW_RUN_NOT_FOUND_ERROR =
+  "The durable catalog workflow run was not found.";
+
+function localServerStartedAt() {
+  return new Date(Date.now() - process.uptime() * 1_000 + 1_000);
+}
+
+async function recoverOrphanedLocalWorkflow(
+  userId: string,
+  operation: CatalogOperation,
+  options: { runExists?: boolean } = {},
+) {
+  if (
+    process.env.NODE_ENV !== "development" ||
+    !operation.workflowRunId
+  ) {
+    return false;
+  }
+
+  const isMissingRunFailure =
+    operation.status === "failed" &&
+    operation.error === CATALOG_WORKFLOW_RUN_NOT_FOUND_ERROR;
+  const serverStartedAt = localServerStartedAt();
+  if (
+    !isMissingRunFailure &&
+    Date.parse(operation.updatedAt) >= serverStartedAt.getTime()
+  ) {
+    return false;
+  }
+
+  // A missing-run failure may have been recorded after this server started.
+  // The workflow_run_id is cleared by the atomic claim so concurrent polls
+  // cannot both attach replacement runs to the same durable checkpoint.
+  const recoveryBoundary = isMissingRunFailure
+    ? new Date(Date.now() + 1_000)
+    : serverStartedAt;
+
+  const claimed = await claimCatalogOperationWorkflowRecovery(
+    userId,
+    operation.id,
+    operation.workflowRunId,
+    recoveryBoundary,
+    CATALOG_WORKFLOW_RUN_NOT_FOUND_ERROR,
+  );
+  if (!claimed) return false;
+
+  console.info("Recovering catalog workflow after local server restart", {
+    operationId: operation.id,
+    previousWorkflowRunId: operation.workflowRunId,
+    checkpointUpdatedAt: operation.updatedAt,
+  });
+
+  if (options.runExists !== false) {
+    await cancelCatalogOperationWorkflow(operation);
+  }
+  await startCatalogOperationWorkflow(userId, operation.id);
+  return true;
+}
+
 export async function reconcileCatalogOperationWorkflow(
   userId: string,
   operation: CatalogOperation,
 ) {
+  const isRecoverableMissingRunFailure =
+    process.env.NODE_ENV === "development" &&
+    operation.status === "failed" &&
+    operation.error === CATALOG_WORKFLOW_RUN_NOT_FOUND_ERROR;
   if (
     !operation.workflowRunId ||
-    !["queued", "running"].includes(operation.status)
+    (
+      !["queued", "running"].includes(operation.status) &&
+      !isRecoverableMissingRunFailure
+    )
   ) {
     return;
   }
@@ -51,15 +118,30 @@ export async function reconcileCatalogOperationWorkflow(
   try {
     const run = getRun<unknown>(operation.workflowRunId);
     if (!(await run.exists)) {
+      if (
+        await recoverOrphanedLocalWorkflow(userId, operation, {
+          runExists: false,
+        })
+      ) {
+        return;
+      }
+      if (isRecoverableMissingRunFailure) return;
       await updateCatalogOperation(userId, operation.id, {
         status: "failed",
         currentStep: "Failed",
-        error: "The durable catalog workflow run was not found.",
+        error: CATALOG_WORKFLOW_RUN_NOT_FOUND_ERROR,
       });
       return;
     }
 
     const status = await run.status;
+    if (
+      (status === "pending" || status === "running") &&
+      await recoverOrphanedLocalWorkflow(userId, operation)
+    ) {
+      return;
+    }
+
     if (status === "running" && operation.status === "queued") {
       await updateCatalogOperation(userId, operation.id, {
         status: "running",

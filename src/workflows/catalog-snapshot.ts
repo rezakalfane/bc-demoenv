@@ -1,5 +1,7 @@
 import {
+  captureCategoryBatchStep,
   captureProductBatchStep,
+  completeSnapshotInitializationStep,
   failSnapshotStep,
   finalizeSnapshotStep,
   initializeSnapshotStep,
@@ -13,7 +15,16 @@ export async function catalogSnapshotWorkflow(
   console.info("Starting durable snapshot workflow", { operationId });
 
   try {
-    let progress = await initializeSnapshotStep(userId, operationId);
+    let categoryProgress = await initializeSnapshotStep(userId, operationId);
+    while (
+      categoryProgress.nextCategoryIndex < categoryProgress.totalCategories
+    ) {
+      categoryProgress = await captureCategoryBatchStep(userId, operationId);
+    }
+    let progress = await completeSnapshotInitializationStep(
+      userId,
+      operationId,
+    );
     while (progress.nextProductIndex < progress.totalProducts) {
       progress = await captureProductBatchStep(userId, operationId);
     }

@@ -101,10 +101,7 @@ function ChannelCard({
           </h3>
           <p className="mt-1 text-xs text-black/40 dark:text-white/40">{formatLabel(channel.type)} · {formatLabel(channel.platform)}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <ChannelStatus status={channel.status} />
-          <FavoriteButton target={{ type: "channel", environmentId, channelId: channel.id }} initialFavorite={channel.isFavorite} label={channel.name} />
-        </div>
+        <FavoriteButton target={{ type: "channel", environmentId, channelId: channel.id }} initialFavorite={channel.isFavorite} label={channel.name} />
       </div>
 
       <dl className="mt-5 grid grid-cols-2 gap-2.5 text-sm">
@@ -124,7 +121,7 @@ function ChannelCard({
         <p className="text-[11px] leading-4 text-black/35 dark:text-white/35">
           {modifiedDate ? `Updated ${modifiedDate}` : createdDate ? `Created ${createdDate}` : "Live channel details"}
         </p>
-        <Link href={catalogHref} className="inline-flex shrink-0 rounded-sm text-xs font-semibold text-emerald-700 transition hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200">View catalog →</Link>
+        <ChannelStatus status={channel.status} />
       </div>
     </article>
   );

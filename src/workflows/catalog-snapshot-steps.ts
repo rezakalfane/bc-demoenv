@@ -1,9 +1,11 @@
 import { FatalError } from "workflow";
 import {
+  captureWorkflowCatalogSnapshotCategoryBatch,
   captureWorkflowCatalogSnapshotProductBatch,
+  completeWorkflowCatalogSnapshotInitialization,
   failWorkflowCatalogSnapshot,
   finalizeWorkflowCatalogSnapshot,
-  initializeWorkflowCatalogSnapshot,
+  prepareWorkflowCatalogSnapshot,
 } from "@/lib/catalog-snapshots";
 
 function asStepError(error: unknown) {
@@ -25,12 +27,46 @@ export async function initializeSnapshotStep(
   "use step";
   console.info("Initializing durable snapshot capture", { operationId });
   try {
-    return await initializeWorkflowCatalogSnapshot(userId, operationId);
+    return await prepareWorkflowCatalogSnapshot(userId, operationId);
   } catch (error) {
     throw asStepError(error);
   }
 }
 initializeSnapshotStep.maxRetries = 2;
+
+export async function captureCategoryBatchStep(
+  userId: string,
+  operationId: number,
+) {
+  "use step";
+  console.info("Capturing durable snapshot category batch", { operationId });
+  try {
+    return await captureWorkflowCatalogSnapshotCategoryBatch(
+      userId,
+      operationId,
+    );
+  } catch (error) {
+    throw asStepError(error);
+  }
+}
+captureCategoryBatchStep.maxRetries = 4;
+
+export async function completeSnapshotInitializationStep(
+  userId: string,
+  operationId: number,
+) {
+  "use step";
+  console.info("Completing durable snapshot initialization", { operationId });
+  try {
+    return await completeWorkflowCatalogSnapshotInitialization(
+      userId,
+      operationId,
+    );
+  } catch (error) {
+    throw asStepError(error);
+  }
+}
+completeSnapshotInitializationStep.maxRetries = 2;
 
 export async function captureProductBatchStep(
   userId: string,

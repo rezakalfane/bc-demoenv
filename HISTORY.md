@@ -2,6 +2,98 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Resume snapshot capture after a local server restart
+
+### Prompt
+
+> I restarted my local server in the middle of a workflow but it's not continuing and stay stalled
+>
+> I've restarted a new workflow. Should I restart the server to test?
+>
+> Looks like it's working, you can document, branch, commit, merge and push!
+>
+> got this error after restarting the server. 32 products were captured when I restarted
+>
+> It's running a I can see it in Operations, but the progress bar don't show up in the Channel page
+>
+> (and icons are not disabled) Also in the trace: ... UNIQUE constraint failed ...
+>
+> in operations, keep the progress column same width (cut text if necessary)
+
+### Summary
+
+- Confirmed that the local Workflow backend could retain an orphaned in-flight HTTP step after `next dev` stopped, even though the snapshot's Turso checkpoint remained intact.
+- Added a development-only recovery guard that detects active operations last updated before the current server process, atomically claims recovery, cancels the superseded Workflow run, and starts a replacement run for the same operation.
+- Recovered the exact local `run not found` case from the same Turso capture state, confirming the replacement run continued beyond the saved 32-product cursor instead of restarting the capture.
+- Limited failed-run recovery to the latest operation for each operation key and treated concurrent unique-index claims as an unsuccessful recovery rather than failing the shared operations API.
+- Reordered operation reconciliation ahead of stale-run expiry and kept development snapshot operations available for immediate recovery rather than prematurely marking them failed.
+- Restored channel-page progress, activity state, and disabled actions by keeping historical failures from returning a 500 in the global operation feed.
+- Gave the Operations progress/result column a fixed table allocation and ellipsized long product-step descriptions while retaining their full text as a tooltip.
+- Verified a real capture retained all 211 category checkpoints and continued from product 32 through subsequent 30-product batches after restarting the local server.
+
+## 2026-07-20 — Checkpoint category capture batches
+
+### Prompt
+
+> my last capture looks stuck...
+>
+> Can you implement it?
+
+### Summary
+
+- Traced the stalled capture to the original Workflow initialization step, which fetched every category metafield before creating its first durable capture-state checkpoint.
+- Persisted the source channel, category tree, raw category records, category cursor, and initialization state before category enrichment begins.
+- Split category enrichment into retryable 10-category Workflow steps so worker restarts resume from the last saved batch, then retained the existing retryable 30-product batches and atomic version finalization.
+- Added backward-compatible staging-table migrations, initialization guards, exact category progress, and updated the documented Workflow diagram.
+
+## 2026-07-20 — Prioritize favorite Restore channels
+
+### Prompt
+
+> is it possible to have a yellow star, same color as the icon?
+>
+> channel dropdown can also show the fav channel at the top with an icon
+
+### Summary
+
+- Switched native Restore favorite markers to the yellow `⭐` symbol so they match the favorite action color.
+- Added per-user channel favorite metadata to Restore destinations, sorted favorite channels first within each environment, and marked them in the Channel selector.
+
+## 2026-07-20 — Mark favorite snapshots in Restore
+
+### Prompt
+
+> Great but I don't see the favorite icon on the left of the snapshot name. I can see the one for the published version
+
+### Summary
+
+- Added per-user snapshot favorite state to the Restore snapshot-series selector.
+- Sorted favorite snapshot series first and displayed a leading favorite star beside their names, while retaining the blue globe exclusively for published versions.
+
+## 2026-07-20 — Prioritize favorite restore destinations and distinguish publication
+
+### Prompt
+
+> when choosing a destination, move the favorite envs at the top with a small fav icon on the left of the name. change all the publish icon with something else than a star to avoid confusion with fav. it should also be blue in the version selection dropdown. change the icon application wide for published
+
+### Summary
+
+- Added environment favorite metadata to Restore destinations, sorted favorite environments first, and marked them with a leading favorite star in the destination selector.
+- Replaced the application-wide published star with a blue globe icon so publication and favorites have distinct visual meanings.
+- Updated the native snapshot-version selector to use a blue globe marker for published versions.
+
+## 2026-07-20 — Move channel status into card footers
+
+### Prompt
+
+> in the channel listing, remove the "View catalog" link in the card, and replace by the status tag "Active", "Prelaunch" in the card view, ...
+
+### Summary
+
+- Removed the redundant **View catalog** footer link from channel cards while retaining catalog navigation through each channel title.
+- Moved each channel's Active, Prelaunch, or other status badge into the bottom-right footer position.
+- Left the favorite control alone in the card's top-right corner for a cleaner and more consistent card hierarchy.
+
 ## 2026-07-20 — Align toolbar favorite controls
 
 ### Prompt
