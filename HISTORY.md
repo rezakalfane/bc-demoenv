@@ -2,6 +2,22 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Compare immutable snapshot versions
+
+### Prompt
+
+> let's do snapshot diff viewer between two versions
+>
+> perfect you can validate that phase (document, branch, commit, merge and push)
+
+### Summary
+
+- Added a Snapshot detail action that compares any two retained versions from the same owner/name series in a directional modal.
+- Summarized added, removed, changed, and unchanged categories, products, variants, images, metafields—including variant metafields—and captured configuration resources.
+- Added expandable, bounded record-level previews with changed field names and omitted-entry counts for large catalog differences.
+- Kept manifest parsing, stable identity matching, access validation, and comparison server-side so complete snapshot payloads never cross the Client Component boundary.
+- Added keyboard, focus-trap, pending, error, empty, and published-version affordances to the comparison modal.
+
 ## 2026-07-20 — Add Workflow observability and detailed traces
 
 ### Prompt
