@@ -2,6 +2,25 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Persist localized snapshot metadata
+
+### Prompt
+
+> already saw that twice, any reason?
+>
+> Yes please fix, it's a new bug due to localized tag for sure
+>
+> can this then be computed during capture? Can we store this in the DB so we don't have to compute it again?
+>
+> Perfect you can validate
+
+### Summary
+
+- Traced the intermittent Turso 502 to a recursive JSON scan over every retained snapshot manifest whenever the Snapshots index loaded.
+- Computed and persisted a version-level localization flag during direct and durable capture finalization, then backfilled legacy rows once during schema migration.
+- Switched owned and shared snapshot-series reads to compact metadata and added bounded retries plus recoverable schema initialization for transient Turso gateway failures.
+- Verified the configured database backfill identified 19 localized versions among 32 retained versions, then validated TypeScript, lint, whitespace, and the production build.
+
 ## 2026-07-20 — Browse catalogs in captured locales
 
 ### Prompt
