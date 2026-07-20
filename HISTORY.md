@@ -2,6 +2,34 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-20 — Release credential diagnostics
+
+### Prompt
+
+> Perfect, you can branch, commit, merge into main and push
+
+### Summary
+
+- Finalized the documentation and release records for BigCommerce credential diagnostics, the Restore-style report modal, and responsive environment cards.
+- Created `feature/credential-diagnostics`, verified and committed the implementation, merged it into `main`, and pushed the updated main branch.
+
+## 2026-07-20 — Add credential diagnostics and three-column environment cards
+
+### Prompt
+
+> let's add 9. Better credential diagnostics. In Settings, add “Test access” with a scope report: Available operations; Missing scopes; B2B availability; APIs unavailable for that store/channel type.
+>
+> Can we also make the environment cards on 3 columns like for env and snapshots?
+>
+> Test access should display the result in a nice modal window
+
+### Summary
+
+- Added tenant-scoped, read-only BigCommerce endpoint probes that classify verified capabilities, inferred missing read scopes, invalid credentials, rate limits, and APIs unavailable for a specific store or channel type without exercising destructive write permissions.
+- Added operation-level readiness, explicit unverified modify-scope requirements, and B2B Edition detection across active channels.
+- Added a pending **Test access** action and an accessible, responsive scope-report modal rendered through a body portal with the same viewport shell as Restore, plus focus restoration, Escape/backdrop dismissal, detailed probe results, and a **View report** action.
+- Changed saved environment cards to a responsive three-column layout and widened the Settings content area while keeping edit and credential controls tenant scoped.
+
 ## 2026-07-20 — Release global completion notifications
 
 ### Prompt

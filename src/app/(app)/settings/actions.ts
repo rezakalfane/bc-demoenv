@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireAppUser } from "@/lib/auth";
 import {
+  diagnoseBigCommerceCredential,
+  type CredentialDiagnosticsReport,
+} from "@/lib/bigcommerce-credential-diagnostics";
+import {
   addBigCommerceEnvironment,
   removeBigCommerceEnvironment,
   updateBigCommerceEnvironment,
@@ -11,6 +15,12 @@ import {
 export type EnvironmentActionState = {
   status: "idle" | "success" | "error";
   message: string;
+};
+
+export type EnvironmentDiagnosticsActionState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  report: CredentialDiagnosticsReport | null;
 };
 
 type EnvironmentInput = {
@@ -133,4 +143,28 @@ export async function deleteEnvironment(formData: FormData) {
 
   await removeBigCommerceEnvironment(user.id, id);
   revalidatePath("/settings");
+}
+
+export async function testEnvironmentAccess(
+  environmentId: number,
+  _previousState: EnvironmentDiagnosticsActionState,
+  _formData: FormData,
+): Promise<EnvironmentDiagnosticsActionState> {
+  void _previousState;
+  void _formData;
+  const user = await requireAppUser();
+  if (!Number.isSafeInteger(environmentId) || environmentId < 1) {
+    return { status: "error", message: "Invalid environment.", report: null };
+  }
+
+  try {
+    const report = await diagnoseBigCommerceCredential(user.id, environmentId);
+    return { status: "success", message: "Access test completed.", report };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "The access test failed.",
+      report: null,
+    };
+  }
 }

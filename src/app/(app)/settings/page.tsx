@@ -2,6 +2,7 @@ import {
   DeleteEnvironmentForm,
   EnvironmentForm,
 } from "@/components/environment-form";
+import { EnvironmentAccessDiagnostics } from "@/components/environment-access-diagnostics";
 import { requireAppUser } from "@/lib/auth";
 import { getBigCommerceEnvironments } from "@/lib/db";
 
@@ -13,7 +14,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-12">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-7xl">
         <header className="mb-8 border-b border-black/10 pb-7 dark:border-white/10">
           <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
             Settings
@@ -68,7 +69,7 @@ export default async function SettingsPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {environments.map((environment) => (
                 <article
                   key={environment.id}
@@ -98,6 +99,8 @@ export default async function SettingsPage() {
                     </div>
                     <DeleteEnvironmentForm environment={environment} />
                   </div>
+
+                  <EnvironmentAccessDiagnostics environment={environment} />
 
                   <details className="group mt-5 border-t border-black/8 pt-4 dark:border-white/8">
                     <summary className="cursor-pointer list-none text-sm font-medium text-black/50 transition hover:text-black dark:text-white/50 dark:hover:text-white">
