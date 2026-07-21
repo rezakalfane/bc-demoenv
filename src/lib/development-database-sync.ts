@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
 import {
   createClient,
   type Client,
@@ -261,18 +262,18 @@ function prepareSourceTablesForSync(sourceTables: TableCopy[]) {
   return { tables, skippedRowCount };
 }
 
-function getInsertStatements(table: TableCopy): InStatement[] {
+function getInsertStatements(table: TableCopy, destinationName: string = table.name): InStatement[] {
   if (!table.rows.length) return [];
   const columns = table.columns.map(quoteIdentifier).join(", ");
   const placeholders = table.columns.map(() => "?").join(", ");
-  const sql = `INSERT INTO ${quoteIdentifier(table.name)} (${columns}) VALUES (${placeholders})`;
+  const sql = `INSERT INTO ${quoteIdentifier(destinationName)} (${columns}) VALUES (${placeholders})`;
   return table.rows.map((row) => ({
     sql,
     args: table.columns.map((column) => row[column] as InValue),
   }));
 }
 
-async function replaceDatabase(destination: Client, sourceTables: TableCopy[]) {
+async function replaceDatabaseInTransaction(destination: Client, sourceTables: TableCopy[]) {
   const transaction = await destination.transaction("write");
   try {
     for (const table of [...applicationTables].reverse()) {
@@ -292,6 +293,74 @@ async function replaceDatabase(destination: Client, sourceTables: TableCopy[]) {
   } finally {
     transaction.close();
   }
+}
+
+async function replaceRemoteDatabase(destination: Client, sourceTables: TableCopy[]) {
+  const syncId = randomUUID().replaceAll("-", "");
+  const stagingTables = new Map(
+    sourceTables.map((table) => [table.name, `__bc_demoenv_sync_${syncId}_${table.name}`]),
+  );
+
+  const dropStagingTables = async () => {
+    await destination.batch(
+      [...stagingTables.values()].map((tableName) => `DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`),
+      "write",
+    );
+  };
+
+  try {
+    await destination.batch(
+      sourceTables.map((table) => {
+        const columns = table.columns.map(quoteIdentifier).join(", ");
+        const stagingName = stagingTables.get(table.name)!;
+        return `CREATE TABLE ${quoteIdentifier(stagingName)} AS SELECT ${columns} FROM ${quoteIdentifier(table.name)} WHERE 0`;
+      }),
+      "write",
+    );
+
+    // Turso expires interactive HTTP transaction streams when a whole database
+    // copy holds them open across many network round trips. Populate isolated
+    // staging tables through bounded atomic requests instead.
+    for (const table of sourceTables) {
+      const stagingName = stagingTables.get(table.name)!;
+      const statements = getInsertStatements(table, stagingName);
+      for (let index = 0; index < statements.length; index += 25) {
+        await destination.batch(statements.slice(index, index + 25), "write");
+      }
+    }
+
+    // The potentially slow upload is complete. The visible database replacement
+    // is now a single server-side transaction with no per-row network round trips.
+    const replacementStatements: InStatement[] = [
+      ...[...applicationTables].reverse().map(
+        (table) => `DELETE FROM ${quoteIdentifier(table)}`,
+      ),
+      ...sourceTables.map((table) => {
+        const columns = table.columns.map(quoteIdentifier).join(", ");
+        const stagingName = stagingTables.get(table.name)!;
+        return `INSERT INTO ${quoteIdentifier(table.name)} (${columns}) SELECT ${columns} FROM ${quoteIdentifier(stagingName)}`;
+      }),
+      ...[...stagingTables.values()].map(
+        (tableName) => `DROP TABLE ${quoteIdentifier(tableName)}`,
+      ),
+    ];
+    await destination.batch(replacementStatements, "write");
+  } catch (error) {
+    await dropStagingTables().catch(() => undefined);
+    throw error;
+  }
+}
+
+async function replaceDatabase(
+  destination: Client,
+  sourceTables: TableCopy[],
+  destinationType: "local" | "remote",
+) {
+  if (destinationType === "remote") {
+    await replaceRemoteDatabase(destination, sourceTables);
+    return;
+  }
+  await replaceDatabaseInTransaction(destination, sourceTables);
 }
 
 function assertDatabaseMaintenanceAvailable() {
@@ -424,7 +493,11 @@ export async function restoreDatabaseBackup(
     const decodedTables = await validateAndDecodeBackup(database, input);
     const sourceImage = prepareSourceTablesForSync(decodedTables);
     await assertNoActiveOperations(database, label);
-    await replaceDatabase(database, sourceImage.tables);
+    await replaceDatabase(
+      database,
+      sourceImage.tables,
+      getDevelopmentDatabaseStatus().activeDatabase,
+    );
     return {
       tableCount: sourceImage.tables.length,
       rowCount: sourceImage.tables.reduce((total, table) => total + table.rows.length, 0),
@@ -483,7 +556,11 @@ export async function syncDevelopmentDatabases(
         assertNoActiveOperations(local, "Local SQLite"),
         assertNoActiveOperations(remote, "Turso"),
       ]);
-      await replaceDatabase(destination, sourceTables);
+      await replaceDatabase(
+        destination,
+        sourceTables,
+        direction === "push" ? "remote" : "local",
+      );
 
       result = {
         direction,
