@@ -24,5 +24,6 @@ export const requireAppUser = cache(async () => {
     email: normalizeEmail(emailAddress),
     firstName: user.firstName ?? "",
     lastName: user.lastName ?? "",
+    imageUrl: user.hasImage ? user.imageUrl : "",
   };
 });

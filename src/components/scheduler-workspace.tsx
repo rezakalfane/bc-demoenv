@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   removeSchedule,
   runScheduleNow,
@@ -100,6 +100,9 @@ export function SchedulerWorkspace({
   dispatchInterval: "minute" | "daily";
 }) {
   const confirmation = useConfirmation();
+  const [availableDestinations, setAvailableDestinations] = useState(destinations);
+  const [destinationsLoading, setDestinationsLoading] = useState(false);
+  const [destinationsError, setDestinationsError] = useState("");
   const [editing, setEditing] = useState<CatalogSchedule | null | undefined>(undefined);
   const [step, setStep] = useState(1);
   const [action, setAction] = useState<CatalogSchedule["action"]>("refresh");
@@ -121,7 +124,9 @@ export function SchedulerWorkspace({
   const [togglePendingIds, setTogglePendingIds] = useState<Set<number>>(() => new Set());
   const [toggleError, setToggleError] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
-  const selectedEnvironment = destinations.find((environment) => environment.id === environmentId);
+  const destinationsRef = useRef(destinations);
+  const destinationsRequestRef = useRef<Promise<CatalogRestoreDestination[]> | null>(null);
+  const selectedEnvironment = availableDestinations.find((environment) => environment.id === environmentId);
   const selectedChannel = selectedEnvironment?.channels.find((channel) => channel.id === channelId);
   const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
   const snapshotSeries = useMemo(() => {
@@ -217,12 +222,54 @@ export function SchedulerWorkspace({
     });
   }
 
+  const loadDestinations = useCallback(async () => {
+    if (destinationsRef.current.length > 0) return destinationsRef.current;
+    if (destinationsRequestRef.current) return destinationsRequestRef.current;
+
+    const request = (async () => {
+      const response = await fetch("/api/scheduler/destinations", {
+        cache: "no-store",
+      });
+      const body = await response.json().catch(() => ({})) as {
+        destinations?: CatalogRestoreDestination[];
+        error?: string;
+      };
+      if (!response.ok || !Array.isArray(body.destinations)) {
+        throw new Error(body.error ?? "The live BigCommerce destinations could not be loaded.");
+      }
+      return body.destinations;
+    })();
+
+    destinationsRequestRef.current = request;
+    setDestinationsLoading(true);
+    setDestinationsError("");
+    try {
+      const nextDestinations = await request;
+      destinationsRef.current = nextDestinations;
+      setAvailableDestinations(nextDestinations);
+      return nextDestinations;
+    } catch (error) {
+      setDestinationsError(
+        error instanceof Error ? error.message : "The live BigCommerce destinations could not be loaded.",
+      );
+      return [];
+    } finally {
+      destinationsRequestRef.current = null;
+      setDestinationsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadDestinations(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadDestinations]);
+
   function openSchedule(schedule?: CatalogSchedule, preset?: "refresh" | "backup") {
     setEditing(schedule ?? null);
     setStep(1);
     const nextAction = schedule?.action ?? (preset === "backup" ? "snapshot" : "refresh");
-    const nextEnvironmentId = schedule?.environmentId ?? destinations[0]?.id ?? 0;
-    const nextEnvironment = destinations.find((environment) => environment.id === nextEnvironmentId);
+    const nextEnvironmentId = schedule?.environmentId ?? availableDestinations[0]?.id ?? 0;
+    const nextEnvironment = availableDestinations.find((environment) => environment.id === nextEnvironmentId);
     setAction(nextAction);
     setEnvironmentId(nextEnvironmentId);
     setChannelId(schedule?.channelId ?? nextEnvironment?.channels[0]?.id ?? 0);
@@ -233,10 +280,21 @@ export function SchedulerWorkspace({
     setWeekday(schedule?.weekday ?? 0);
     setTimezone(schedule?.timezone ?? defaultTimezone);
     setRestoreGroups(schedule?.restoreGroups.length ? schedule.restoreGroups : ["catalog"]);
+    void loadDestinations().then((nextDestinations) => {
+      const preferredEnvironment = nextDestinations.find(
+        (environment) => environment.id === nextEnvironmentId,
+      );
+      const nextLoadedEnvironment = preferredEnvironment ?? nextDestinations[0];
+      const preferredChannel = nextLoadedEnvironment?.channels.find(
+        (channel) => channel.id === (schedule?.channelId ?? 0),
+      );
+      setEnvironmentId(nextLoadedEnvironment?.id ?? 0);
+      setChannelId(preferredChannel?.id ?? nextLoadedEnvironment?.channels[0]?.id ?? 0);
+    });
   }
 
   function selectEnvironment(nextEnvironmentId: number) {
-    const environment = destinations.find((candidate) => candidate.id === nextEnvironmentId);
+    const environment = availableDestinations.find((candidate) => candidate.id === nextEnvironmentId);
     setEnvironmentId(nextEnvironmentId);
     setChannelId(environment?.channels[0]?.id ?? 0);
   }
@@ -412,8 +470,9 @@ export function SchedulerWorkspace({
                 <div><h3 className="text-xl font-semibold">Choose the target and action</h3><p className="mt-1 text-sm text-white/45">Select one channel and the durable operation that should run.</p></div>
                 <div className="mt-6 grid gap-5 sm:grid-cols-2">
                   <label className="sm:col-span-2"><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Schedule name</span><input name="name" required maxLength={100} value={scheduleName} onChange={(event) => setScheduleName(event.target.value)} className="mt-2 w-full rounded-xl border border-white/12 bg-white/5 px-3 py-2.5" /></label>
-                  <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Environment</span><select name="environmentId" value={environmentId} onChange={(event) => selectEnvironment(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5">{destinations.map((environment) => <option key={environment.id} value={environment.id}>{environment.isFavorite ? "★ " : ""}{environment.name}</option>)}</select></label>
-                  <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Channel</span><select name="channelId" value={channelId} onChange={(event) => setChannelId(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5">{selectedEnvironment?.channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.isFavorite ? "★ " : ""}{channel.name}</option>)}</select></label>
+                  <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Environment</span><select name="environmentId" value={environmentId} onChange={(event) => selectEnvironment(Number(event.target.value))} disabled={destinationsLoading || availableDestinations.length === 0} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5 disabled:opacity-50">{availableDestinations.length === 0 ? <option value={environmentId}>{destinationsLoading ? "Loading environments…" : "No environments available"}</option> : availableDestinations.map((environment) => <option key={environment.id} value={environment.id}>{environment.isFavorite ? "★ " : ""}{environment.name}</option>)}</select></label>
+                  <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Channel</span><select name="channelId" value={channelId} onChange={(event) => setChannelId(Number(event.target.value))} disabled={destinationsLoading || !selectedEnvironment?.channels.length} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5 disabled:opacity-50">{!selectedEnvironment?.channels.length ? <option value={channelId}>{destinationsLoading ? "Loading channels…" : "No channels available"}</option> : selectedEnvironment.channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.isFavorite ? "★ " : ""}{channel.name}</option>)}</select></label>
+                  {destinationsError ? <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200 sm:col-span-2"><span>{destinationsError}</span><button type="button" onClick={() => void loadDestinations()} className="shrink-0 rounded-lg border border-red-400/30 px-3 py-1.5 font-semibold hover:bg-red-500/10">Retry</button></div> : null}
                   <label className="sm:col-span-2"><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Action</span><select name="action" value={action} onChange={(event) => setAction(event.target.value as CatalogSchedule["action"])} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5"><option value="refresh">Clear & Restore</option><option value="snapshot">Capture snapshot</option><option value="restore">Restore snapshot</option><option value="clear">Clear catalog</option></select></label>
                   {action === "snapshot" ? <label className="sm:col-span-2"><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Snapshot series name</span><input name="snapshotName" defaultValue={editing?.snapshotName ?? "Weekly backup"} required className="mt-2 w-full rounded-xl border border-white/12 bg-white/5 px-3 py-2.5" /></label> : null}
                   {["restore", "refresh"].includes(action) ? <div className="grid gap-5 sm:col-span-2 sm:grid-cols-2">
@@ -453,7 +512,7 @@ export function SchedulerWorkspace({
             </div>
             <footer className="flex items-center justify-between gap-2 border-t border-white/10 p-5">
               <button type="button" onClick={() => setEditing(undefined)} className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold">Cancel</button>
-              <div className="flex gap-2">{step > 1 ? <button type="button" onClick={() => setStep((current) => Math.max(1, current - 1))} className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold">Back</button> : null}{step < 3 ? <button type="button" onClick={continueWizard} className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold">Continue</button> : <button type="button" onClick={saveWizard} disabled={pending || saving || (["restore", "refresh"].includes(action) && restoreGroups.length === 0)} className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold disabled:opacity-50">{pending || saving ? "Saving…" : editing ? "Save changes" : "Create schedule"}</button>}</div>
+              <div className="flex gap-2">{step > 1 ? <button type="button" onClick={() => setStep((current) => Math.max(1, current - 1))} className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold">Back</button> : null}{step < 3 ? <button type="button" onClick={continueWizard} disabled={step === 1 && (destinationsLoading || Boolean(destinationsError) || !selectedEnvironment || !selectedChannel)} className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">{step === 1 && destinationsLoading ? "Loading…" : "Continue"}</button> : <button type="button" onClick={saveWizard} disabled={pending || saving || (["restore", "refresh"].includes(action) && restoreGroups.length === 0)} className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold disabled:opacity-50">{pending || saving ? "Saving…" : editing ? "Save changes" : "Create schedule"}</button>}</div>
             </footer>
           </form>
         </div>

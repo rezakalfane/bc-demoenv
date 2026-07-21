@@ -80,6 +80,7 @@ export default async function SettingsPage() {
     getUserProfile(user.id, {
       firstName: user.firstName,
       lastName: user.lastName,
+      avatar: user.imageUrl,
       timezone: "UTC",
     }),
     getCollectionViewPreferences(user.id),

@@ -15,6 +15,7 @@ import {
   setCollectionViewMode,
   type CollectionViewMode,
 } from "@/lib/db";
+import { isValidProfileAvatar } from "@/lib/profile-avatar";
 
 export type ProfileActionState = {
   status: "idle" | "success" | "error";
@@ -128,6 +129,7 @@ export async function saveProfileAndPreferences(
   const user = await requireAppUser();
   const firstName = String(formData.get("firstName") ?? "").trim();
   const lastName = String(formData.get("lastName") ?? "").trim();
+  const avatar = String(formData.get("avatar") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "").trim();
   const environments = String(formData.get("environmentsView"));
   const channels = String(formData.get("channelsView"));
@@ -139,6 +141,9 @@ export async function saveProfileAndPreferences(
   if (firstName.length > 80 || lastName.length > 80) {
     return { status: "error", message: "Names must be 80 characters or fewer." };
   }
+  if (!isValidProfileAvatar(avatar)) {
+    return { status: "error", message: "Choose a built-in avatar or upload a valid image." };
+  }
   if (!timezone || !isTimezone(timezone)) {
     return { status: "error", message: "Enter a valid IANA timezone, such as Europe/Paris." };
   }
@@ -147,7 +152,7 @@ export async function saveProfileAndPreferences(
   }
 
   await Promise.all([
-    saveUserProfile(user.id, { firstName, lastName, timezone }),
+    saveUserProfile(user.id, { firstName, lastName, avatar, timezone }),
     setCollectionViewMode(user.id, "dashboard-environments", environments),
     setCollectionViewMode(user.id, "environment-channels", channels),
     setCollectionViewMode(user.id, "snapshot-series", snapshots),
@@ -158,6 +163,7 @@ export async function saveProfileAndPreferences(
 
   revalidatePath("/settings");
   revalidatePath("/scheduler");
+  revalidatePath("/", "layout");
   return {
     status: "success",
     message: "Profile and preferences saved.",

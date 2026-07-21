@@ -1,30 +1,12 @@
-import { Fragment, type ReactNode } from "react";
-import { CollectionToolbar } from "@/components/collection-toolbar";
+import {
+  ClientCollectionBrowser,
+  type CollectionBrowserItem,
+  type CollectionColumn,
+} from "@/components/client-collection-browser";
 import { requireAppUser } from "@/lib/auth";
 import { getCollectionViewPreference } from "@/lib/db";
 
-const FOUR_COLUMN_COLLECTIONS = new Set([
-  "dashboard-environments",
-  "settings-environments",
-  "environment-channels",
-  "snapshot-series",
-]);
-
-export type CollectionColumn = {
-  key: string;
-  label: string;
-  className?: string;
-  align?: "left" | "right";
-};
-
-export type CollectionBrowserItem = {
-  id: string;
-  searchText: string;
-  tags?: string[];
-  isShared?: boolean;
-  card: ReactNode;
-  cells: ReactNode[];
-};
+export type { CollectionBrowserItem, CollectionColumn };
 
 export async function CollectionBrowser({
   collectionId,
@@ -32,9 +14,9 @@ export async function CollectionBrowser({
   items,
   columns,
   searchPlaceholder,
-  cardsClassName = "grid gap-5 md:grid-cols-2 xl:grid-cols-3",
-  tableClassName = "min-w-[880px]",
-  emptyMessage = "No items match your search.",
+  cardsClassName,
+  tableClassName,
+  emptyMessage,
   allowSharedToggle = false,
   filterTags = [],
 }: {
@@ -51,96 +33,21 @@ export async function CollectionBrowser({
 }) {
   const user = await requireAppUser();
   const preference = await getCollectionViewPreference(user.id, collectionId);
-  const initialView = preference.viewMode;
-  const initialShowShared = allowSharedToggle ? preference.showShared : true;
-  const initialVisibleItems = initialShowShared
-    ? items
-    : items.filter((item) => !item.isShared);
 
   return (
-    <section id={collectionId} aria-label={ariaLabel}>
-      <CollectionToolbar
-        collectionId={collectionId}
-        ariaLabel={ariaLabel}
-        searchPlaceholder={searchPlaceholder}
-        itemCount={items.length}
-        allowSharedToggle={allowSharedToggle}
-        initialView={initialView}
-        initialShowShared={initialShowShared}
-        filterTags={filterTags}
-      />
-
-      <div
-        data-collection-cards
-        hidden={initialView !== "cards" || initialVisibleItems.length === 0}
-        className={`${FOUR_COLUMN_COLLECTIONS.has(collectionId) ? "collection-four-column-cards " : ""}${cardsClassName}`}
-      >
-        {items.map((item) => (
-          <div
-            key={item.id}
-            hidden={!initialShowShared && item.isShared}
-            className="contents"
-            data-collection-entry
-            data-search-text={item.searchText.toLocaleLowerCase("en-US")}
-            data-tags={JSON.stringify(item.tags ?? [])}
-            data-shared={item.isShared ? "true" : "false"}
-          >
-            <Fragment>{item.card}</Fragment>
-          </div>
-        ))}
-      </div>
-
-      <div
-        data-collection-table
-        hidden={initialView !== "table" || initialVisibleItems.length === 0}
-        className="overflow-hidden rounded-2xl border border-black/8 bg-white/55 dark:border-white/8 dark:bg-white/3"
-      >
-        <div className="overflow-x-auto">
-          <table className={`w-full border-collapse text-left text-xs ${tableClassName}`}>
-            <thead className="border-b border-black/8 bg-black/[0.025] dark:border-white/8 dark:bg-white/[0.025]">
-              <tr>
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    scope="col"
-                    className={`whitespace-nowrap px-3 py-3 font-semibold text-black/50 dark:text-white/50 ${column.align === "right" ? "text-right" : ""} ${column.className ?? ""}`}
-                  >
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black/6 dark:divide-white/6">
-              {items.map((item) => (
-                <tr
-                  key={item.id}
-                  hidden={!initialShowShared && item.isShared}
-                  data-collection-entry
-                  data-search-text={item.searchText.toLocaleLowerCase("en-US")}
-                  data-tags={JSON.stringify(item.tags ?? [])}
-                  data-shared={item.isShared ? "true" : "false"}
-                  className="align-middle transition hover:bg-black/[0.025] dark:hover:bg-white/[0.025]"
-                >
-                  {columns.map((column, index) => (
-                    <td key={column.key} className={`px-3 py-2.5 ${column.align === "right" ? "text-right" : ""} ${column.className ?? ""}`}>
-                      {item.cells[index] ?? "—"}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div
-        data-collection-empty
-        hidden={initialVisibleItems.length > 0}
-        className="rounded-2xl border border-dashed border-black/15 px-6 py-12 text-center dark:border-white/15"
-      >
-        <p className="font-medium">{emptyMessage}</p>
-        <p className="mt-1 text-sm text-black/45 dark:text-white/45">Try a different search or display filter.</p>
-      </div>
-    </section>
+    <ClientCollectionBrowser
+      collectionId={collectionId}
+      ariaLabel={ariaLabel}
+      items={items}
+      columns={columns}
+      searchPlaceholder={searchPlaceholder}
+      initialView={preference.viewMode}
+      initialShowShared={allowSharedToggle ? preference.showShared : true}
+      cardsClassName={cardsClassName}
+      tableClassName={tableClassName}
+      emptyMessage={emptyMessage}
+      allowSharedToggle={allowSharedToggle}
+      filterTags={filterTags}
+    />
   );
 }

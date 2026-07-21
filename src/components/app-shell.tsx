@@ -6,6 +6,7 @@ import { saveCollectionSidebarCollapsed } from "@/app/(app)/collection-preferenc
 import { AppNavigation } from "@/components/app-navigation";
 import { CatalogOperationNotifications } from "@/components/catalog-operation-notifications";
 import { useCollectionPreference } from "@/components/collection-preferences-provider";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { SignOutButton } from "@/components/sign-out-button";
 
 function pagePreferenceId(pathname: string) {
@@ -30,10 +31,16 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 export function AppShell({
   userId,
   userEmail,
+  userFirstName,
+  userLastName,
+  userImageUrl,
   children,
 }: {
   userId: string;
   userEmail: string;
+  userFirstName: string;
+  userLastName: string;
+  userImageUrl: string;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -45,6 +52,14 @@ export function AppShell({
   } = useCollectionPreference("app-shell");
   const [, startTransition] = useTransition();
   const collapsed = shellPreference.sidebarCollapsed;
+  const userName = [userFirstName, userLastName].filter(Boolean).join(" ");
+  const initials =
+    [userFirstName, userLastName]
+      .filter(Boolean)
+      .map((name) => name.charAt(0))
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || userEmail.charAt(0).toUpperCase();
 
   function toggleSidebar() {
     const nextCollapsed = !collapsed;
@@ -90,7 +105,13 @@ export function AppShell({
         </div>
 
         <div className="app-sidebar-footer mt-4 hidden border-t border-black/8 pt-5 lg:block dark:border-white/8">
-          <p className="truncate px-2 text-xs text-black/45 dark:text-white/45">{userEmail}</p>
+          <div className="app-sidebar-user flex min-w-0 items-center gap-3 px-2">
+            <ProfileAvatar value={userImageUrl} initials={initials} className="app-sidebar-avatar size-9 text-xs" />
+            <div className="app-sidebar-user-copy min-w-0">
+              {userName ? <p className="truncate text-xs font-semibold text-black/70 dark:text-white/70">{userName}</p> : null}
+              <p className="truncate text-xs text-black/45 dark:text-white/45">{userEmail}</p>
+            </div>
+          </div>
           <div className="mt-3 px-2"><SignOutButton /></div>
         </div>
       </aside>

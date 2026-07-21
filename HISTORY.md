@@ -2,6 +2,45 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-21 — Speed up Dashboard and Scheduler and improve profile identity
+
+### Prompt
+
+> When menu is callpsed add a logout icon button at the bottom
+>
+> You can add the icon in the default Sign out button, then
+>
+> When available, display Firstname and Lastname above the email when menu is not collapsed, with an avatar icon on the left (user initials if no avatar image exist in the profile)
+>
+> dislay the avatar icon above the signout icon when menu is collapsed
+>
+> add an avatar field in the profile in settings. offer a selection of 10 different avatars, and the possibility to upload a photo that will be resized and cropped
+>
+> picture should fill the whole avatar circle
+>
+> remove the 10 avatar options
+>
+> I think that Scheduler takes a long time to open, can you investigate?
+>
+> Let implemented them one by one and stop once I feel it's fast enough
+>
+> You can trigger the BigCommerce environments/channels fetch right after the UI is displayed from DB in the background?
+>
+> Same way can you improve the dashboard page and quickly load from database and then async load data from BC?
+>
+> working fine
+>
+> perfect you can validate that phase
+
+### Summary
+
+- Added profile avatar upload with client-side square cropping/resizing, full-circle rendering, and initials fallback without preset avatar choices.
+- Added first/last name, email, avatar, and icon-based sign-out presentation to the expanded and collapsed application shell.
+- Changed Scheduler loading to render its database-backed schedule UI immediately and discover live BigCommerce destinations asynchronously with retry and safe disabled states.
+- Added tenant-scoped Dashboard metric caching so saved results render immediately while a no-store authenticated endpoint refreshes BigCommerce counts and statuses in place.
+- Preserved collection filtering, view preferences, favorites, and navigation behavior while moving the live updates behind client boundaries.
+- Validated TypeScript, lint, whitespace, and the optimized production build before documenting, committing, merging, and pushing the phase.
+
 ## 2026-07-21 — Add Notes and Settings loading states and complete Workflow documentation
 
 ### Prompt

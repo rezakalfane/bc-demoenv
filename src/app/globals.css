@@ -77,9 +77,47 @@ input {
   }
 
   .app-shell[data-sidebar-collapsed="true"] .app-brand-copy,
-  .app-shell[data-sidebar-collapsed="true"] .app-nav-label,
-  .app-shell[data-sidebar-collapsed="true"] .app-sidebar-footer {
+  .app-shell[data-sidebar-collapsed="true"] .app-nav-label {
     display: none;
+  }
+
+  .app-shell[data-sidebar-collapsed="true"] .app-sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    border-top-color: transparent;
+    padding-top: 0;
+  }
+
+  .app-shell[data-sidebar-collapsed="true"] .app-sidebar-user-copy,
+  .app-shell[data-sidebar-collapsed="true"] .sign-out-label {
+    display: none;
+  }
+
+  .app-shell[data-sidebar-collapsed="true"] .app-sidebar-user {
+    display: flex;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .app-shell[data-sidebar-collapsed="true"] .app-sidebar-footer > div {
+    margin-top: 0;
+    padding-inline: 0;
+  }
+
+  .app-shell[data-sidebar-collapsed="true"] .sign-out-button {
+    display: flex;
+    width: 2.25rem;
+    height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-shell[data-sidebar-collapsed="true"] .sign-out-icon {
+    display: block;
   }
 
   .app-shell[data-sidebar-collapsed="true"] .app-nav-link {

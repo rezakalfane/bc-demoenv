@@ -4,6 +4,28 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-21
 
+### Merge — Integrate cached-first Dashboard, Scheduler, and profile identity
+
+- **Date:** 2026-07-21
+- **Source:** `feature/async-page-performance`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated cached-first Dashboard and Scheduler loading, background BigCommerce refreshes, and personalized sidebar identity after TypeScript, lint, whitespace, and optimized production-build validation.
+
+### Commit — Speed up Dashboard and Scheduler loading
+
+- **Date:** 2026-07-21
+- **Branch:** `feature/async-page-performance`
+- **Type:** Performance and UI commit
+
+- Rendered the Dashboard immediately from tenant-owned metrics cached in libSQL, then refreshed BigCommerce data in the background without replacing the page.
+- Rendered Scheduler structure and saved schedules from the database before asynchronously discovering current BigCommerce destinations and channels.
+- Added retry and disabled-control states around background Scheduler discovery so stale or incomplete remote data cannot be submitted accidentally.
+- Added persisted profile avatars with client-side square crop/resize, expanded sidebar identity, and compact avatar/sign-out controls for the collapsed shell.
+- Preserved the existing server-authorized collection browser through a reusable client rendering boundary.
+- Validated TypeScript, lint, whitespace, and the optimized production build.
+
 ### Merge — Integrate Notes and Settings loading states and complete Workflow documentation
 
 - **Date:** 2026-07-21
