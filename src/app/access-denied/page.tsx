@@ -11,8 +11,9 @@ export default function AccessDeniedPage() {
           Use an approved work email
         </h1>
         <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-black/55 dark:text-white/55">
-          Field Notes is limited to verified @bigcommerce.com and @commerce.com
-          accounts. Sign out and try again with an approved address.
+          BigCommerce Demo Environments Manager is limited to verified
+          @bigcommerce.com and @commerce.com accounts. Sign out and try again
+          with an approved address.
         </p>
         <div className="mt-6 flex justify-center">
           <SignOutButton />

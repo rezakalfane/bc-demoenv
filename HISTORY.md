@@ -2,6 +2,27 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-21 — Refresh product branding and README overview
+
+### Prompt
+
+> We can change the login screen and use "BigCommerce Demo Environments Manager" and a short description
+>
+> tags should look better and not full width column...
+>
+> Can you generate a bullet points list of key features of the app?
+>
+> Can you add that list under a Key features section in README before application pages? Also shorten the texts for application pages, it will be easier to read
+>
+> you can commit and push
+
+### Summary
+
+- Rebranded the sign-in and access-denied screens with the application name and a short environment-management description.
+- Changed Operations type badges to compact, content-sized labels instead of filling their table column.
+- Added a Key features section to the README and condensed the Application pages section into short, scannable summaries.
+- Updated project records and validated the final changes before committing and pushing to `main`.
+
 ## 2026-07-21 — Fix notification deletion and Control Panel deep links
 
 ### Prompt

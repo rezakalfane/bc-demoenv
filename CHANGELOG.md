@@ -4,6 +4,17 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-21
 
+### Commit — Refresh product branding and feature documentation
+
+- **Date:** 2026-07-21
+- **Branch:** `main`
+- **Type:** UI and documentation commit
+
+- Rebranded the sign-in and access-denied experiences around the BigCommerce Demo Environments Manager and its core purpose.
+- Made Operations type badges compact and content-sized for a cleaner activity table.
+- Added a concise Key features overview to the README and shortened the Application pages reference for easier scanning.
+- Updated prompt history and validated TypeScript, lint, and whitespace before committing and pushing.
+
 ### Merge — Integrate durable notification deletion and Control Panel actions
 
 - **Date:** 2026-07-21
