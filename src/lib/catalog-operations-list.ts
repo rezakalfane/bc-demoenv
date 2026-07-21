@@ -125,19 +125,31 @@ function operationMetrics(
   result: Record<string, unknown>,
   snapshot: Awaited<ReturnType<typeof getCatalogSnapshotSummariesByIds>>[number] | undefined,
 ) {
-  const values = operation.kind === "snapshot" && snapshot
+  const values = operation.kind === "database_sync"
+    ? [
+        metric("Tables", result.tableCount),
+        metric("Rows", result.rowCount),
+        Number(result.skippedRowCount ?? 0) > 0
+          ? metric("Ownerless notes skipped", result.skippedRowCount)
+          : null,
+      ]
+    : operation.kind === "snapshot" && snapshot
     ? [
         metric("Categories", snapshot.categoryCount),
         metric("Products", snapshot.productCount),
         metric("Variants", snapshot.variantCount),
         metric("Images", snapshot.imageCount),
       ]
-    : operation.kind === "restore"
+    : operation.kind === "restore" || operation.kind === "refresh"
       ? [
           metric("Categories created", result.categoriesCreated),
           metric("Categories updated", result.categoriesUpdated),
           metric("Products created", result.productsCreated),
           metric("Products matched", result.productsUpdated),
+          ...(operation.kind === "refresh" ? [
+            metric("Products cleared", asRecord(result.clearResult).productsUnassigned),
+            metric("Categories cleared", asRecord(result.clearResult).categoriesRemoved),
+          ] : []),
         ]
       : [
           metric("Categories removed", result.categoriesRemoved),
@@ -168,10 +180,14 @@ export async function getCatalogOperationList(userId: string) {
     const payload = parseRecord(operation.payloadJson);
     const result = parseRecord(operation.resultJson);
     const snapshot = operation.snapshotId ? snapshotsById.get(operation.snapshotId) : undefined;
-    const environmentName = readString(result.destinationEnvironmentName) ||
+    const isDatabaseSync = operation.kind === "database_sync";
+    const environmentName = (isDatabaseSync ? readString(result.source) || readString(payload.source) : "") ||
+      readString(result.destinationEnvironmentName) ||
       (operation.environmentId ? environmentsById.get(operation.environmentId)?.name ?? "" : "") ||
       (operation.environmentId ? `Environment #${operation.environmentId}` : "—");
-    const channelName = readString(result.destinationChannelName) ||
+    const syncDestination = readString(result.destination) || readString(payload.destination);
+    const channelName = (isDatabaseSync && syncDestination ? `→ ${syncDestination}` : "") ||
+      readString(result.destinationChannelName) ||
       (operation.kind === "snapshot" ? snapshot?.sourceChannelName ?? "" : "") ||
       (operation.channelId ? `Channel #${operation.channelId}` : "—");
     const snapshotName = snapshot?.name || readString(result.snapshotName) ||
@@ -189,7 +205,9 @@ export async function getCatalogOperationList(userId: string) {
     const progressPercent = operation.totalSteps > 0
       ? Math.min(Math.max(Math.round((operation.stepIndex / operation.totalSteps) * 100), 0), 100)
       : operation.status === "completed" ? 100 : 0;
-    const resourceHref = operation.kind === "snapshot" && operation.snapshotId
+    const resourceHref = isDatabaseSync
+      ? "/settings#database"
+      : operation.kind === "snapshot" && operation.snapshotId
       ? `/snapshots/${operation.snapshotId}`
       : operation.environmentId && operation.channelId
         ? `/environments/${operation.environmentId}/channels/${operation.channelId}`
@@ -204,6 +222,8 @@ export async function getCatalogOperationList(userId: string) {
         snapshot: "Snapshot capture",
         restore: "Snapshot restore",
         clear: "Catalog clear",
+        refresh: "Clear & Restore",
+        database_sync: "Database sync",
       }[operation.kind],
       environmentId: operation.environmentId,
       environmentName,
@@ -227,7 +247,9 @@ export async function getCatalogOperationList(userId: string) {
       metrics: operationMetrics(operation, result, snapshot),
       restoreGroups,
       resourceHref,
-      resourceLabel: operation.kind === "snapshot" && operation.snapshotId
+      resourceLabel: isDatabaseSync
+        ? "Open database settings"
+        : operation.kind === "snapshot" && operation.snapshotId
         ? "Open snapshot"
         : operation.environmentId && operation.channelId ? "Open channel" : "View resource",
     };

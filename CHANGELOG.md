@@ -2,6 +2,29 @@
 
 This file records every commit and merge in reverse chronological order. Entries are based on Git history; uncommitted working-tree changes are not represented as commits.
 
+## 2026-07-21
+
+### Merge — Integrate scheduled catalog automation and database operations
+
+- **Date:** 2026-07-21
+- **Source:** `feature/scheduled-catalog-automation`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated tenant-scoped catalog schedules, durable Clear & Restore automation, consolidated profile/settings controls, local/Turso database mirroring, whole-database backup/restore, and scheduler/workflow UX refinements after lint, TypeScript, whitespace, and production-build validation.
+
+### Commit — Add scheduled catalog automation and database operations
+
+- **Date:** 2026-07-21
+- **Branch:** `feature/scheduled-catalog-automation`
+- **Type:** Feature commit
+
+- Added daily and weekly snapshot, restore, clear, and Clear & Restore schedules with one-minute local/Vercel dispatch and overlap protection.
+- Added the three-step schedule editor, current-time display, asynchronous icon controls, development-disabled warning, loading skeleton, and retained Operation/Workflow diagnostics.
+- Consolidated user profile, display preferences, environments, scheduler controls, local/Turso mirroring, and active-database backup/restore in Settings.
+- Added strict transactional database maintenance validation, production operator authorization, safe handling of legacy ownerless notes, and Operations audit records.
+- Updated README, implementation details, database schema, environment examples, prompt History, and Changelog.
+
 ## 2026-07-20
 
 ### Merge — Integrate persisted localized snapshot metadata

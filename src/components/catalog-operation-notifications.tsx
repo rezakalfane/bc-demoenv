@@ -10,7 +10,7 @@ import {
 } from "@/components/catalog-operation-progress";
 
 type OperationStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-type OperationKind = "snapshot" | "restore" | "clear";
+type OperationKind = "snapshot" | "restore" | "clear" | "refresh" | "database_sync";
 
 type OperationFeedItem = {
   id: number;
@@ -124,6 +124,9 @@ function readLastCheckedAt(userId: string) {
 }
 
 function getNotificationLink(operation: OperationFeedItem) {
+  if (operation.kind === "database_sync") {
+    return { href: "/settings#database", label: "View database settings" };
+  }
   if (operation.kind === "snapshot" && operation.snapshotId) {
     return { href: `/snapshots/${operation.snapshotId}`, label: "View snapshot" };
   }
@@ -140,6 +143,18 @@ function getNotificationLink(operation: OperationFeedItem) {
 }
 
 function toNotification(operation: OperationFeedItem, shownAt: number): CompletionNotification {
+  if (operation.kind === "database_sync") {
+    const link = getNotificationLink(operation);
+    return {
+      ...operation,
+      tone: operation.status === "failed" ? "danger" : "success",
+      title: operation.status === "failed" ? "Database sync failed" : "Database sync completed",
+      description: operation.error || operation.currentStep || "The development databases were synchronized.",
+      href: link.href,
+      linkLabel: link.label,
+      expiresAt: shownAt + NOTIFICATION_TIMEOUT_MS,
+    };
+  }
   const target = operation.destinationChannelName
     ? [operation.destinationEnvironmentName, operation.destinationChannelName]
         .filter(Boolean)
@@ -154,6 +169,8 @@ function toNotification(operation: OperationFeedItem, shownAt: number): Completi
       snapshot: "Snapshot capture failed",
       restore: "Snapshot restore failed",
       clear: "Catalog clear failed",
+      refresh: "Clear & Restore failed",
+      database_sync: "Database sync failed",
     };
     return {
       ...operation,
@@ -182,6 +199,8 @@ function toNotification(operation: OperationFeedItem, shownAt: number): Completi
     snapshot: "Snapshot captured",
     restore: "Snapshot restored",
     clear: "Catalog cleared",
+    refresh: "Clear & Restore completed",
+    database_sync: "Database sync completed",
   };
   return {
     ...operation,

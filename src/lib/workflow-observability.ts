@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getRun } from "workflow/api";
+import { parseWorkflowName } from "workflow/observability";
 import type { WorkflowRunStatus } from "@workflow/world";
 import {
   getCatalogSnapshotCaptureStates,
@@ -70,16 +71,16 @@ function friendlyWorkflowName(
     ? "Catalog snapshot workflow"
     : kind === "restore"
       ? "Catalog restore workflow"
-      : "Catalog clear workflow";
+      : kind === "refresh"
+        ? "Clear & Restore workflow"
+        : "Catalog clear workflow";
   if (!runtimeName) return fallback;
 
-  const leaf = runtimeName
-    .split("//")
-    .filter(Boolean)
-    .at(-1)
-    ?.split("/")
-    .filter(Boolean)
-    .at(-1);
+  // Workflow DevKit exposes a module-qualified runtime identifier such as
+  // `workflow//./src/workflows/catalog-operation//catalogOperationWorkflow`.
+  // Preserve it in technical details while using the SDK's parsed short name
+  // in the primary UI.
+  const leaf = parseWorkflowName(runtimeName)?.shortName;
   if (!leaf) return fallback;
 
   const readable = leaf
@@ -278,6 +279,74 @@ function snapshotStages(
 }
 
 function operationStages(operation: CatalogOperation, payload: Record<string, unknown>) {
+  if (operation.kind === "refresh") {
+    const groups = strings(payload.restoreGroups);
+    const active = operation.status === "queued" || operation.status === "running";
+    const stopped = operation.status === "failed" || operation.status === "cancelled";
+    const preflightStarted = /preflight/i.test(operation.currentStep) || operation.stepIndex >= 1;
+    const clearStarted = /product assignments|unassigning products|removing categories|verified:/i.test(operation.currentStep) || operation.stepIndex >= 2;
+    const categoriesStarted = /removing categories|verified:/i.test(operation.currentStep);
+    const restoreStarted = operation.stepIndex >= 3 || operation.status === "completed";
+    const preflightComplete = clearStarted || restoreStarted || operation.status === "completed";
+    const clearComplete = restoreStarted || operation.status === "completed";
+    const stages: WorkflowStage[] = [
+      {
+        id: "preflight",
+        label: "Restore preflight",
+        description: preflightStarted && !preflightComplete
+          ? operation.currentStep
+          : "Validate snapshot access, destination capabilities, and selected restore sections before clearing.",
+        status: preflightComplete
+          ? "completed"
+          : stopped && preflightStarted ? terminalStageStatus(operation) : active ? "running" : "pending",
+        progressPercent: preflightComplete ? 100 : preflightStarted ? 50 : 0,
+      },
+      {
+        id: "clear-products",
+        label: "Unassign products",
+        description: clearStarted && !categoriesStarted && !clearComplete
+          ? operation.currentStep
+          : "Remove product assignments from the destination channel without deleting products.",
+        status: categoriesStarted || clearComplete
+          ? "completed"
+          : stopped && clearStarted ? terminalStageStatus(operation) : clearStarted ? "running" : "pending",
+        progressPercent: categoriesStarted || clearComplete ? 100 : clearStarted ? 50 : 0,
+      },
+      {
+        id: "clear-categories",
+        label: "Remove channel categories",
+        description: categoriesStarted && !clearComplete
+          ? operation.currentStep
+          : "Remove category assignments from the destination channel trees and verify the clear.",
+        status: clearComplete
+          ? "completed"
+          : stopped && categoriesStarted ? terminalStageStatus(operation) : categoriesStarted ? "running" : "pending",
+        progressPercent: clearComplete ? 100 : categoriesStarted ? 50 : 0,
+      },
+    ];
+    groups.forEach((group, index) => {
+      const groupPosition = index + 3;
+      const isDone = operation.status === "completed" || operation.stepIndex > groupPosition;
+      const isCurrent = operation.status === "running" && operation.stepIndex === groupPosition;
+      const isStoppedHere = stopped && Math.max(operation.stepIndex, 3) === groupPosition;
+      stages.push({
+        id: `restore-${group}`,
+        label: `Restore ${group.replaceAll("_", " ")}`,
+        description: isCurrent ? operation.currentStep : `Reconcile the ${group.replaceAll("_", " ")} section from the selected snapshot.`,
+        status: isDone ? "completed" : isStoppedHere ? terminalStageStatus(operation) : isCurrent ? "running" : "pending",
+        progressPercent: isDone ? 100 : isCurrent ? 50 : 0,
+      });
+    });
+    stages.push({
+      id: "finalize",
+      label: "Finalize refresh",
+      description: "Combine clear and restore results, warnings, and manual follow-up actions.",
+      status: operation.status === "completed" ? "completed" : stopped && operation.stepIndex >= groups.length + 3 ? terminalStageStatus(operation) : "pending",
+      progressPercent: operation.status === "completed" ? 100 : 0,
+    });
+    return stages;
+  }
+
   if (operation.kind === "clear") {
     const active = operation.status === "queued" || operation.status === "running";
     const stopped = operation.status === "failed" || operation.status === "cancelled";

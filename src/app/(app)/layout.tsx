@@ -1,7 +1,9 @@
 import { AppShell } from "@/components/app-shell";
 import { CollectionPreferencesProvider } from "@/components/collection-preferences-provider";
+import { ConfirmationProvider } from "@/components/confirmation-provider";
+import { LocalSchedulerDispatcher } from "@/components/local-scheduler-dispatcher";
 import { requireAppUser } from "@/lib/auth";
-import { getCollectionViewPreferences } from "@/lib/db";
+import { getCollectionViewPreferences, getUserProfile } from "@/lib/db";
 
 export default async function AppLayout({
   children,
@@ -9,11 +11,17 @@ export default async function AppLayout({
   children: React.ReactNode;
 }>) {
   const user = await requireAppUser();
-  const collectionPreferences = await getCollectionViewPreferences(user.id);
+  const [collectionPreferences, profile] = await Promise.all([
+    getCollectionViewPreferences(user.id),
+    getUserProfile(user.id),
+  ]);
 
   return (
     <CollectionPreferencesProvider initialPreferences={collectionPreferences}>
-      <AppShell userId={user.id} userEmail={user.email}>{children}</AppShell>
+      <ConfirmationProvider>
+        <LocalSchedulerDispatcher enabled={profile.localSchedulerEnabled} />
+        <AppShell userId={user.id} userEmail={user.email}>{children}</AppShell>
+      </ConfirmationProvider>
     </CollectionPreferencesProvider>
   );
 }

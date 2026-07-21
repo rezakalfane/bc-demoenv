@@ -1,9 +1,11 @@
 import {
   clearCatalogStep,
   completeClearOperationStep,
+  completeRefreshOperationStep,
   completeRestoreOperationStep,
   failCatalogOperationStep,
   initializeCatalogOperationStep,
+  preflightRefreshOperationStep,
   restoreCatalogGroupStep,
 } from "./catalog-operation-steps";
 import type { CatalogRestoreResult } from "@/lib/catalog-restore";
@@ -20,6 +22,32 @@ export async function catalogOperationWorkflow(
     if (operation.kind === "clear") {
       const result = await clearCatalogStep(userId, operationId);
       return await completeClearOperationStep(userId, operationId, result);
+    }
+
+    if (operation.kind === "refresh") {
+      await preflightRefreshOperationStep(userId, operationId);
+      const clearResult = await clearCatalogStep(
+        userId,
+        operationId,
+        2,
+        operation.restoreGroups.length + 2,
+      );
+      const restoreResults: CatalogRestoreResult[] = [];
+      for (let index = 0; index < operation.restoreGroups.length; index += 1) {
+        restoreResults.push(await restoreCatalogGroupStep(
+          userId,
+          operationId,
+          operation.restoreGroups[index],
+          index + 3,
+          operation.restoreGroups.length + 2,
+        ));
+      }
+      return await completeRefreshOperationStep(
+        userId,
+        operationId,
+        clearResult,
+        restoreResults,
+      );
     }
 
     const results: CatalogRestoreResult[] = [];

@@ -6,12 +6,20 @@ import { EnvironmentAccessDiagnostics } from "@/components/environment-access-di
 import { requireAppUser } from "@/lib/auth";
 import {
   getBigCommerceEnvironments,
+  getCollectionViewPreferences,
+  getDevelopmentDatabaseStatus,
   getEnvironmentFavoriteKey,
   getFavoriteResourceKeys,
+  getUserProfile,
   type BigCommerceEnvironment,
 } from "@/lib/db";
 import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
+import { DevelopmentDatabasePanel } from "@/components/development-database-panel";
+import { DatabaseBackupPanel } from "@/components/database-backup-panel";
+import { LocalSchedulerSettings } from "@/components/local-scheduler-settings";
+import { ProfileSettingsForm } from "@/components/profile-settings-form";
+import { canMaintainDatabase } from "@/lib/database-maintenance-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -65,9 +73,16 @@ function SavedEnvironmentCard({
 
 export default async function SettingsPage() {
   const user = await requireAppUser();
-  const [environments, favoriteKeys] = await Promise.all([
+  const databaseStatus = getDevelopmentDatabaseStatus();
+  const [environments, favoriteKeys, profile, preferences] = await Promise.all([
     getBigCommerceEnvironments(user.id),
     getFavoriteResourceKeys(user.id, "environment"),
+    getUserProfile(user.id, {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      timezone: "UTC",
+    }),
+    getCollectionViewPreferences(user.id),
   ]);
   const sortedEnvironments = environments.toSorted((left, right) => {
     const favoriteOrder =
@@ -83,37 +98,80 @@ export default async function SettingsPage() {
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-12 lg:px-12">
       <div className="mx-auto w-full max-w-7xl">
-        <header className="mb-8 border-b border-black/10 pb-7 dark:border-white/10">
+        <header className="mb-10 border-b border-black/10 pb-7 dark:border-white/10">
           <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
             Settings
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-            BigCommerce environments
+            Application settings
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-black/55 dark:text-white/55">
-            Save the stores you use for demos and development. Every environment
-            belongs to your signed-in account; access tokens are encrypted before
-            they reach the database.
+            Manage your profile, interface preferences, BigCommerce connections,
+            and development-only services in one place.
           </p>
         </header>
 
-        <section
-          aria-labelledby="add-environment-heading"
-          className="rounded-3xl border border-black/10 bg-white/65 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-7 dark:border-white/10 dark:bg-white/4"
-        >
-          <h2
-            id="add-environment-heading"
-            className="text-lg font-semibold tracking-tight"
-          >
-            Add an environment
-          </h2>
-          <p className="mt-1 mb-6 text-sm text-black/45 dark:text-white/45">
-            Create a memorable name for a BigCommerce store connection.
-          </p>
-          <EnvironmentForm />
+        <section id="profile" aria-labelledby="profile-heading" className="scroll-mt-8">
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-400">
+              Account
+            </p>
+            <h2 id="profile-heading" className="mt-2 text-2xl font-semibold tracking-tight">
+              Profile & preferences
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-black/45 dark:text-white/45">
+              Set your identity, timezone, and application-wide display defaults.
+            </p>
+          </div>
+          <ProfileSettingsForm
+            email={user.email}
+            profile={profile}
+            initialPreferences={{
+              environments: preferences["dashboard-environments"]?.viewMode ?? "cards",
+              channels: preferences["environment-channels"]?.viewMode ?? "cards",
+              snapshots: preferences["snapshot-series"]?.viewMode ?? "cards",
+              settings: preferences["settings-environments"]?.viewMode ?? "cards",
+              showSharedSnapshots: preferences["snapshot-series"]?.showShared ?? true,
+              sidebarCollapsed: preferences["app-shell"]?.sidebarCollapsed ?? false,
+            }}
+          />
         </section>
 
-        <section aria-labelledby="saved-environments-heading" className="mt-10">
+        <section
+          id="environments"
+          aria-labelledby="environments-heading"
+          className="mt-14 scroll-mt-8 border-t border-black/10 pt-10 dark:border-white/10"
+        >
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-400">
+              Connections
+            </p>
+            <h2 id="environments-heading" className="mt-2 text-2xl font-semibold tracking-tight">
+              BigCommerce environments
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-black/45 dark:text-white/45">
+              Save the stores you use for demos and development. Every environment
+              belongs to your account; access tokens are encrypted before storage.
+            </p>
+          </div>
+
+          <section
+            aria-labelledby="add-environment-heading"
+            className="rounded-3xl border border-black/10 bg-white/65 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.05)] backdrop-blur sm:p-7 dark:border-white/10 dark:bg-white/4"
+          >
+            <h3
+              id="add-environment-heading"
+              className="text-lg font-semibold tracking-tight"
+            >
+              Add an environment
+            </h3>
+            <p className="mt-1 mb-6 text-sm text-black/45 dark:text-white/45">
+              Create a memorable name for a BigCommerce store connection.
+            </p>
+            <EnvironmentForm />
+          </section>
+
+          <section aria-labelledby="saved-environments-heading" className="mt-10">
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <h2
@@ -168,7 +226,55 @@ export default async function SettingsPage() {
               })}
             />
           )}
+          </section>
         </section>
+
+        <section
+          id="database-backup"
+          aria-labelledby="database-backup-heading"
+          className="mt-14 scroll-mt-8 border-t border-black/10 pt-10 dark:border-white/10"
+        >
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">
+              Data safety
+            </p>
+            <h2 id="database-backup-heading" className="mt-2 text-2xl font-semibold tracking-tight">
+              Database backup & restore
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-black/45 dark:text-white/45">
+              Back up or restore the database currently used by this application—local SQLite in development or Turso on Vercel.
+            </p>
+          </div>
+          <DatabaseBackupPanel
+            activeDatabase={databaseStatus.activeDatabase}
+            authorized={canMaintainDatabase(user)}
+          />
+        </section>
+
+        {process.env.NODE_ENV === "development" ? (
+          <section
+            id="development"
+            aria-labelledby="development-heading"
+            className="mt-14 scroll-mt-8 border-t border-black/10 pt-10 dark:border-white/10"
+          >
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">
+                Development only
+              </p>
+              <h2 id="development-heading" className="mt-2 text-2xl font-semibold tracking-tight">
+                Local services
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-black/45 dark:text-white/45">
+                Control local schedule dispatch and explicitly synchronize your
+                development database. These controls are never rendered in production.
+              </p>
+            </div>
+            <div className="space-y-5">
+              <LocalSchedulerSettings initialEnabled={profile.localSchedulerEnabled} />
+              <DevelopmentDatabasePanel status={databaseStatus} />
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );

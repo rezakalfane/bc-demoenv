@@ -112,14 +112,48 @@ export type CollectionViewPreference = {
   sidebarCollapsed: boolean;
 };
 
+export type UserProfile = {
+  firstName: string;
+  lastName: string;
+  timezone: string;
+  localSchedulerEnabled: boolean;
+  updatedAt: string | null;
+};
+
 export type CatalogOperation = {
-  id: number; userId: string; kind: "snapshot" | "restore" | "clear";
+  id: number; userId: string; kind: "snapshot" | "restore" | "clear" | "refresh" | "database_sync";
   environmentId: number | null; channelId: number | null; snapshotId: number | null;
   operationKey: string | null;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   currentStep: string; stepIndex: number; totalSteps: number; payloadJson: string;
   resultJson: string | null; error: string | null; workflowRunId: string | null;
   createdAt: string; updatedAt: string;
+};
+
+export type CatalogScheduleAction = "snapshot" | "restore" | "clear" | "refresh";
+export type CatalogScheduleFrequency = "daily" | "weekly";
+
+export type CatalogSchedule = {
+  id: number;
+  userId: string;
+  name: string;
+  environmentId: number;
+  channelId: number;
+  action: CatalogScheduleAction;
+  frequency: CatalogScheduleFrequency;
+  localTime: string;
+  weekday: number | null;
+  timezone: string;
+  enabled: boolean;
+  snapshotId: number | null;
+  snapshotName: string | null;
+  restoreGroups: SnapshotRestoreGroup[];
+  nextRunAt: string;
+  lastRunAt: string | null;
+  lastOperationId: number | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CatalogSnapshotCaptureState = {
@@ -178,13 +212,37 @@ export function normalizeCatalogSnapshotTag(tag: string) {
 let client: Client | undefined;
 let schemaReady: Promise<void> | undefined;
 
+export type DevelopmentDatabaseStatus = {
+  enabled: boolean;
+  activeDatabase: "local" | "remote";
+  localUrl: string | null;
+  remoteConfigured: boolean;
+};
+
+function getDevelopmentLocalDatabaseUrl() {
+  if (process.env.NODE_ENV !== "development") return null;
+  const url = process.env.LOCAL_DATABASE_URL?.trim();
+  return url || null;
+}
+
+export function getDevelopmentDatabaseStatus(): DevelopmentDatabaseStatus {
+  const localUrl = getDevelopmentLocalDatabaseUrl();
+  return {
+    enabled: Boolean(localUrl && process.env.TURSO_DATABASE_URL?.trim()),
+    activeDatabase: localUrl ? "local" : "remote",
+    localUrl,
+    remoteConfigured: Boolean(process.env.TURSO_DATABASE_URL?.trim()),
+  };
+}
+
 function getClient() {
   if (client) {
     return client;
   }
 
-  const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
+  const localUrl = getDevelopmentLocalDatabaseUrl();
+  const url = localUrl ?? process.env.TURSO_DATABASE_URL;
+  const authToken = localUrl ? undefined : process.env.TURSO_AUTH_TOKEN;
 
   if (!url && process.env.VERCEL) {
     throw new Error(
@@ -449,6 +507,29 @@ async function ensureSchema() {
         PRIMARY KEY (user_id, collection_id)
       )
     `);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        user_id TEXT PRIMARY KEY,
+        first_name TEXT NOT NULL DEFAULT '',
+        last_name TEXT NOT NULL DEFAULT '',
+        timezone TEXT NOT NULL DEFAULT 'UTC',
+        local_scheduler_enabled INTEGER NOT NULL DEFAULT 1 CHECK(local_scheduler_enabled IN (0, 1)),
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    const userProfileColumns = await db.execute(
+      "PRAGMA table_info(user_profiles)",
+    );
+    if (
+      !userProfileColumns.rows.some(
+        (column) => String(column.name) === "local_scheduler_enabled",
+      )
+    ) {
+      await db.execute(
+        "ALTER TABLE user_profiles ADD COLUMN local_scheduler_enabled INTEGER NOT NULL DEFAULT 1 CHECK(local_scheduler_enabled IN (0, 1))",
+      );
+    }
     const collectionPreferenceColumns = await db.execute(
       "PRAGMA table_info(collection_view_preferences)",
     );
@@ -494,6 +575,37 @@ async function ensureSchema() {
     await db.execute("CREATE INDEX IF NOT EXISTS catalog_operations_user_idx ON catalog_operations(user_id, id DESC)");
     await db.execute(
       "CREATE UNIQUE INDEX IF NOT EXISTS catalog_operations_one_active_key_idx ON catalog_operations(user_id, kind, operation_key) WHERE operation_key IS NOT NULL AND status IN ('queued', 'running')",
+    );
+    await db.execute(`CREATE TABLE IF NOT EXISTS catalog_schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL COLLATE NOCASE CHECK(length(name) BETWEEN 1 AND 100),
+      environment_id INTEGER NOT NULL,
+      channel_id INTEGER NOT NULL,
+      action TEXT NOT NULL CHECK(action IN ('snapshot', 'restore', 'clear', 'refresh')),
+      frequency TEXT NOT NULL CHECK(frequency IN ('daily', 'weekly')),
+      local_time TEXT NOT NULL,
+      weekday INTEGER CHECK(weekday BETWEEN 0 AND 6),
+      timezone TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+      snapshot_id INTEGER,
+      snapshot_name TEXT COLLATE NOCASE,
+      restore_groups_json TEXT NOT NULL DEFAULT '["catalog"]',
+      next_run_at TEXT NOT NULL,
+      last_run_at TEXT,
+      last_operation_id INTEGER,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    // Schedule names are labels, not identifiers. Multiple schedules may share a
+    // name when their target, timing, or action differs.
+    await db.execute("DROP INDEX IF EXISTS catalog_schedules_user_name_idx");
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS catalog_schedules_user_name_idx ON catalog_schedules(user_id, name)",
+    );
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS catalog_schedules_due_idx ON catalog_schedules(enabled, next_run_at)",
     );
     await db.execute(`CREATE TABLE IF NOT EXISTS catalog_snapshot_capture_state (
       operation_id INTEGER PRIMARY KEY,
@@ -558,15 +670,210 @@ async function ensureSchema() {
   return schemaReady;
 }
 
+export async function getActiveDatabaseClientForDevelopmentSync() {
+  await ensureSchema();
+  return getClient();
+}
+
+export async function getActiveDatabaseClientForMaintenance() {
+  await ensureSchema();
+  return getClient();
+}
+
 function toCatalogOperation(row: Record<string, unknown>): CatalogOperation {
   return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), operationKey: row.operation_key == null ? null : String(row.operation_key), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), workflowRunId: row.workflow_run_id == null ? null : String(row.workflow_run_id), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
 }
 
+function toCatalogSchedule(row: Record<string, unknown>): CatalogSchedule {
+  let restoreGroups: SnapshotRestoreGroup[] = ["catalog"];
+  try {
+    restoreGroups = (JSON.parse(String(row.restore_groups_json ?? "[]")) as unknown[])
+      .flatMap((group) => typeof group === "string" ? [group] : [])
+      .filter((group): group is SnapshotRestoreGroup =>
+        SNAPSHOT_RESTORE_GROUPS.some((candidate) => candidate.id === group),
+      );
+  } catch {
+    restoreGroups = ["catalog"];
+  }
+  return {
+    id: Number(row.id),
+    userId: String(row.user_id),
+    name: String(row.name),
+    environmentId: Number(row.environment_id),
+    channelId: Number(row.channel_id),
+    action: row.action as CatalogScheduleAction,
+    frequency: row.frequency as CatalogScheduleFrequency,
+    localTime: String(row.local_time),
+    weekday: row.weekday == null ? null : Number(row.weekday),
+    timezone: String(row.timezone),
+    enabled: Number(row.enabled) === 1,
+    snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id),
+    snapshotName: row.snapshot_name == null ? null : String(row.snapshot_name),
+    restoreGroups,
+    nextRunAt: toIsoDate(row.next_run_at),
+    lastRunAt: row.last_run_at == null ? null : toIsoDate(row.last_run_at),
+    lastOperationId: row.last_operation_id == null ? null : Number(row.last_operation_id),
+    lastError: row.last_error == null ? null : String(row.last_error),
+    createdAt: toIsoDate(row.created_at),
+    updatedAt: toIsoDate(row.updated_at),
+  };
+}
+
+export async function getCatalogSchedules(userId: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: "SELECT * FROM catalog_schedules WHERE user_id = ? ORDER BY name COLLATE NOCASE",
+    args: [userId],
+  });
+  return result.rows.map((row) => toCatalogSchedule(row as Record<string, unknown>));
+}
+
+export async function getCatalogSchedule(userId: string, id: number) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: "SELECT * FROM catalog_schedules WHERE user_id = ? AND id = ?",
+    args: [userId, id],
+  });
+  return result.rows[0]
+    ? toCatalogSchedule(result.rows[0] as Record<string, unknown>)
+    : null;
+}
+
+export async function saveCatalogSchedule(
+  userId: string,
+  input: Omit<CatalogSchedule, "id" | "userId" | "lastRunAt" | "lastOperationId" | "lastError" | "createdAt" | "updatedAt"> & { id?: number },
+) {
+  await ensureSchema();
+  const args = [
+    input.name,
+    input.environmentId,
+    input.channelId,
+    input.action,
+    input.frequency,
+    input.localTime,
+    input.weekday,
+    input.timezone,
+    input.enabled ? 1 : 0,
+    input.snapshotId,
+    input.snapshotName,
+    JSON.stringify(input.restoreGroups),
+    input.nextRunAt,
+  ] as Array<string | number | null>;
+  if (input.id) {
+    const result = await getClient().execute({
+      sql: `UPDATE catalog_schedules SET name=?, environment_id=?, channel_id=?, action=?, frequency=?, local_time=?, weekday=?, timezone=?, enabled=?, snapshot_id=?, snapshot_name=?, restore_groups_json=?, next_run_at=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=? RETURNING id`,
+      args: [...args, userId, input.id],
+    });
+    if (!result.rows[0]) throw new Error("The schedule was not found.");
+    return Number(result.rows[0].id);
+  }
+  const result = await getClient().execute({
+    sql: `INSERT INTO catalog_schedules (user_id,name,environment_id,channel_id,action,frequency,local_time,weekday,timezone,enabled,snapshot_id,snapshot_name,restore_groups_json,next_run_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+    args: [userId, ...args],
+  });
+  return Number(result.rows[0].id);
+}
+
+export async function deleteCatalogSchedule(userId: string, id: number) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: "DELETE FROM catalog_schedules WHERE user_id = ? AND id = ?",
+    args: [userId, id],
+  });
+}
+
+export async function setCatalogScheduleEnabled(
+  userId: string,
+  id: number,
+  enabled: boolean,
+  nextRunAt: string,
+) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: "UPDATE catalog_schedules SET enabled=?, next_run_at=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=? RETURNING id",
+    args: [enabled ? 1 : 0, nextRunAt, userId, id],
+  });
+  if (!result.rows[0]) throw new Error("The schedule was not found.");
+}
+
+export async function getDueCatalogSchedules(now: string, userId?: string) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: userId
+      ? "SELECT * FROM catalog_schedules WHERE user_id=? AND enabled=1 AND next_run_at <= ? ORDER BY next_run_at LIMIT 50"
+      : "SELECT * FROM catalog_schedules WHERE enabled=1 AND next_run_at <= ? ORDER BY next_run_at LIMIT 50",
+    args: userId ? [userId, now] : [now],
+  });
+  return result.rows.map((row) => toCatalogSchedule(row as Record<string, unknown>));
+}
+
+export async function claimCatalogSchedule(
+  schedule: CatalogSchedule,
+  nextRunAt: string,
+) {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: "UPDATE catalog_schedules SET last_run_at=CURRENT_TIMESTAMP, next_run_at=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=? AND enabled=1 AND next_run_at=?",
+    args: [nextRunAt, schedule.id, schedule.userId, schedule.nextRunAt],
+  });
+  return result.rowsAffected > 0;
+}
+
+export async function recordCatalogScheduleDispatch(
+  userId: string,
+  id: number,
+  operationId: number | null,
+  error: string | null,
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: "UPDATE catalog_schedules SET last_run_at=COALESCE(last_run_at,CURRENT_TIMESTAMP), last_operation_id=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?",
+    args: [operationId, error, userId, id],
+  });
+}
+
 export async function createCatalogOperation(userId: string, input: { kind: CatalogOperation["kind"]; environmentId?: number; channelId?: number; snapshotId?: number; payload: unknown; totalSteps?: number; operationKey?: string }) {
   await ensureSchema();
-  const r = await getClient().execute({ sql: `INSERT INTO catalog_operations (user_id,kind,environment_id,channel_id,snapshot_id,payload_json,total_steps,operation_key) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING RETURNING id`, args: [userId,input.kind,input.environmentId ?? null,input.channelId ?? null,input.snapshotId ?? null,JSON.stringify(input.payload),input.totalSteps ?? 0,input.operationKey ?? null] });
+  const environmentId = input.environmentId ?? null;
+  const channelId = input.channelId ?? null;
+  const r = await getClient().execute({
+    sql: `
+      INSERT INTO catalog_operations (
+        user_id, kind, environment_id, channel_id, snapshot_id,
+        payload_json, total_steps, operation_key
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM catalog_operations
+        WHERE user_id = ?
+          AND kind = ?
+          AND environment_id = ?
+          AND channel_id = ?
+          AND status IN ('queued', 'running')
+      )
+      ON CONFLICT DO NOTHING
+      RETURNING id
+    `,
+    args: [
+      userId,
+      input.kind,
+      environmentId,
+      channelId,
+      input.snapshotId ?? null,
+      JSON.stringify(input.payload),
+      input.totalSteps ?? 0,
+      input.operationKey ?? null,
+      userId,
+      input.kind,
+      environmentId,
+      channelId,
+    ],
+  });
   if (!r.rows[0]) {
-    if (input.operationKey) throw new CatalogOperationAlreadyActiveError();
+    if (input.operationKey || (environmentId !== null && channelId !== null)) {
+      throw new CatalogOperationAlreadyActiveError();
+    }
     throw new Error("The catalog operation could not be created.");
   }
   return Number(r.rows[0].id);
@@ -1031,6 +1338,68 @@ export async function getCollectionViewPreference(
   };
 }
 
+export async function getUserProfile(
+  userId: string,
+  defaults: Partial<Omit<UserProfile, "updatedAt">> = {},
+): Promise<UserProfile> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT first_name, last_name, timezone, local_scheduler_enabled, updated_at
+      FROM user_profiles
+      WHERE user_id = ?
+      LIMIT 1
+    `,
+    args: [userId],
+  });
+  const row = result.rows[0];
+  return {
+    firstName: row ? String(row.first_name) : defaults.firstName ?? "",
+    lastName: row ? String(row.last_name) : defaults.lastName ?? "",
+    timezone: row ? String(row.timezone) : defaults.timezone ?? "UTC",
+    localSchedulerEnabled: row
+      ? Number(row.local_scheduler_enabled) === 1
+      : defaults.localSchedulerEnabled ?? true,
+    updatedAt: row ? toIsoDate(row.updated_at) : null,
+  };
+}
+
+export async function saveUserProfile(
+  userId: string,
+  profile: Pick<UserProfile, "firstName" | "lastName" | "timezone">,
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO user_profiles (user_id, first_name, last_name, timezone)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        first_name = excluded.first_name,
+        last_name = excluded.last_name,
+        timezone = excluded.timezone,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    args: [userId, profile.firstName, profile.lastName, profile.timezone],
+  });
+}
+
+export async function setLocalSchedulerEnabled(
+  userId: string,
+  enabled: boolean,
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO user_profiles (user_id, local_scheduler_enabled)
+      VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        local_scheduler_enabled = excluded.local_scheduler_enabled,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    args: [userId, enabled ? 1 : 0],
+  });
+}
+
 export async function getCollectionViewPreferences(userId: string) {
   await ensureSchema();
   const result = await getClient().execute({
@@ -1176,7 +1545,12 @@ export async function removeNote(userId: string, id: number) {
 }
 
 function toIsoDate(value: unknown) {
-  return `${String(value).replace(" ", "T")}Z`;
+  const rawValue = String(value).trim();
+  const normalizedValue = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(rawValue)
+    ? rawValue
+    : `${rawValue.replace(" ", "T")}Z`;
+  const date = new Date(normalizedValue);
+  return Number.isNaN(date.getTime()) ? normalizedValue : date.toISOString();
 }
 
 export async function getBigCommerceEnvironments(
