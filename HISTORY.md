@@ -2,6 +2,24 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-21 — Add Notes and Settings loading states and complete Workflow documentation
+
+### Prompt
+
+> perfect! notes and settings would deserve some skeleton too
+>
+> perfect you can validate that phase
+>
+> Did you detail all workflows in DETAILS including the new Clear & Restore? If not you can do it.
+
+### Summary
+
+- Added route-level Notes and Settings loading boundaries that render immediately while their Server Components load.
+- Mirrored the real Notes and Settings page structures, including a preference-aware saved-environments collection skeleton.
+- Audited the implemented durable workflows and added the missing Clear & Restore flow to `DETAILS.md`, covering preflight, catalog clearing, selected restore groups, completion, failure, and cancellation semantics.
+- Confirmed that capture, restore, clear, and Clear & Restore are now all represented, while database synchronization remains correctly identified as a bounded non-Workflow operation.
+- Validated lint, TypeScript, whitespace, and the optimized production build before branching, committing, merging, and pushing.
+
 ## 2026-07-21 — Refresh product branding and README overview
 
 ### Prompt

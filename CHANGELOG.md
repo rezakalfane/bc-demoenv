@@ -4,6 +4,27 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-21
 
+### Merge — Integrate Notes and Settings loading states and complete Workflow documentation
+
+- **Date:** 2026-07-21
+- **Source:** `feature/notes-settings-loading-skeletons`
+- **Target:** `main`
+- **Type:** Non-fast-forward feature merge
+
+Integrated immediate route-level skeletons for Notes and Settings and completed the durable Workflow reference with the composite Clear & Restore execution path after TypeScript, lint, whitespace, and production-build validation.
+
+### Commit — Add Notes and Settings loading states and document Clear & Restore
+
+- **Date:** 2026-07-21
+- **Branch:** `feature/notes-settings-loading-skeletons`
+- **Type:** UI and documentation commit
+
+- Added accessible App Router loading boundaries so Notes and Settings render useful structure immediately during server navigation.
+- Matched the Notes skeleton to its form and list layout and the Settings skeleton to profile, scheduler, environment, collection, and database sections.
+- Made the saved-environments fallback respect the user's persisted Settings card/table preference.
+- Added the missing Clear & Restore Workflow diagram to `DETAILS.md`, including preflight, clear, per-group restore, completion, and failure paths.
+- Validated TypeScript, lint, whitespace, and the optimized production build.
+
 ### Commit — Refresh product branding and feature documentation
 
 - **Date:** 2026-07-21
