@@ -117,6 +117,7 @@ export type UserProfile = {
   lastName: string;
   timezone: string;
   localSchedulerEnabled: boolean;
+  localSchedulerInterval: "minute" | "daily";
   updatedAt: string | null;
 };
 
@@ -297,9 +298,7 @@ function payloadHasCapturedTranslations(payloadJson: string) {
   }
 }
 
-async function ensureSchema() {
-  schemaReady ??= (async () => {
-    const db = getClient();
+export async function applyCurrentDatabaseSchema(db: Client) {
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS notes (
@@ -515,6 +514,7 @@ async function ensureSchema() {
         last_name TEXT NOT NULL DEFAULT '',
         timezone TEXT NOT NULL DEFAULT 'UTC',
         local_scheduler_enabled INTEGER NOT NULL DEFAULT 1 CHECK(local_scheduler_enabled IN (0, 1)),
+        local_scheduler_interval TEXT NOT NULL DEFAULT 'minute' CHECK(local_scheduler_interval IN ('minute', 'daily')),
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -528,6 +528,15 @@ async function ensureSchema() {
     ) {
       await db.execute(
         "ALTER TABLE user_profiles ADD COLUMN local_scheduler_enabled INTEGER NOT NULL DEFAULT 1 CHECK(local_scheduler_enabled IN (0, 1))",
+      );
+    }
+    if (
+      !userProfileColumns.rows.some(
+        (column) => String(column.name) === "local_scheduler_interval",
+      )
+    ) {
+      await db.execute(
+        "ALTER TABLE user_profiles ADD COLUMN local_scheduler_interval TEXT NOT NULL DEFAULT 'minute' CHECK(local_scheduler_interval IN ('minute', 'daily'))",
       );
     }
     const collectionPreferenceColumns = await db.execute(
@@ -662,7 +671,10 @@ async function ensureSchema() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (operation_id, product_index)
     )`);
-  })().catch((error) => {
+}
+
+async function ensureSchema() {
+  schemaReady ??= applyCurrentDatabaseSchema(getClient()).catch((error) => {
     schemaReady = undefined;
     throw error;
   });
@@ -1345,7 +1357,7 @@ export async function getUserProfile(
   await ensureSchema();
   const result = await getClient().execute({
     sql: `
-      SELECT first_name, last_name, timezone, local_scheduler_enabled, updated_at
+      SELECT first_name, last_name, timezone, local_scheduler_enabled, local_scheduler_interval, updated_at
       FROM user_profiles
       WHERE user_id = ?
       LIMIT 1
@@ -1360,6 +1372,9 @@ export async function getUserProfile(
     localSchedulerEnabled: row
       ? Number(row.local_scheduler_enabled) === 1
       : defaults.localSchedulerEnabled ?? true,
+    localSchedulerInterval: row?.local_scheduler_interval === "daily"
+      ? "daily"
+      : defaults.localSchedulerInterval ?? "minute",
     updatedAt: row ? toIsoDate(row.updated_at) : null,
   };
 }
@@ -1397,6 +1412,23 @@ export async function setLocalSchedulerEnabled(
         updated_at = CURRENT_TIMESTAMP
     `,
     args: [userId, enabled ? 1 : 0],
+  });
+}
+
+export async function setLocalSchedulerInterval(
+  userId: string,
+  interval: "minute" | "daily",
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO user_profiles (user_id, local_scheduler_interval)
+      VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        local_scheduler_interval = excluded.local_scheduler_interval,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    args: [userId, interval],
   });
 }
 

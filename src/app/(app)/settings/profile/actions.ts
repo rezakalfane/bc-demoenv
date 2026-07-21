@@ -9,6 +9,7 @@ import {
 import {
   saveUserProfile,
   setLocalSchedulerEnabled,
+  setLocalSchedulerInterval,
   setCollectionSharedVisibility,
   setCollectionSidebarCollapsed,
   setCollectionViewMode,
@@ -78,8 +79,32 @@ export async function updateLocalSchedulerEnabled(enabled: boolean) {
   return {
     status: "success" as const,
     message: enabled
-      ? "The local scheduler is enabled. Due schedules are checked every minute."
+      ? "The local scheduler is enabled. Due schedules use your selected check interval."
       : "The local scheduler is disabled for your account on this dev server.",
+  };
+}
+
+export async function updateLocalSchedulerInterval(interval: "minute" | "daily") {
+  const user = await requireAppUser();
+  if (process.env.NODE_ENV !== "development") {
+    return {
+      status: "error" as const,
+      message: "The local scheduler is available only in development.",
+    };
+  }
+  if (interval !== "minute" && interval !== "daily") {
+    return { status: "error" as const, message: "Choose a valid scheduler interval." };
+  }
+
+  await setLocalSchedulerInterval(user.id, interval);
+  revalidatePath("/", "layout");
+  revalidatePath("/settings");
+  revalidatePath("/scheduler");
+  return {
+    status: "success" as const,
+    message: interval === "minute"
+      ? "The local dispatcher now checks due schedules every minute."
+      : "The local dispatcher now checks due schedules once per day.",
   };
 }
 

@@ -87,6 +87,9 @@ export default async function SchedulerPage() {
             destinations={destinations}
             snapshots={snapshotOptions}
             defaultTimezone={profile.timezone}
+            dispatchInterval={process.env.NODE_ENV === "development"
+              ? profile.localSchedulerInterval
+              : "daily"}
           />
         </div>
       </div>

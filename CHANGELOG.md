@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-21
 
+### Merge — Integrate deployment and database synchronization hardening
+
+- **Date:** 2026-07-21
+- **Source:** `fix/validate-database-sync-scheduler`
+- **Target:** `main`
+- **Type:** Non-fast-forward fix merge
+
+Integrated resilient Operations timestamps and layout, Vercel Hobby-compatible scheduling, configurable local dispatch, and automatic local/Turso schema migration before database synchronization after lint, TypeScript, whitespace, and production-build validation.
+
+### Commit — Harden deployment and database synchronization
+
+- **Date:** 2026-07-21
+- **Branch:** `fix/validate-database-sync-scheduler`
+- **Type:** Fix commit
+
+- Guarded Operations formatting, filtering, sorting, and details against invalid persisted timestamps and kept its compact table within the available width.
+- Changed the committed Vercel Cron cadence to a Hobby-compatible daily dispatch while retaining configurable minute/daily development dispatch.
+- Applied the current idempotent schema and additive migrations to both local SQLite and Turso before mirror compatibility checks and transactional copying.
+- Updated deployment, scheduler, database-mirror, environment, prompt-history, and changelog documentation.
+
 ### Merge — Integrate scheduled catalog automation and database operations
 
 - **Date:** 2026-07-21

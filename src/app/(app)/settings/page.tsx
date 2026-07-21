@@ -138,6 +138,68 @@ export default async function SettingsPage() {
         </section>
 
         <section
+          id="scheduler"
+          aria-labelledby="scheduler-heading"
+          className="mt-14 scroll-mt-8 border-t border-black/10 pt-10 dark:border-white/10"
+        >
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-400">
+              Automation
+            </p>
+            <h2 id="scheduler-heading" className="mt-2 text-2xl font-semibold tracking-tight">
+              Scheduler
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-black/45 dark:text-white/45">
+              Control how due schedules are discovered locally and understand the
+              cloud dispatcher cadence used by this deployment.
+            </p>
+          </div>
+
+          <div className="space-y-5">
+            <section className="rounded-3xl border border-black/10 bg-white/65 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.04)] sm:p-7 dark:border-white/10 dark:bg-white/4">
+              <div className="flex flex-wrap items-start justify-between gap-5">
+                <div className="max-w-2xl">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-semibold">Vercel Cron</h3>
+                    <span className="rounded-full bg-blue-500/12 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                      Cloud
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-black/45 dark:text-white/45">
+                    Production checks due schedules once per day. This cadence is
+                    deploy-time configuration and is compatible with Vercel Hobby.
+                  </p>
+                </div>
+                <div className="grid min-w-48 gap-1 rounded-2xl border border-black/8 px-4 py-3 text-sm dark:border-white/8">
+                  <span className="text-xs uppercase tracking-[0.14em] text-black/40 dark:text-white/40">Interval</span>
+                  <span className="font-semibold">Once per day</span>
+                </div>
+              </div>
+              <p className="mt-5 text-sm leading-6 text-black/45 dark:text-white/45">
+                Vercel Pro and Enterprise can dispatch every minute by changing the
+                cron expression in <code className="font-mono text-xs">vercel.json</code> to <code className="font-mono text-xs">* * * * *</code> and redeploying. Runtime profile settings cannot change a deployed Vercel Cron.
+                {" "}
+                <a
+                  href="https://vercel.com/docs/cron-jobs/usage-and-pricing"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-emerald-700 hover:underline dark:text-emerald-300"
+                >
+                  View Vercel scheduling limits ↗
+                </a>
+              </p>
+            </section>
+
+            {process.env.NODE_ENV === "development" ? (
+              <LocalSchedulerSettings
+                initialEnabled={profile.localSchedulerEnabled}
+                initialInterval={profile.localSchedulerInterval}
+              />
+            ) : null}
+          </div>
+        </section>
+
+        <section
           id="environments"
           aria-labelledby="environments-heading"
           className="mt-14 scroll-mt-8 border-t border-black/10 pt-10 dark:border-white/10"
@@ -262,17 +324,14 @@ export default async function SettingsPage() {
                 Development only
               </p>
               <h2 id="development-heading" className="mt-2 text-2xl font-semibold tracking-tight">
-                Local services
+                Local database
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-black/45 dark:text-white/45">
-                Control local schedule dispatch and explicitly synchronize your
-                development database. These controls are never rendered in production.
+                Explicitly synchronize your development database with Turso. These
+                controls are never rendered in production.
               </p>
             </div>
-            <div className="space-y-5">
-              <LocalSchedulerSettings initialEnabled={profile.localSchedulerEnabled} />
-              <DevelopmentDatabasePanel status={databaseStatus} />
-            </div>
+            <DevelopmentDatabasePanel status={databaseStatus} />
           </section>
         ) : null}
       </div>

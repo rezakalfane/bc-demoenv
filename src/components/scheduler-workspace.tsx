@@ -91,11 +91,13 @@ export function SchedulerWorkspace({
   destinations,
   snapshots,
   defaultTimezone,
+  dispatchInterval,
 }: {
   schedules: ScheduleRow[];
   destinations: CatalogRestoreDestination[];
   snapshots: SchedulerSnapshotOption[];
   defaultTimezone: string;
+  dispatchInterval: "minute" | "daily";
 }) {
   const confirmation = useConfirmation();
   const [editing, setEditing] = useState<CatalogSchedule | null | undefined>(undefined);
@@ -297,7 +299,9 @@ export function SchedulerWorkspace({
           </button>
         </div>
         <div className="text-right text-xs text-black/45 dark:text-white/45">
-          <p>Due schedules are dispatched every minute.</p>
+          <p>
+            Due schedules are dispatched {dispatchInterval === "minute" ? "every minute" : "once per day"}.
+          </p>
           {process.env.NODE_ENV === "development" ? (
             <p className="mt-1">Local checks run while this application is open.</p>
           ) : null}

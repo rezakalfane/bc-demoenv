@@ -2,6 +2,23 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-21 — Validate deployment and database synchronization hardening
+
+### Prompt
+
+> The user_profiles schema differs between local SQLite and Turso. Apply the current schema to both databases before syncing.
+>
+> (when pushing to Torso)
+>
+> can you validate so we can see if my auto deployment to Vercel works?
+
+### Summary
+
+- Made local SQLite/Turso mirroring apply the current idempotent schema and additive migrations to both databases before comparing their application tables or copying data.
+- Prevented invalid operation timestamps from crashing Vercel rendering and tightened the Operations table layout to avoid horizontal scrolling.
+- Changed the committed production Cron to a Vercel Hobby-compatible daily cadence while retaining configurable minute/daily local development dispatch.
+- Updated deployment and operational documentation, then validated whitespace, TypeScript, lint, and the production build before branching, committing, merging, and pushing to trigger the connected Vercel deployment.
+
 ## 2026-07-21 — Validate scheduled catalog automation and database operations
 
 ### Prompt
