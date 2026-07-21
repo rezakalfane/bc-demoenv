@@ -386,7 +386,34 @@ flowchart TD
     class fail,failed failure;
 ```
 
-The restore and clear paths are two branches of `catalogOperationWorkflow` and therefore share their initialization and failure steps. Cancellation is initiated through the catalog-operation API by cancelling the registered run and persisting `cancelled`; it is run control rather than a `"use step"` function, so it is not shown as a step node above.
+### Clear & Restore Workflow
+
+```mermaid
+flowchart TD
+    start([Start Clear & Restore]) --> initialize["initializeCatalogOperationStep<br/>Validate payload, immutable version, selected groups,<br/>and destination ownership<br/>maxRetries: 2"]
+    initialize --> preflight["preflightRefreshOperationStep<br/>Verify the selected snapshot can be restored<br/>before changing the destination<br/>maxRetries: 2"]
+    preflight --> clear["clearCatalogStep<br/>Unassign channel products, remove categories,<br/>then verify BigCommerce state<br/>maxRetries: 3"]
+    clear -. Application trace .-> clearMacros["Clear macro stages<br/>Unassign products → Remove channel categories<br/>→ Verify catalog is clear"]
+    clear --> more{"Next selected restore group?"}
+    more -- Yes --> group["restoreCatalogGroupStep<br/>Restore one catalog/configuration group<br/>maxRetries: 3"]
+    group --> more
+    more -- No --> complete["completeRefreshOperationStep<br/>Combine clear and restore results, warnings,<br/>manual actions, and final status<br/>maxRetries: 2"]
+    complete --> success([Fresh environment ready])
+
+    initialize -. Error .-> fail["failCatalogOperationStep<br/>Persist terminal failure unless cancelled<br/>maxRetries: 2"]
+    preflight -. Blocker or error after retries .-> fail
+    clear -. Error after retries .-> fail
+    group -. Error after retries .-> fail
+    complete -. Error .-> fail
+    fail --> failed([Failed])
+
+    classDef terminal fill:#064e3b,color:#ecfdf5,stroke:#10b981,stroke-width:2px;
+    classDef failure fill:#450a0a,color:#fef2f2,stroke:#ef4444,stroke-width:2px;
+    class start,success terminal;
+    class fail,failed failure;
+```
+
+Snapshot capture uses `catalogSnapshotWorkflow`. Restore, clear, and Clear & Restore are the three branches of `catalogOperationWorkflow` and share its initialization and failure steps. Clear & Restore is stored as the `refresh` operation kind and preserves one operation ID, Workflow run, progress surface, notification, and audit result across both phases. Cancellation is initiated through the catalog-operation API by cancelling the registered run and persisting `cancelled`; it is run control rather than a `"use step"` function, so it is not shown as a step node above.
 
 Restore is presented as a three-step wizard: choose the snapshot and version plus the destination, select the available restore sections, then review the destination preflight and enter the typed confirmation. On channel pages, Snapshot and Version are separate selectors: selecting a snapshot chooses its newest version, the Version selector contains only that series, and a star identifies its published version. The step header exposes progress and permits returning to completed steps, while the modal footer keeps Cancel, Back, Continue, preflight, and final Restore actions visible independently from scroll position. Changing a prior selection invalidates confirmation and requires a fresh preflight.
 
