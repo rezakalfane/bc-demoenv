@@ -2,6 +2,46 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-21 — Validate scheduled catalog automation and database operations
+
+### Prompt
+
+> Great, you can validate that whole phase
+
+### Summary
+
+- Completed the Scheduler phase with daily/weekly per-channel snapshot, restore, clear, and sequential Clear & Restore automations, a three-step editor, favorite-aware selectors, one-minute dispatch, non-overlapping durable operations, and asynchronous row controls.
+- Added user profile and application preferences, a consolidated Settings experience, development scheduler control, explicit local SQLite/Turso mirroring, and privileged whole-database backup/restore for the active local or Turso database.
+- Added Scheduler-disabled guidance, loading skeletons, normalized Workflow names and traces, direct Operation-to-Workflow navigation, and compact icon actions with clearer running-state behavior.
+- Preserved the destination storefront contact email during restore, documented the schedule/operation safety model and new database tables, and validated lint, TypeScript, whitespace, and the production build before branching, committing, merging, and pushing.
+
+## 2026-07-21 — Warn when local schedule dispatch is disabled
+
+### Prompt
+
+> Can you display a warning to a link to settings in the Scheduler page, when the scheduler is disabled?
+
+### Summary
+
+- Added a prominent warning to the Scheduler page when the signed-in user's development scheduler dispatcher is disabled.
+- Linked the warning directly to the development controls in Settings.
+- Clarified that saved schedules and the independent Vercel Cron dispatcher are unaffected.
+
+## 2026-07-21 — Make full database maintenance work with Turso
+
+### Prompt
+
+> Backup restore is not necessarily local only, it could also be done on Vercel + Turso
+
+### Summary
+
+- Separated full database backup and restore from the development-only local/Turso mirror controls.
+- Made versioned whole-database exports and transactional restores operate on the application's active database, including Turso in Preview and Production deployments.
+- Added an authenticated production maintenance route protected by the `DATABASE_BACKUP_ALLOWED_EMAILS` operator allow-list because a backup contains every tenant's data and encrypted credentials.
+- Kept local database pull/push mirroring and the browser scheduler toggle development-only.
+- Preserved strict schema validation, active-operation guards, transactional replacement, binary/bigint encoding, and safe omission of inaccessible legacy ownerless notes.
+- Updated Settings, environment examples, and operational documentation for both local SQLite and Vercel/Turso usage.
+
 ## 2026-07-20 — Persist localized snapshot metadata
 
 ### Prompt

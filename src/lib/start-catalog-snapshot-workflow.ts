@@ -180,7 +180,9 @@ export async function reconcileCatalogOperationWorkflow(
           ? "Starting durable snapshot capture"
           : operation.kind === "restore"
             ? "Starting durable snapshot restoration"
-            : "Starting durable catalog clear",
+            : operation.kind === "refresh"
+              ? "Starting durable clear and restore"
+              : "Starting durable catalog clear",
       });
       return;
     }

@@ -8,7 +8,7 @@ export function ChannelCatalogLiveState({ environmentId, channelId }: { environm
     const className = `catalog-clearing-${environmentId}-${channelId}`;
     const sync = () => {
       const operation = readCatalogOperation();
-      const active = operation?.kind === "clear" && operation.environmentId === environmentId && operation.channelId === channelId;
+      const active = (operation?.kind === "clear" || operation?.kind === "refresh") && operation.environmentId === environmentId && operation.channelId === channelId;
       document.body.classList.toggle(className, Boolean(active));
     };
     sync();

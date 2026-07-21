@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirmation } from "@/components/confirmation-provider";
 import type {
   WorkflowRunListItem,
   WorkflowStage,
@@ -218,6 +219,7 @@ export function WorkflowRunsExplorer({
   initialSelectedOperationId?: number | null;
 }) {
   const router = useRouter();
+  const confirmation = useConfirmation();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [kind, setKind] = useState<KindFilter>("all");
@@ -256,8 +258,24 @@ export function WorkflowRunsExplorer({
   }, [initialSelectedOperationId, router]);
 
   const runAction = useCallback(async (run: WorkflowRunListItem, action: "refresh" | "cancel" | "retry") => {
-    if (action === "cancel" && !window.confirm("Cancel this active workflow? Completed durable checkpoints remain in the audit record.")) return;
-    if (action === "retry" && !window.confirm("Start a new workflow run with the same stored input?")) return;
+    if (action === "cancel") {
+      const confirmed = await confirmation({
+        title: "Cancel this active workflow?",
+        description: "The workflow will stop after its current durable checkpoint. Completed checkpoints remain available in the audit record.",
+        confirmLabel: "Cancel workflow",
+        tone: "danger",
+      });
+      if (!confirmed) return;
+    }
+    if (action === "retry") {
+      const confirmed = await confirmation({
+        title: "Retry this workflow?",
+        description: "A new durable workflow run will start with the same stored input. The existing run remains in history.",
+        confirmLabel: "Start new run",
+        tone: "primary",
+      });
+      if (!confirmed) return;
+    }
     setBusyAction(action);
     setActionError(null);
     try {
@@ -275,7 +293,7 @@ export function WorkflowRunsExplorer({
     } finally {
       setBusyAction(null);
     }
-  }, [router]);
+  }, [confirmation, router]);
 
   return (
     <div>
@@ -290,7 +308,7 @@ export function WorkflowRunsExplorer({
             <option value="all">All statuses</option><option value="active">Active</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option>
           </select>
           <select value={kind} onChange={(event) => setKind(event.target.value as KindFilter)} aria-label="Filter workflow type" className="h-10 rounded-xl border border-black/10 bg-white px-3 text-xs font-semibold dark:border-white/10 dark:bg-neutral-900">
-            <option value="all">All workflows</option><option value="snapshot">Snapshot capture</option><option value="restore">Snapshot restore</option><option value="clear">Catalog clear</option>
+            <option value="all">All workflows</option><option value="snapshot">Snapshot capture</option><option value="restore">Snapshot restore</option><option value="refresh">Clear &amp; Restore</option><option value="clear">Catalog clear</option>
           </select>
           <button type="button" onClick={() => router.refresh()} className="h-10 rounded-xl border border-black/10 px-3 text-xs font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">Refresh</button>
         </div>

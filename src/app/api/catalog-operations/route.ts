@@ -49,6 +49,8 @@ export async function GET() {
           : null,
         destinationEnvironmentName: typeof result.destinationEnvironmentName === "string"
           ? result.destinationEnvironmentName
+          : operation.kind === "database_sync" && typeof result.destination === "string"
+            ? result.destination
           : null,
         destinationChannelName: typeof result.destinationChannelName === "string"
           ? result.destinationChannelName

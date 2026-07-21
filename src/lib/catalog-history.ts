@@ -69,7 +69,7 @@ function operationEntry(
 ): CatalogHistoryEntry {
   const payload = parseRecord(operation.payloadJson);
   const result = parseRecord(operation.resultJson);
-  const titles = { snapshot: "Snapshot captured", restore: "Snapshot restored", clear: "Catalog cleared" } as const;
+  const titles = { snapshot: "Snapshot captured", restore: "Snapshot restored", clear: "Catalog cleared", refresh: "Catalog refreshed", database_sync: "Database synchronized" } as const;
   const details: string[] = [];
   const manualActions = parseManualActions(result.manualActions);
   const snapshotName = snapshot?.name || (typeof result.snapshotName === "string" ? result.snapshotName : "");
@@ -80,12 +80,12 @@ function operationEntry(
     );
   } else if (operation.kind === "snapshot" && payload.name) {
     details.push(`Snapshot: ${String(payload.name)}`);
-  } else if (operation.kind === "restore" && operation.snapshotId) {
+  } else if ((operation.kind === "restore" || operation.kind === "refresh") && operation.snapshotId) {
     details.push(`Snapshot ID: ${operation.snapshotId}`);
   }
   if (result.destinationEnvironmentName || result.destinationChannelName) details.push([result.destinationEnvironmentName, result.destinationChannelName].filter(Boolean).join(" · "));
-  if (operation.kind === "clear" && result.productsUnassigned !== undefined) details.push(`${Number(result.productsUnassigned)} products unassigned · ${Number(result.categoriesRemoved ?? 0)} categories removed`);
-  if (operation.kind === "restore") {
+  if ((operation.kind === "clear" || operation.kind === "refresh") && result.productsUnassigned !== undefined) details.push(`${Number(result.productsUnassigned)} products unassigned · ${Number(result.categoriesRemoved ?? 0)} categories removed`);
+  if (operation.kind === "restore" || operation.kind === "refresh") {
     const created = Number(result.productsCreated ?? 0);
     const reportedUpdated = Number(result.productsUpdated ?? 0);
     const updated = reportedUpdated > 0
@@ -164,6 +164,6 @@ export async function getSnapshotCatalogHistory(snapshotId: number) {
     };
   });
   const versionsById = new Map(versions.map((version) => [version.id, version]));
-  return [...versionEntries, ...eventEntries, ...operations.filter((operation) => operation.kind === "restore").map((operation) => operationEntry(operation, operation.snapshotId ? versionsById.get(operation.snapshotId) : undefined))]
+  return [...versionEntries, ...eventEntries, ...operations.filter((operation) => operation.kind === "restore" || operation.kind === "refresh").map((operation) => operationEntry(operation, operation.snapshotId ? versionsById.get(operation.snapshotId) : undefined))]
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 }

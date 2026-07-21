@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
+import { useConfirmation } from "@/components/confirmation-provider";
 import type { BigCommerceEnvironment } from "@/lib/db";
 import {
   createEnvironment,
@@ -158,12 +159,29 @@ export function DeleteEnvironmentForm({
 }: {
   environment: BigCommerceEnvironment;
 }) {
+  const confirmation = useConfirmation();
+  const confirmedRef = useRef(false);
+
   return (
     <form
       action={deleteEnvironment}
-      onSubmit={(event) => {
-        if (!window.confirm(`Remove ${environment.name}?`)) {
-          event.preventDefault();
+      onSubmit={async (event) => {
+        if (confirmedRef.current) {
+          confirmedRef.current = false;
+          return;
+        }
+
+        event.preventDefault();
+        const form = event.currentTarget;
+        const confirmed = await confirmation({
+          title: `Remove ${environment.name}?`,
+          description: "This removes the saved environment and its credentials from your account. BigCommerce data is not changed.",
+          confirmLabel: "Remove environment",
+          tone: "danger",
+        });
+        if (confirmed) {
+          confirmedRef.current = true;
+          form.requestSubmit();
         }
       }}
     >

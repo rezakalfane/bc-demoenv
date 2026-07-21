@@ -95,6 +95,15 @@ erDiagram
         TEXT updated_at
     }
 
+    USER_PROFILES {
+        TEXT user_id PK
+        TEXT first_name
+        TEXT last_name
+        TEXT timezone
+        INTEGER local_scheduler_enabled
+        TEXT updated_at
+    }
+
     CATALOG_OPERATIONS {
         INTEGER id PK
         TEXT user_id
@@ -111,6 +120,29 @@ erDiagram
         TEXT result_json
         TEXT error
         TEXT workflow_run_id
+        TEXT created_at
+        TEXT updated_at
+    }
+
+    CATALOG_SCHEDULES {
+        INTEGER id PK
+        TEXT user_id
+        TEXT name
+        INTEGER environment_id
+        INTEGER channel_id
+        TEXT action
+        TEXT frequency
+        TEXT local_time
+        INTEGER weekday
+        TEXT timezone
+        INTEGER enabled
+        INTEGER snapshot_id
+        TEXT snapshot_name
+        TEXT restore_groups_json
+        TEXT next_run_at
+        TEXT last_run_at
+        INTEGER last_operation_id
+        TEXT last_error
         TEXT created_at
         TEXT updated_at
     }
@@ -144,13 +176,16 @@ erDiagram
 
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_SNAPSHOTS : "source for"
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_OPERATIONS : "targeted by"
+    BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_SCHEDULES : "targeted by"
     BIGCOMMERCE_ENVIRONMENTS o|..o{ FAVORITES : "may be favored as"
     CATALOG_SNAPSHOTS o|..o{ CATALOG_SNAPSHOT_EVENTS : "described by"
     CATALOG_SNAPSHOTS o|..o{ CATALOG_SNAPSHOT_TAGS : "series labeled by"
     CATALOG_SNAPSHOTS o|..o{ CATALOG_OPERATIONS : "used by"
+    CATALOG_SNAPSHOTS o|..o{ CATALOG_SCHEDULES : "selected by"
     CATALOG_SNAPSHOTS o|..o{ FAVORITES : "series may be favored as"
     CATALOG_OPERATIONS ||..o| CATALOG_SNAPSHOT_CAPTURE_STATE : "checkpoints"
     CATALOG_OPERATIONS ||..o{ CATALOG_SNAPSHOT_CAPTURE_PRODUCTS : "stages products"
+    CATALOG_SCHEDULES o|..o| CATALOG_OPERATIONS : "last dispatched"
 ```
 
 Important uniqueness rules and indexes are:
@@ -162,8 +197,32 @@ Important uniqueness rules and indexes are:
 - Capture-product rows use the composite primary key `(operation_id, product_index)`.
 - Favorites use the composite primary key `(user_id, resource_type, resource_key)`. Environment keys use the tenant-owned database ID, channel keys combine environment and BigCommerce channel IDs, and snapshot keys combine the owner Clerk ID with the normalized series name so a favorite survives new immutable versions. Snapshot rename and deletion reconcile those keys for every viewer.
 - Collection view preferences use `(user_id, collection_id)` as their composite primary key. Collection IDs represent page types—Dashboard environments, Settings environments, environment channel lists, the Snapshots index, live channel products, captured snapshot products, Operations, and Notes—rather than individual environment, channel, or snapshot IDs. Those records store card/table mode and shared-snapshot visibility. A reserved `app-shell` collection ID stores the user's single desktop-sidebar collapse state for the whole authenticated application.
+- User profiles use the Clerk `user_id` as their primary key and store display names, timezone, and the development-only local scheduler preference; account email remains authoritative and read-only in Clerk.
+- Schedule names are descriptive labels and are intentionally not unique. Due schedules are indexed by `(enabled, next_run_at)`, while the catalog-operation active-key constraint prevents overlapping work for the same user/action/resource even when multiple schedules share a name or become due together.
+
+## Scheduled automation
+
+`catalog_schedules` stores one channel target per tenant-owned schedule, a daily or weekly local-time cadence, its IANA timezone, optional immutable snapshot version, selected restore groups, and next/last dispatch metadata. The editor uses the same favorite-aware environment/channel and snapshot/version patterns as manual restore. Snapshot schedules append a new immutable version to their named series; restore and **Clear & Restore** retain the chosen version and configuration groups so later publication changes do not silently change the scheduled source.
+
+Vercel Cron calls `/api/scheduler/tick` every minute and authenticates with the server-only `CRON_SECRET`. Local development can run a one-minute browser dispatcher for only the signed-in user; its per-user switch is independent from saved schedule state and from Vercel's production dispatcher. Concurrent dispatchers are safe: each attempts an atomic compare-and-update claim of the due timestamp before starting work, so only one advances that schedule occurrence. The catalog-operation partial unique index then rejects any second queued/running operation for the same action key and destination resource.
+
+Manual **Run now** uses the same dispatch path without changing the saved cadence. Pause/resume updates return immediately and recalculate the next occurrence when resumed; editing or deleting a schedule never removes its retained Operations or Workflow history. The Scheduler page shows the user's current timezone clock and warns development users when their local dispatcher is disabled.
+
+Clear, restore, snapshot, and composite refresh actions all become durable Workflow-backed catalog operations. **Clear & Restore** runs channel product unassignment and category cleanup first, then applies the selected snapshot only after clear succeeds. It uses one operation, progress surface, notification, and trace, so navigation, browser closure, Function timeout, and ordinary deployment restarts do not split or restart the sequence. Failures remain visible with their checkpoint and can be diagnosed from Operations and Workflows.
 
 ## Security and tenancy
+
+### Development database mirror
+
+Development can run against a dedicated SQLite file by setting `LOCAL_DATABASE_URL=file:local.db` while retaining `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as the remote mirror. Production ignores the local override. The sectioned Settings page combines account preferences, environments, and development-only services. Authenticated developers can use Settings → Development database to explicitly pull Turso into local SQLite or push local SQLite to Turso; synchronization is never automatic and is unavailable outside `next dev`. A neighboring Local scheduler control persists per user and can disable that browser's one-minute development dispatcher without changing saved schedules or the production Vercel Cron dispatcher.
+
+The mirror is a whole-database replacement because snapshot, operation, schedule, staging, preference, favorite, environment, and audit rows share application-level IDs across tables. Before copying, the server verifies every application table and column on both sides and refuses to continue if either database has queued or running catalog work. It reads one consistent source image, rechecks active work, then replaces all destination application tables inside one write transaction. A failed copy rolls back. Push is intentionally presented as a destructive confirmation because it replaces data for every Turso tenant; access tokens remain encrypted at rest throughout the copy. Legacy notes created before authentication can have a null owner in an upgraded Turso table; the mirror omits those inaccessible rows instead of guessing an owner or weakening the destination's tenant constraint, and reports the skipped count in its result.
+
+Pull and push are recorded as terminal **Database sync** rows in Operations after the mirror transaction, so the audit row cannot block its own active-work guard and a pull cannot erase its own result. The application writes the audit to local SQLite for immediate visibility and makes the same best-effort write to Turso. Completed rows include source, destination, copied table and row counts, start/end timestamps, and duration; failed attempts retain the error without storing credentials. Database sync has no Workflow run because the developer explicitly invokes the bounded transaction from Settings.
+
+Whole-database backup and restore are separate from the development mirror and operate on the database currently used by the application: local SQLite in development or Turso in local, Preview, and Production deployments. Export and restore share the in-instance maintenance lock and reject queued or running catalog operations. Restore validates the backup marker and version, requires the exact current application-table and column set, decodes binary and bigint values explicitly, omits inaccessible legacy notes without an owner, and replaces all tables in one transaction so a failed import rolls back completely.
+
+Development permits authenticated users to use these controls. Outside development, the signed-in email must appear in the comma-separated `DATABASE_BACKUP_ALLOWED_EMAILS` server environment variable. The authorization check happens in the Route Handler before either export or restore reaches the active database. Backups include all tenants' data and encrypted BigCommerce credentials; encryption prevents casual token disclosure but does not make the backup non-sensitive, so downloaded files must be stored and transferred securely. Turso backup and restore therefore remain an explicitly privileged operational capability rather than ordinary tenant-scoped Settings behavior.
 
 BigCommerce access tokens are encrypted with AES-256-GCM before storage. The application returns only the final four characters to the Settings UI and binds each encrypted value to its owning Clerk user. Reads, updates, deletes, and Dashboard credential lookups also include the Clerk user ID, so one user cannot access another user's settings. Dashboard API requests run only on the server and are never cached.
 

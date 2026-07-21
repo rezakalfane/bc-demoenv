@@ -6,6 +6,7 @@ import {
 } from "@/lib/db";
 import {
   clearCatalogChannel,
+  getCatalogRestorePreflight,
   restoreCatalogSnapshot,
   type CatalogRestoreResult,
   type ClearCatalogResult,
@@ -17,7 +18,8 @@ import {
 
 export type DurableCatalogOperationSpec =
   | { kind: "clear" }
-  | { kind: "restore"; restoreGroups: SnapshotRestoreGroup[] };
+  | { kind: "restore"; restoreGroups: SnapshotRestoreGroup[] }
+  | { kind: "refresh"; restoreGroups: SnapshotRestoreGroup[] };
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -67,10 +69,14 @@ export async function initializeCatalogOperationStep(
     status: "running",
     currentStep: operation.kind === "restore"
       ? "Starting durable snapshot restoration"
+      : operation.kind === "refresh"
+        ? "Preparing clear and restore"
       : "Starting durable catalog clear",
     stepIndex: 0,
     totalSteps: operation.kind === "restore"
       ? Math.max(parseSnapshotRestoreGroups(payload.restoreGroups).length, 1)
+      : operation.kind === "refresh"
+        ? Math.max(parseSnapshotRestoreGroups(payload.restoreGroups).length + 2, 3)
       : 1,
   });
 
@@ -82,9 +88,47 @@ export async function initializeCatalogOperationStep(
     }
     return { kind: "restore", restoreGroups };
   }
+  if (operation.kind === "refresh") {
+    const restoreGroups = parseSnapshotRestoreGroups(payload.restoreGroups);
+    if (restoreGroups.length === 0) {
+      throw new FatalError("Choose at least one snapshot section to restore.");
+    }
+    return { kind: "refresh", restoreGroups };
+  }
   throw new FatalError("Snapshot captures use a different durable workflow.");
 }
 initializeCatalogOperationStep.maxRetries = 2;
+
+export async function preflightRefreshOperationStep(
+  userId: string,
+  operationId: number,
+) {
+  "use step";
+  const operation = await requireActiveOperation(userId, operationId);
+  const payload = parsePayload(operation);
+  await updateCatalogOperation(userId, operationId, {
+    currentStep: "Running restore preflight before clearing",
+    stepIndex: 1,
+  });
+  try {
+    const result = await getCatalogRestorePreflight({
+      snapshotId: Number(payload.snapshotId),
+      destinationEnvironmentId: Number(payload.destinationEnvironmentId),
+      destinationChannelId: Number(payload.destinationChannelId),
+      restoreGroups: parseSnapshotRestoreGroups(payload.restoreGroups),
+      userId,
+    });
+    if (!result.canRestore) {
+      throw new FatalError(
+        result.blockingIssues[0] ?? "Restore preflight did not pass.",
+      );
+    }
+    return result;
+  } catch (error) {
+    throw asStepError(error);
+  }
+}
+preflightRefreshOperationStep.maxRetries = 2;
 
 export async function restoreCatalogGroupStep(
   userId: string,
@@ -127,6 +171,8 @@ restoreCatalogGroupStep.maxRetries = 3;
 export async function clearCatalogStep(
   userId: string,
   operationId: number,
+  macroStepIndex?: number,
+  macroTotalSteps?: number,
 ): Promise<ClearCatalogResult> {
   "use step";
   console.info("Running durable catalog clear", { operationId });
@@ -141,8 +187,8 @@ export async function clearCatalogStep(
         await requireActiveOperation(userId, operationId);
         await updateCatalogOperation(userId, operationId, {
           currentStep,
-          stepIndex,
-          totalSteps,
+          stepIndex: macroStepIndex ?? stepIndex,
+          totalSteps: macroTotalSteps ?? totalSteps,
         });
       },
     });
@@ -222,6 +268,30 @@ export async function completeClearOperationStep(
   return result;
 }
 completeClearOperationStep.maxRetries = 2;
+
+export async function completeRefreshOperationStep(
+  userId: string,
+  operationId: number,
+  clearResult: ClearCatalogResult,
+  restoreResults: CatalogRestoreResult[],
+) {
+  "use step";
+  const operation = await requireActiveOperation(userId, operationId);
+  const restoreResult = combineRestoreResults(restoreResults);
+  const result = { ...restoreResult, clearResult };
+  await updateCatalogOperation(userId, operation.id, {
+    status: "completed",
+    currentStep: restoreResult.warnings.length > 0
+      ? `Fresh environment ready with ${restoreResult.warnings.length} warning${restoreResult.warnings.length === 1 ? "" : "s"}`
+      : "Fresh environment ready",
+    stepIndex: restoreResult.restoredGroups.length + 2,
+    totalSteps: restoreResult.restoredGroups.length + 2,
+    resultJson: JSON.stringify(result),
+    error: null,
+  });
+  return result;
+}
+completeRefreshOperationStep.maxRetries = 2;
 
 export async function failCatalogOperationStep(
   userId: string,

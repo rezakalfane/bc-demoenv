@@ -45,7 +45,9 @@ const statusStyles: Record<OperationStatus, string> = {
 const kindStyles: Record<OperationKind, string> = {
   snapshot: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
   restore: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+  refresh: "bg-cyan-500/12 text-cyan-700 dark:text-cyan-300",
   clear: "bg-red-500/12 text-red-700 dark:text-red-300",
+  database_sync: "bg-sky-500/12 text-sky-700 dark:text-sky-300",
   snapshot_renamed: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
   version_published: "bg-blue-500/12 text-blue-700 dark:text-blue-300",
   version_unpublished: "bg-sky-500/12 text-sky-700 dark:text-sky-300",
@@ -80,6 +82,30 @@ function DateTimeStack({
       </span>
     </time>
   );
+}
+
+const actionIconProps = {
+  width: 13,
+  height: 13,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+
+function WorkflowIcon() {
+  return <svg {...actionIconProps}><circle cx="6" cy="6" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="12" cy="18" r="2" /><path d="M8 6h8M7.5 7.5l3.2 8M16.5 7.5l-3.2 8" /></svg>;
+}
+
+function DetailsIcon() {
+  return <svg {...actionIconProps}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>;
+}
+
+function OpenIcon() {
+  return <svg {...actionIconProps}><path d="M14 5h5v5M19 5l-8 8" /><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg>;
 }
 
 function hasAttention(operation: CatalogOperationListItem) {
@@ -439,7 +465,7 @@ export function CatalogOperationsTable({
             <span className="sr-only">Search operations</span>
             <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search operations…" className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5" />
           </label>
-          <label className="block"><span className="sr-only">Operation type</span><select value={kind} onChange={(event) => setKind(event.target.value as "all" | OperationKind)} className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-emerald-500 dark:border-white/10 dark:bg-neutral-900"><option value="all">All types</option><option value="snapshot">Snapshot capture</option><option value="restore">Snapshot restore</option><option value="clear">Catalog clear</option><option value="version_published">Version published</option><option value="version_unpublished">Version unpublished</option><option value="version_deleted">Version deleted</option><option value="snapshot_renamed">Snapshot renamed</option><option value="snapshot_deleted">Snapshot deleted</option><option value="environment_added">Environment added</option><option value="environment_deleted">Environment deleted</option></select></label>
+          <label className="block"><span className="sr-only">Operation type</span><select value={kind} onChange={(event) => setKind(event.target.value as "all" | OperationKind)} className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-emerald-500 dark:border-white/10 dark:bg-neutral-900"><option value="all">All types</option><option value="snapshot">Snapshot capture</option><option value="restore">Snapshot restore</option><option value="refresh">Clear &amp; Restore</option><option value="clear">Catalog clear</option><option value="database_sync">Database sync</option><option value="version_published">Version published</option><option value="version_unpublished">Version unpublished</option><option value="version_deleted">Version deleted</option><option value="snapshot_renamed">Snapshot renamed</option><option value="snapshot_deleted">Snapshot deleted</option><option value="environment_added">Environment added</option><option value="environment_deleted">Environment deleted</option></select></label>
           <label className="block"><span className="sr-only">Operation status</span><select value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-emerald-500 dark:border-white/10 dark:bg-neutral-900"><option value="all">All statuses</option><option value="active">Active</option><option value="queued">Queued</option><option value="running">Running</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></label>
           <label className="block"><span className="sr-only">Environment</span><select value={environment} onChange={(event) => setEnvironment(event.target.value)} className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-emerald-500 dark:border-white/10 dark:bg-neutral-900"><option value="all">All environments</option>{environments.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
           <label className="block"><span className="sr-only">Attention required</span><select value={attention} onChange={(event) => setAttention(event.target.value as AttentionFilter)} className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-emerald-500 dark:border-white/10 dark:bg-neutral-900"><option value="all">Any outcome</option><option value="attention">Needs attention</option><option value="clean">No warnings</option></select></label>
@@ -497,7 +523,7 @@ export function CatalogOperationsTable({
                   <td className="overflow-hidden px-3 py-3" title={operation.currentStep}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-3"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
                   <td className="px-3 py-3 text-black/50 dark:text-white/50"><DateTimeStack value={operation.updatedAt} /></td>
                   <td className="whitespace-nowrap px-3 py-3 font-medium">{formatDuration(operation.durationMs)}</td>
-                  <td className="px-3 py-3"><div className="flex items-center justify-end gap-2">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} className="rounded-md border border-sky-500/25 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300">Workflow</Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">Details</button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} className="rounded-md border border-black/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300">Open →</Link> : null}</div></td>
+                  <td className="px-3 py-3"><div className="flex items-center justify-end gap-1.5">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} title="Open workflow" className="grid size-6 shrink-0 place-items-center rounded-md border border-sky-500/25 text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300"><WorkflowIcon /></Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} aria-label={`View details for ${operation.title}`} title="View details" className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"><DetailsIcon /></button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} title={operation.resourceLabel} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300"><OpenIcon /></Link> : null}</div></td>
                 </tr>
               ))}
             </tbody>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 export const CATALOG_OPERATION_KEY = "bc-demoenv:catalog-operation";
-export type CatalogOperationKind = "snapshot" | "restore" | "clear";
+export type CatalogOperationKind = "snapshot" | "restore" | "clear" | "refresh";
 export type CatalogOperation = { kind: CatalogOperationKind; environmentId?: number; channelId?: number; snapshotId?: number; steps?: string[]; operationId?: number; originPath?: string };
 
 export function readCatalogOperation(): CatalogOperation | null {
@@ -157,6 +157,7 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
     snapshot: ["Capturing snapshot", "Categories → products → variants, images, and metadata"],
     restore: ["Restoring snapshot", "Categories → products → variants and images → channel assignments"],
     clear: ["Clearing channel", "Unassigning products → removing channel categories"],
+    refresh: ["Refreshing channel", "Preflight → clear channel → restore snapshot → verify"],
   } as const;
   const [title, detail] = labels[operation.kind];
   const currentStep = remote?.currentStep || operation.steps?.[stepIndex] || detail;
