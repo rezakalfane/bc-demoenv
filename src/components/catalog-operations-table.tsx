@@ -68,6 +68,21 @@ const kindStyles: Record<OperationKind, string> = {
   snapshot_deleted: "bg-red-500/12 text-red-700 dark:text-red-300",
 };
 
+const kindLabels: Record<OperationKind, string> = {
+  snapshot: "Snapshot",
+  restore: "Restore",
+  refresh: "Clear & Restore",
+  clear: "Catalog clear",
+  database_sync: "Database sync",
+  snapshot_renamed: "Snapshot renamed",
+  version_published: "Version published",
+  version_unpublished: "Version unpublished",
+  version_deleted: "Version deleted",
+  environment_added: "Environment added",
+  environment_deleted: "Environment deleted",
+  snapshot_deleted: "Snapshot deleted",
+};
+
 function formatDuration(durationMs: number) {
   const totalSeconds = Math.max(Math.round(durationMs / 1000), 0);
   if (totalSeconds < 60) return `${totalSeconds}s`;
@@ -226,7 +241,7 @@ function OperationDetailsModal({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`rounded-full px-2 py-1 text-[11px] font-semibold capitalize ${kindStyles[operation.kind]}`}>
-                  {operation.kind}
+                  {t(kindLabels[operation.kind])}
                 </span>
                 <OperationStatusBadge operation={operation} />
               </div>

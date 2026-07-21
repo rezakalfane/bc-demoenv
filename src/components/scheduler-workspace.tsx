@@ -9,6 +9,7 @@ import {
   type SchedulerActionState,
 } from "@/app/(app)/scheduler/actions";
 import { useConfirmation } from "@/components/confirmation-provider";
+import { useAppI18n } from "@/components/app-i18n-provider";
 import { SNAPSHOT_RESTORE_GROUPS } from "@/lib/snapshot-configuration";
 import type {
   CatalogSchedule,
@@ -100,6 +101,7 @@ export function SchedulerWorkspace({
   dispatchInterval: "minute" | "daily";
 }) {
   const confirmation = useConfirmation();
+  const { t } = useAppI18n();
   const [availableDestinations, setAvailableDestinations] = useState(destinations);
   const [destinationsLoading, setDestinationsLoading] = useState(false);
   const [destinationsError, setDestinationsError] = useState("");
@@ -408,9 +410,9 @@ export function SchedulerWorkspace({
                   <tr key={schedule.id} className="border-t border-black/8 align-top hover:bg-black/[0.02] dark:border-white/8 dark:hover:bg-white/[0.02]">
                     <td className="px-4 py-3"><button type="button" onDoubleClick={() => openSchedule(schedule)} className="text-left"><span className="block font-semibold">{schedule.name}</span><span className="mt-1 block truncate text-black/45 dark:text-white/45">{schedule.channelName}</span></button></td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2 py-1 font-semibold ${schedule.action === "refresh" ? "bg-blue-500/12 text-blue-700 dark:text-blue-300" : "bg-purple-500/12 text-purple-700 dark:text-purple-300"}`}>{actionLabel(schedule.action)}</span></td>
-                    <td className="px-4 py-3"><span className="block font-medium">{schedule.frequency === "daily" ? "Daily" : WEEKDAYS[schedule.weekday ?? 0]}</span><span className="mt-1 block text-black/45 dark:text-white/45">{schedule.localTime} · {schedule.timezone}</span></td>
+                    <td className="px-4 py-3"><span className="block font-medium">{t(schedule.frequency === "daily" ? "Daily" : WEEKDAYS[schedule.weekday ?? 0])}</span><span className="mt-1 block text-black/45 dark:text-white/45">{schedule.localTime} · {schedule.timezone}</span></td>
                     <td className="px-4 py-3"><span className={scheduleEnabled ? "" : "text-black/35 dark:text-white/35"}>{scheduleEnabled ? formatDate(schedule.nextRunAt) : "Paused"}</span></td>
-                    <td className="px-4 py-3"><span className="block capitalize">{schedule.lastError ? "Needs attention" : schedule.lastStatus ?? "Not run"}</span>{schedule.lastRunAt ? <span className="mt-1 block text-black/45 dark:text-white/45">{formatDate(schedule.lastRunAt)}</span> : null}</td>
+                    <td className="px-4 py-3"><span className="block capitalize">{t(schedule.lastError ? "Needs attention" : schedule.lastStatus ?? "Not run")}</span>{schedule.lastRunAt ? <span className="mt-1 block text-black/45 dark:text-white/45">{formatDate(schedule.lastRunAt)}</span> : null}</td>
                     <td className="px-4 py-3"><div className="flex flex-nowrap items-center justify-end gap-1.5">
                       <button
                         type="button"
@@ -491,7 +493,7 @@ export function SchedulerWorkspace({
                 <div className="mt-6 grid gap-5 sm:grid-cols-2">
                   <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Frequency</span><select name="frequency" value={frequency} onChange={(event) => setFrequency(event.target.value as CatalogSchedule["frequency"])} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5"><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
                   <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Local time</span><input type="time" name="localTime" value={localTime} onChange={(event) => setLocalTime(event.target.value)} required className="mt-2 w-full rounded-xl border border-white/12 bg-white/5 px-3 py-2.5" /></label>
-                  {frequency === "weekly" ? <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Weekday</span><select name="weekday" value={weekday} onChange={(event) => setWeekday(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5">{WEEKDAYS.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label> : null}
+                  {frequency === "weekly" ? <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Weekday</span><select name="weekday" value={weekday} onChange={(event) => setWeekday(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5">{WEEKDAYS.map((day, index) => <option key={day} value={index}>{t(day)}</option>)}</select></label> : null}
                   <label className={frequency === "daily" ? "sm:col-span-2" : ""}><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Timezone</span><input name="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} required className="mt-2 w-full rounded-xl border border-white/12 bg-white/5 px-3 py-2.5" /></label>
                 </div>
                 <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 text-sm text-white/65"><span className="font-semibold text-emerald-300">Cadence preview</span><p className="mt-1">{frequency === "daily" ? "Every day" : `Every ${WEEKDAYS[weekday]}`} at {localTime || "—"} in {timezone || "—"}.</p></div>
