@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAppI18n } from "@/components/app-i18n-provider";
 import {
   finishCatalogOperation,
   readCatalogOperation,
@@ -245,6 +246,7 @@ function notificationStyles(tone: CompletionNotification["tone"], compact = fals
 
 export function CatalogOperationNotifications({ userId }: { userId: string }) {
   const router = useRouter();
+  const { locale, t } = useAppI18n();
   const [notifications, setNotifications] = useState<CompletionNotification[]>([]);
   const [toastNotifications, setToastNotifications] = useState<CompletionNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -514,7 +516,9 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
       <div ref={centerRef} className="notification-center relative shrink-0">
         <button
           type="button"
-          aria-label={`Notifications${notifications.length > 0 ? `, ${notifications.length} awaiting deletion` : ""}`}
+          aria-label={notifications.length > 0
+            ? t("Notifications, {count} awaiting deletion", { count: notifications.length })
+            : t("Notifications")}
           aria-expanded={isOpen}
           aria-controls="notification-center-panel"
           title="Notifications"
@@ -548,7 +552,9 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
               <div>
                 <p className="text-sm font-semibold">Notifications</p>
                 <p className="text-[11px] text-black/45 dark:text-white/45">
-                  {notifications.length === 0 ? "Nothing awaiting deletion" : `${notifications.length} awaiting deletion`}
+                  {notifications.length === 0
+                    ? t("Nothing awaiting deletion")
+                    : t("{count} awaiting deletion", { count: notifications.length })}
                 </p>
               </div>
               {notifications.length > 0 ? (
@@ -574,16 +580,16 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                     <div className="flex items-start gap-2.5">
                       <span className="mt-0.5 shrink-0"><StatusIcon tone={notification.tone} /></span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold">{notification.title}</p>
-                        <p className="mt-1 line-clamp-3 text-[11px] leading-4 text-current/65">{notification.description}</p>
+                        <p className="text-xs font-semibold">{t(notification.title)}</p>
+                        <p className="mt-1 line-clamp-3 text-[11px] leading-4 text-current/65">{t(notification.description)}</p>
                         <div className="mt-2 flex items-center justify-between gap-3">
                           <time dateTime={notification.updatedAt} className="text-[10px] text-current/50">
-                            {new Date(notification.updatedAt).toLocaleString()}
+                            {new Date(notification.updatedAt).toLocaleString(locale)}
                           </time>
                           {notification.href && notification.linkLabel ? (
                             <NotificationActionLink
                               href={notification.href}
-                              label={notification.linkLabel}
+                              label={t(notification.linkLabel)}
                               onClick={() => setIsOpen(false)}
                               className="shrink-0 text-[10px] font-semibold hover:underline"
                             />
@@ -594,7 +600,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                         type="button"
                         onClick={() => removeNotification(notification.id)}
                         className="flex size-6 shrink-0 items-center justify-center rounded-full text-current/50 transition hover:bg-black/6 hover:text-current dark:hover:bg-white/8"
-                        aria-label={`Delete ${notification.title}`}
+                        aria-label={t("Delete {title}", { title: t(notification.title) })}
                         title="Delete notification"
                       >
                         <span aria-hidden="true">×</span>
@@ -621,12 +627,12 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 shrink-0"><StatusIcon tone={notification.tone} /></span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{notification.title}</p>
-                    <p className="mt-1 line-clamp-3 text-xs leading-5 text-current/70">{notification.description}</p>
+                    <p className="text-sm font-semibold">{t(notification.title)}</p>
+                    <p className="mt-1 line-clamp-3 text-xs leading-5 text-current/70">{t(notification.description)}</p>
                     {notification.href && notification.linkLabel ? (
                       <NotificationActionLink
                         href={notification.href}
-                        label={notification.linkLabel}
+                        label={t(notification.linkLabel)}
                         onClick={() => setToastNotifications((current) => current.filter((item) => item.id !== notification.id))}
                         className="mt-3 inline-flex rounded-lg border border-current/25 px-2.5 py-1.5 text-xs font-semibold transition hover:bg-white/10"
                       />
@@ -636,7 +642,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                     type="button"
                     onClick={() => setToastNotifications((current) => current.filter((item) => item.id !== notification.id))}
                     className="flex size-7 shrink-0 items-center justify-center rounded-full text-current/65 transition hover:bg-white/10 hover:text-current"
-                    aria-label={`Dismiss ${notification.title} popup`}
+                    aria-label={t("Dismiss {title} popup", { title: t(notification.title) })}
                   >
                     <span aria-hidden="true">×</span>
                   </button>

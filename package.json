@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "i18n:check": "node scripts/check-i18n.mjs && node scripts/check-i18n-coverage.mjs",
     "start": "next start",
     "lint": "eslint"
   },

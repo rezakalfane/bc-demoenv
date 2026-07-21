@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { APP_LOCALE_COOKIE, normalizeAppLocale } from "@/i18n/config";
 import { requireAppUser } from "@/lib/auth";
 import {
   syncDevelopmentDatabases,
@@ -14,6 +16,7 @@ import {
   setCollectionSidebarCollapsed,
   setCollectionViewMode,
   type CollectionViewMode,
+  type AppLocale,
 } from "@/lib/db";
 import { isValidProfileAvatar } from "@/lib/profile-avatar";
 
@@ -28,6 +31,7 @@ export type ProfileActionState = {
     showSharedSnapshots: boolean;
     sidebarCollapsed: boolean;
   };
+  language?: AppLocale;
 };
 
 export type DatabaseSyncActionResult = {
@@ -131,6 +135,7 @@ export async function saveProfileAndPreferences(
   const lastName = String(formData.get("lastName") ?? "").trim();
   const avatar = String(formData.get("avatar") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "").trim();
+  const language = normalizeAppLocale(formData.get("language"));
   const environments = String(formData.get("environmentsView"));
   const channels = String(formData.get("channelsView"));
   const snapshots = String(formData.get("snapshotsView"));
@@ -142,7 +147,7 @@ export async function saveProfileAndPreferences(
     return { status: "error", message: "Names must be 80 characters or fewer." };
   }
   if (!isValidProfileAvatar(avatar)) {
-    return { status: "error", message: "Choose a built-in avatar or upload a valid image." };
+    return { status: "error", message: "Use initials or upload a valid image." };
   }
   if (!timezone || !isTimezone(timezone)) {
     return { status: "error", message: "Enter a valid IANA timezone, such as Europe/Paris." };
@@ -152,7 +157,7 @@ export async function saveProfileAndPreferences(
   }
 
   await Promise.all([
-    saveUserProfile(user.id, { firstName, lastName, avatar, timezone }),
+    saveUserProfile(user.id, { firstName, lastName, avatar, timezone, language }),
     setCollectionViewMode(user.id, "dashboard-environments", environments),
     setCollectionViewMode(user.id, "environment-channels", channels),
     setCollectionViewMode(user.id, "snapshot-series", snapshots),
@@ -161,12 +166,21 @@ export async function saveProfileAndPreferences(
     setCollectionSidebarCollapsed(user.id, "app-shell", sidebarCollapsed),
   ]);
 
+  const cookieStore = await cookies();
+  cookieStore.set(APP_LOCALE_COOKIE, language, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+
   revalidatePath("/settings");
   revalidatePath("/scheduler");
   revalidatePath("/", "layout");
   return {
     status: "success",
     message: "Profile and preferences saved.",
+    language,
     preferences: {
       environments,
       channels,

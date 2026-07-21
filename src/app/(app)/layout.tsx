@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { AppLocaleSynchronizer } from "@/components/app-i18n-provider";
 import { CollectionPreferencesProvider } from "@/components/collection-preferences-provider";
 import { ConfirmationProvider } from "@/components/confirmation-provider";
 import { LocalSchedulerDispatcher } from "@/components/local-scheduler-dispatcher";
@@ -23,6 +24,7 @@ export default async function AppLayout({
   return (
     <CollectionPreferencesProvider initialPreferences={collectionPreferences}>
       <ConfirmationProvider>
+        <AppLocaleSynchronizer locale={profile.language} />
         <LocalSchedulerDispatcher
           enabled={profile.localSchedulerEnabled}
           interval={profile.localSchedulerInterval}

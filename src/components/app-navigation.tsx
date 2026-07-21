@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 const navigationItems = [
   { href: "/", label: "Dashboard", icon: "D" },
@@ -14,9 +15,10 @@ const navigationItems = [
 
 export function AppNavigation({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname();
+  const { t } = useAppI18n();
 
   return (
-    <nav aria-label="Main navigation" className="space-y-1">
+    <nav aria-label={t("Main navigation")} className="space-y-1">
       {navigationItems.map((item) => {
         const isActive =
           item.href === "/"
@@ -27,8 +29,8 @@ export function AppNavigation({ compact = false }: { compact?: boolean }) {
           <Link
             key={item.href}
             href={item.href}
-            title={compact ? item.label : undefined}
-            aria-label={compact ? item.label : undefined}
+            title={compact ? t(item.label) : undefined}
+            aria-label={compact ? t(item.label) : undefined}
             aria-current={isActive ? "page" : undefined}
             className={`app-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
               isActive
@@ -46,7 +48,7 @@ export function AppNavigation({ compact = false }: { compact?: boolean }) {
             >
               {item.icon}
             </span>
-            <span className="app-nav-label">{item.label}</span>
+            <span className="app-nav-label">{t(item.label)}</span>
           </Link>
         );
       })}

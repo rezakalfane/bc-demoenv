@@ -8,6 +8,7 @@ import { CatalogOperationNotifications } from "@/components/catalog-operation-no
 import { useCollectionPreference } from "@/components/collection-preferences-provider";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { SignOutButton } from "@/components/sign-out-button";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 function pagePreferenceId(pathname: string) {
   if (pathname === "/operations" || pathname.startsWith("/operations/")) return "operations-page";
@@ -44,6 +45,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const { t } = useAppI18n();
   const preferenceId = pagePreferenceId(pathname);
   const { preference } = useCollectionPreference(preferenceId);
   const {
@@ -78,8 +80,8 @@ export function AppShell({
       <aside className="app-sidebar relative border-b border-black/10 bg-white/45 px-4 py-4 backdrop-blur-xl dark:border-white/10 dark:bg-white/3 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0 lg:px-5 lg:py-6">
         <button
           type="button"
-          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-          title={collapsed ? "Expand navigation" : "Collapse navigation"}
+          aria-label={t(collapsed ? "Expand navigation" : "Collapse navigation")}
+          title={t(collapsed ? "Expand navigation" : "Collapse navigation")}
           onClick={toggleSidebar}
           className="app-sidebar-toggle absolute top-7 -right-3 z-20 hidden size-6 items-center justify-center rounded-full border border-black/10 bg-background text-black/45 shadow-sm transition hover:border-emerald-500/35 hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 lg:flex dark:border-white/10 dark:text-white/45 dark:hover:text-emerald-300"
         >
@@ -91,7 +93,7 @@ export function AppShell({
             <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500 text-sm font-bold text-white shadow-sm">BC</span>
             <div className="app-brand-copy">
               <p className="text-sm font-semibold tracking-tight">Demo Env</p>
-              <p className="text-xs text-black/40 dark:text-white/40">BigCommerce tools</p>
+              <p className="text-xs text-black/40 dark:text-white/40">{t("BigCommerce tools")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -108,8 +110,8 @@ export function AppShell({
           <div className="app-sidebar-user flex min-w-0 items-center gap-3 px-2">
             <ProfileAvatar value={userImageUrl} initials={initials} className="app-sidebar-avatar size-9 text-xs" />
             <div className="app-sidebar-user-copy min-w-0">
-              {userName ? <p className="truncate text-xs font-semibold text-black/70 dark:text-white/70">{userName}</p> : null}
-              <p className="truncate text-xs text-black/45 dark:text-white/45">{userEmail}</p>
+              {userName ? <p data-i18n-ignore className="truncate text-xs font-semibold text-black/70 dark:text-white/70">{userName}</p> : null}
+              <p data-i18n-ignore className="truncate text-xs text-black/45 dark:text-white/45">{userEmail}</p>
             </div>
           </div>
           <div className="mt-3 px-2"><SignOutButton /></div>

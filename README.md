@@ -24,6 +24,7 @@ A deployable Next.js 16 application with the App Router, Tailwind CSS 4, Turso/l
 - Live progress indicators and notifications for completed work, failures, and required manual actions.
 - Deep links to relevant BigCommerce Control Panel pages when manual configuration is required.
 - Persistent user preferences for layouts, navigation state, shared snapshots, timezone, and profile information.
+- English, French, Spanish, and Italian interface localization selected from the user profile and retained across devices.
 - Local SQLite development with Turso synchronization, database backup, and restore tools.
 - Automatic recovery of interrupted durable operations and a reconnecting server-unavailable screen.
 - A responsive dark interface with compact tables, multi-column cards, skeleton states, and accessible controls.
@@ -41,6 +42,8 @@ A deployable Next.js 16 application with the App Router, Tailwind CSS 4, Turso/l
 ## Implementation details
 
 See [`DETAILS.md`](./DETAILS.md) for security and tenancy, required BigCommerce scopes, snapshot semantics, configuration portability, durable processing, and catalog restoration behavior.
+
+Interface copy lives in the structured resource bundles under `src/i18n/`. Run `npm run i18n:check` when changing visible text; it verifies four-locale resource parity, stable keys, duplicate values, placeholders, and source coverage.
 
 ## Local development
 
