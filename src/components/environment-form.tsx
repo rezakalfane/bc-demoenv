@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { useConfirmation } from "@/components/confirmation-provider";
+import { useAppI18n } from "@/components/app-i18n-provider";
 import type { BigCommerceEnvironment } from "@/lib/db";
 import {
   createEnvironment,
@@ -17,6 +18,7 @@ const initialEnvironmentActionState = {
 
 function SaveButton({ isEditing }: { isEditing: boolean }) {
   const { pending } = useFormStatus();
+  const { t } = useAppI18n();
 
   return (
     <button
@@ -24,13 +26,13 @@ function SaveButton({ isEditing }: { isEditing: boolean }) {
       disabled={pending}
       className="rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-neutral-950 dark:hover:bg-emerald-300"
     >
-      {pending
+      {t(pending
         ? isEditing
           ? "Saving…"
           : "Adding…"
         : isEditing
           ? "Save changes"
-          : "Add environment"}
+          : "Add environment")}
     </button>
   );
 }

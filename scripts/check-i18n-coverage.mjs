@@ -75,6 +75,13 @@ function addLiteral(node, file, line) {
   }
 }
 
+function isNestedJsxConditionalLiteral(node) {
+  let parent = node.parent;
+  if (!ts.isConditionalExpression(parent)) return false;
+  while (ts.isConditionalExpression(parent)) parent = parent.parent;
+  return ts.isJsxExpression(parent);
+}
+
 for (const file of await walk(path.join(root, "src"))) {
   const sourceText = await readFile(file, "utf8");
   const source = ts.createSourceFile(
@@ -97,6 +104,7 @@ for (const file of await walk(path.join(root, "src"))) {
       ) add(node.initializer.expression.text, file, line);
     }
     if (ts.isStringLiteral(node) && ts.isJsxExpression(node.parent)) add(node.text, file, line);
+    if (ts.isStringLiteral(node) && isNestedJsxConditionalLiteral(node)) add(node.text, file, line);
     if (ts.isConditionalExpression(node) && ts.isJsxExpression(node.parent)) {
       if (ts.isStringLiteral(node.whenTrue)) add(node.whenTrue.text, file, line);
       if (ts.isStringLiteral(node.whenFalse)) add(node.whenFalse.text, file, line);

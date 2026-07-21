@@ -274,6 +274,12 @@
       "save": "Guardar",
       "set": "Colocar",
       "attention": "atención",
+      "ascending": "ascendente",
+      "descending": "descendente",
+      "empty": "Vacío",
+      "live_channel_details": "Detalles del canal en vivo",
+      "mixed_scope": "Ámbito mixto",
+      "using_cached_data": "Usando datos en caché",
       "connected": "Conectado",
       "snapshot_id_title": "ID de la instantánea",
       "snapshot_version": "Versión de la instantánea",
@@ -340,7 +346,9 @@
       "close_editor": "Cerrar editor",
       "close_history": "Cerrar historia",
       "removed": "Remoto",
-      "tested": "Probado"
+      "tested": "Probado",
+      "create_schedule": "Crear programación",
+      "email_login_link": "Enviarme un enlace de acceso"
     },
     "help": {
       "additional_changes_are_omitted_from_this_preview": "Los cambios adicionales se omiten en esta vista previa.",
@@ -356,7 +364,9 @@
       "review_access_capabilities_help": "Revise las capacidades de lectura disponibles para esta credencial, los alcances faltantes inferidos, la disponibilidad del canal B2B y las API no admitidas por la tienda o el tipo de canal.",
       "store_ids_remapped_help": "Los ID específicos de la tienda se reasignan mediante rutas de categoría, SKU de producto y slugs de producto.",
       "try_different_search_filter": "Pruebe con un filtro de búsqueda o visualización diferente.",
-      "view_read_only_probes": "Ver todas las sondas API de solo lectura"
+      "view_read_only_probes": "Ver todas las sondas API de solo lectura",
+      "different_channel_original_store": "Canal diferente en la tienda original de la instantánea.",
+      "different_store_remapping": "Tienda diferente: se reasignarán las marcas, clases fiscales, categorías, productos y variantes."
     }
   },
   "environments": {
@@ -382,6 +392,9 @@
     },
     "actions": {
       "add_an_environment": "Añadir un entorno",
+      "add_environment": "Añadir entorno",
+      "adding": "Añadiendo…",
+      "save_changes": "Guardar cambios",
       "connection_name": "Cree un nombre memorable para una conexión de tienda BigCommerce.",
       "edit_environment": "Editar entorno",
       "saved_bigcommerce_environment_connections": "Se guardaron BigCommerce conexiones de entorno.",

@@ -274,6 +274,12 @@
       "save": "Save",
       "set": "Set",
       "attention": "attention",
+      "ascending": "ascending",
+      "descending": "descending",
+      "empty": "Empty",
+      "live_channel_details": "Live channel details",
+      "mixed_scope": "Mixed scope",
+      "using_cached_data": "Using cached data",
       "connected": "Connected",
       "snapshot_id_title": "Snapshot Id",
       "snapshot_version": "Snapshot Version",
@@ -340,7 +346,9 @@
       "close_editor": "Close editor",
       "close_history": "Close history",
       "removed": "Removed",
-      "tested": "Tested"
+      "tested": "Tested",
+      "create_schedule": "Create schedule",
+      "email_login_link": "Email me a login link"
     },
     "help": {
       "additional_changes_are_omitted_from_this_preview": "additional changes are omitted from this preview.",
@@ -356,7 +364,9 @@
       "review_access_capabilities_help": "Review the read capabilities available to this credential, inferred missing scopes, B2B channel availability, and APIs unsupported by the store or channel type.",
       "store_ids_remapped_help": "Store-specific IDs are remapped using category paths, product SKUs, and product slugs.",
       "try_different_search_filter": "Try a different search or display filter.",
-      "view_read_only_probes": "View all read-only API probes"
+      "view_read_only_probes": "View all read-only API probes",
+      "different_channel_original_store": "Different channel in the snapshot’s original store.",
+      "different_store_remapping": "Different store: brands, tax classes, categories, products, and variants will be remapped."
     }
   },
   "environments": {
@@ -382,6 +392,9 @@
     },
     "actions": {
       "add_an_environment": "Add an environment",
+      "add_environment": "Add environment",
+      "adding": "Adding…",
+      "save_changes": "Save changes",
       "connection_name": "Create a memorable name for a BigCommerce store connection.",
       "edit_environment": "Edit environment",
       "saved_bigcommerce_environment_connections": "Saved BigCommerce environment connections.",
