@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAppI18n } from "@/components/app-i18n-provider";
 import type {
   CatalogOperationListItem,
   OperationKind,
@@ -161,11 +162,19 @@ function SortButton({
 }
 
 function OperationStatusBadge({ operation }: { operation: CatalogOperationListItem }) {
+  const { t } = useAppI18n();
   const active = operation.status === "queued" || operation.status === "running";
+  const label = t({
+    queued: "Queued",
+    running: "Running",
+    completed: "Completed",
+    failed: "Failed",
+    cancelled: "Cancelled",
+  }[operation.status]);
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold capitalize ${statusStyles[operation.status]}`}>
       {active ? <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-current" /> : null}
-      {operation.status}
+      {label}
     </span>
   );
 }
@@ -177,6 +186,7 @@ function OperationDetailsModal({
   operation: CatalogOperationListItem;
   onClose: () => void;
 }) {
+  const { t } = useAppI18n();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -259,12 +269,12 @@ function OperationDetailsModal({
               />
             </div>
             <p className="mt-2 text-sm text-black/55 dark:text-white/55">
-              {operation.currentStep}
+              {t(operation.currentStep)}
             </p>
           </section> : (
             <section aria-labelledby={`operation-details-summary-title-${operation.id}`}>
               <h3 id={`operation-details-summary-title-${operation.id}`} className="text-sm font-semibold">Details</h3>
-              <p className="mt-2 text-sm text-black/55 dark:text-white/55">{operation.currentStep}</p>
+              <p className="mt-2 text-sm text-black/55 dark:text-white/55">{t(operation.currentStep)}</p>
             </section>
           )}
 
@@ -358,7 +368,7 @@ function OperationDetailsModal({
             ) : null}
             {operation.resourceHref ? (
               <Link href={operation.resourceHref} onClick={onClose} className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200">
-                {operation.resourceLabel} →
+                {t(operation.resourceLabel)} →
               </Link>
             ) : null}
           </div>
@@ -380,6 +390,7 @@ export function CatalogOperationsTable({
   generatedAt: string;
 }) {
   const router = useRouter();
+  const { t } = useAppI18n();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"all" | OperationKind>("all");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -541,10 +552,10 @@ export function CatalogOperationsTable({
                   <td className="overflow-hidden px-2 py-3"><OperationStatusBadge operation={operation} />{hasAttention(operation) ? <span className="mt-1.5 block truncate text-[11px] font-medium text-amber-700 dark:text-amber-300" title="Needs attention">Needs attention</span> : null}</td>
                   <td className="overflow-hidden px-2 py-3"><p className="truncate font-medium" title={operation.environmentName}>{operation.environmentName}</p><p className="mt-1 truncate text-black/45 dark:text-white/45" title={operation.channelName}>{operation.channelName}</p></td>
                   <td className="overflow-hidden px-2 py-3"><p className="truncate font-medium" title={operation.snapshotName}>{operation.snapshotName}</p>{operation.snapshotVersion ? <p className="mt-1 truncate text-black/45 dark:text-white/45">Version {operation.snapshotVersion}</p> : null}</td>
-                  <td className="overflow-hidden px-2 py-3" title={operation.currentStep}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-2"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
+                  <td className="overflow-hidden px-2 py-3" title={t(operation.currentStep)}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-2"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{t(operation.currentStep)}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{t(operation.currentStep)}</span>}</td>
                   <td className="overflow-hidden px-2 py-3 text-black/50 dark:text-white/50"><DateTimeStack value={operation.updatedAt} /></td>
                   <td className="overflow-hidden whitespace-nowrap px-2 py-3 font-medium"><span className="block truncate">{formatDuration(operation.durationMs)}</span></td>
-                  <td className="px-2 py-3"><div className="flex items-center justify-end gap-1">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} title="Open workflow" className="grid size-6 shrink-0 place-items-center rounded-md border border-sky-500/25 text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300"><WorkflowIcon /></Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} aria-label={`View details for ${operation.title}`} title="View details" className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"><DetailsIcon /></button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} title={operation.resourceLabel} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300"><OpenIcon /></Link> : null}</div></td>
+                  <td className="px-2 py-3"><div className="flex items-center justify-end gap-1">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} title="Open workflow" className="grid size-6 shrink-0 place-items-center rounded-md border border-sky-500/25 text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300"><WorkflowIcon /></Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} aria-label={`View details for ${operation.title}`} title="View details" className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"><DetailsIcon /></button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${t(operation.resourceLabel)} for ${operation.title}`} title={t(operation.resourceLabel)} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300"><OpenIcon /></Link> : null}</div></td>
                 </tr>
               ))}
             </tbody>

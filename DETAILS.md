@@ -227,6 +227,16 @@ Clear, restore, snapshot, and composite refresh actions all become durable Workf
 
 The Scheduler uses a cached-first rendering path. Its Server Component immediately renders saved schedules, snapshot metadata, and stored environment names from libSQL. A tenant-authenticated, no-store endpoint then discovers current BigCommerce environments and channels in the background; destination-dependent controls remain disabled until that live data is ready, and a failed refresh can be retried without discarding the already visible schedule table.
 
+## Interface localization
+
+The application ships with complete English, French, Spanish, and Italian resource bundles in `src/i18n/app_en.json`, `app_fr.json`, `app_es.json`, and `app_it.json`. Keys are grouped by stable product domains and component concerns—such as `auth`, `dashboard`, `restore`, `scheduler`, and `common`—rather than by English phrases. Every key segment uses lowercase ASCII snake case, interpolation uses `{name}` placeholders, and all locale files must expose the same nested leaf paths. The English resource is the canonical source locale; duplicate English leaf values are rejected so the compatibility lookup cannot resolve one phrase to multiple keys.
+
+The authenticated profile stores `en`, `fr`, `es`, or `it` in `user_profiles.language`. Schema application safely expands older language constraints while preserving existing profiles. The root layout reads the locale cookie before rendering, and the signed-in application layout reconciles it with the tenant profile so the selected language survives both navigation and a new browser session. Changing Language in Settings updates the profile, cookie, document language, and current interface without changing route URLs or user data.
+
+New components should call `useAppI18n().t("domain.section.key", values)` directly. A delayed DOM compatibility bridge translates legacy exact English text, accessible labels, titles, and placeholders after hydration while the remaining components are migrated incrementally; it deliberately ignores code, preformatted content, editable fields, and dynamic BigCommerce or user data. Dynamic workflow states, notification content, operation results, validation, and error messages use direct translation at render time so live data remains localized without hydration mismatches.
+
+`npm run i18n:check` performs two validations. The bundle checker parses raw JSON to detect duplicate object keys, enforces key syntax and exact four-locale leaf parity, and rejects empty or duplicate source messages. Generated locale catalogs preserve interpolation placeholders before translation, and parity checks prevent missing or unexpected keys. The coverage checker scans TypeScript and TSX for visible JSX, accessible attributes, workflow descriptions, notification copy, validation messages, and thrown errors, then fails when an English source string is absent from the canonical bundle. These checks make missing translations and accidental key drift build-time maintenance issues instead of runtime surprises.
+
 ## Security and tenancy
 
 ### Development database mirror

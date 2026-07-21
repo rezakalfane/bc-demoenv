@@ -116,6 +116,7 @@ export type ApplicationEvent = {
 export type FavoriteResourceType = "environment" | "channel" | "snapshot";
 
 export type CollectionViewMode = "cards" | "table";
+export type AppLocale = "en" | "fr" | "es" | "it";
 
 export type CollectionViewPreference = {
   viewMode: CollectionViewMode;
@@ -127,6 +128,7 @@ export type UserProfile = {
   firstName: string;
   lastName: string;
   avatar: string;
+  language: AppLocale;
   timezone: string;
   localSchedulerEnabled: boolean;
   localSchedulerInterval: "minute" | "daily";
@@ -544,6 +546,7 @@ export async function applyCurrentDatabaseSchema(db: Client) {
         first_name TEXT NOT NULL DEFAULT '',
         last_name TEXT NOT NULL DEFAULT '',
         avatar TEXT NOT NULL DEFAULT '',
+        language TEXT NOT NULL DEFAULT 'en' CHECK(language IN ('en', 'fr', 'es', 'it')),
         timezone TEXT NOT NULL DEFAULT 'UTC',
         local_scheduler_enabled INTEGER NOT NULL DEFAULT 1 CHECK(local_scheduler_enabled IN (0, 1)),
         local_scheduler_interval TEXT NOT NULL DEFAULT 'minute' CHECK(local_scheduler_interval IN ('minute', 'daily')),
@@ -553,6 +556,15 @@ export async function applyCurrentDatabaseSchema(db: Client) {
     const userProfileColumns = await db.execute(
       "PRAGMA table_info(user_profiles)",
     );
+    if (
+      !userProfileColumns.rows.some(
+        (column) => String(column.name) === "language",
+      )
+    ) {
+      await db.execute(
+        "ALTER TABLE user_profiles ADD COLUMN language TEXT NOT NULL DEFAULT 'en' CHECK(language IN ('en', 'fr', 'es', 'it'))",
+      );
+    }
     if (
       !userProfileColumns.rows.some(
         (column) => String(column.name) === "avatar",
@@ -579,6 +591,33 @@ export async function applyCurrentDatabaseSchema(db: Client) {
       await db.execute(
         "ALTER TABLE user_profiles ADD COLUMN local_scheduler_interval TEXT NOT NULL DEFAULT 'minute' CHECK(local_scheduler_interval IN ('minute', 'daily'))",
       );
+    }
+    const userProfileSchema = await db.execute(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_profiles' LIMIT 1",
+    );
+    if (!String(userProfileSchema.rows[0]?.sql ?? "").includes("'it'")) {
+      await db.batch([
+        "ALTER TABLE user_profiles RENAME TO user_profiles_before_locale_expansion",
+        `CREATE TABLE user_profiles (
+          user_id TEXT PRIMARY KEY,
+          first_name TEXT NOT NULL DEFAULT '',
+          last_name TEXT NOT NULL DEFAULT '',
+          avatar TEXT NOT NULL DEFAULT '',
+          language TEXT NOT NULL DEFAULT 'en' CHECK(language IN ('en', 'fr', 'es', 'it')),
+          timezone TEXT NOT NULL DEFAULT 'UTC',
+          local_scheduler_enabled INTEGER NOT NULL DEFAULT 1 CHECK(local_scheduler_enabled IN (0, 1)),
+          local_scheduler_interval TEXT NOT NULL DEFAULT 'minute' CHECK(local_scheduler_interval IN ('minute', 'daily')),
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `INSERT INTO user_profiles (
+          user_id, first_name, last_name, avatar, language, timezone,
+          local_scheduler_enabled, local_scheduler_interval, updated_at
+        ) SELECT
+          user_id, first_name, last_name, avatar, language, timezone,
+          local_scheduler_enabled, local_scheduler_interval, updated_at
+        FROM user_profiles_before_locale_expansion`,
+        "DROP TABLE user_profiles_before_locale_expansion",
+      ], "write");
     }
     const collectionPreferenceColumns = await db.execute(
       "PRAGMA table_info(collection_view_preferences)",
@@ -1398,7 +1437,7 @@ export async function getUserProfile(
   await ensureSchema();
   const result = await getClient().execute({
     sql: `
-      SELECT first_name, last_name, avatar, timezone, local_scheduler_enabled, local_scheduler_interval, updated_at
+      SELECT first_name, last_name, avatar, language, timezone, local_scheduler_enabled, local_scheduler_interval, updated_at
       FROM user_profiles
       WHERE user_id = ?
       LIMIT 1
@@ -1410,6 +1449,9 @@ export async function getUserProfile(
     firstName: row ? String(row.first_name) : defaults.firstName ?? "",
     lastName: row ? String(row.last_name) : defaults.lastName ?? "",
     avatar: row ? String(row.avatar) || defaults.avatar || "" : defaults.avatar ?? "",
+    language: row?.language === "fr" || row?.language === "es" || row?.language === "it"
+      ? row.language
+      : defaults.language ?? "en",
     timezone: row ? String(row.timezone) : defaults.timezone ?? "UTC",
     localSchedulerEnabled: row
       ? Number(row.local_scheduler_enabled) === 1
@@ -1423,21 +1465,22 @@ export async function getUserProfile(
 
 export async function saveUserProfile(
   userId: string,
-  profile: Pick<UserProfile, "firstName" | "lastName" | "avatar" | "timezone">,
+  profile: Pick<UserProfile, "firstName" | "lastName" | "avatar" | "language" | "timezone">,
 ) {
   await ensureSchema();
   await getClient().execute({
     sql: `
-      INSERT INTO user_profiles (user_id, first_name, last_name, avatar, timezone)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO user_profiles (user_id, first_name, last_name, avatar, language, timezone)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         first_name = excluded.first_name,
         last_name = excluded.last_name,
         avatar = excluded.avatar,
+        language = excluded.language,
         timezone = excluded.timezone,
         updated_at = CURRENT_TIMESTAMP
     `,
-    args: [userId, profile.firstName, profile.lastName, profile.avatar, profile.timezone],
+    args: [userId, profile.firstName, profile.lastName, profile.avatar, profile.language, profile.timezone],
   });
 }
 

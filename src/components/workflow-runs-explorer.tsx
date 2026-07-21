@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirmation } from "@/components/confirmation-provider";
+import { useAppI18n } from "@/components/app-i18n-provider";
 import type {
   WorkflowRunListItem,
   WorkflowStage,
@@ -102,6 +103,7 @@ function RunDetailsModal({
   onClose: () => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const { t } = useAppI18n();
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -153,7 +155,7 @@ function RunDetailsModal({
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/10">
               <div className={`h-full rounded-full ${run.appStatus === "failed" ? "bg-red-500" : run.appStatus === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${run.progressPercent}%` }} />
             </div>
-            <p className="mt-2 text-sm text-black/55 dark:text-white/55">{run.currentStep}</p>
+            <p className="mt-2 text-sm text-black/55 dark:text-white/55">{t(run.currentStep)}</p>
           </section>
 
           <section>
@@ -219,6 +221,7 @@ export function WorkflowRunsExplorer({
   initialSelectedOperationId?: number | null;
 }) {
   const router = useRouter();
+  const { t } = useAppI18n();
   const confirmation = useConfirmation();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -327,7 +330,7 @@ export function WorkflowRunsExplorer({
                   <td className="px-4 py-3"><button type="button" onClick={() => setSelectedId(run.operationId)} className="block max-w-full text-left"><span className="block truncate font-semibold">{run.workflowName}</span><span className="mt-1 block truncate font-mono text-[10px] text-black/40 dark:text-white/40">{run.workflowRunId}</span><span className="mt-1 block text-[10px] text-black/35 dark:text-white/35">Operation #{run.operationId}</span></button></td>
                   <td className="px-4 py-3"><StatusBadge run={run} />{run.warningCount || run.manualActionCount ? <span className="mt-2 block text-[10px] font-semibold text-amber-600 dark:text-amber-300">{run.warningCount + run.manualActionCount} attention</span> : null}</td>
                   <td className="px-4 py-3"><span className="block truncate font-semibold">{run.environmentName}</span><span className="mt-1 block truncate text-black/45 dark:text-white/45">{run.channelName}</span><span className="mt-1 block truncate text-black/35 dark:text-white/35">{run.snapshotName}{run.snapshotVersion ? ` · v${run.snapshotVersion}` : ""}</span></td>
-                  <td className="px-4 py-3"><div className="flex items-start justify-between gap-3"><span title={run.currentStep} className="block min-w-0 flex-1 truncate text-black/55 dark:text-white/55">{run.currentStep}</span><strong>{run.progressPercent}%</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${run.appStatus === "failed" ? "bg-red-500" : run.appStatus === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${run.progressPercent}%` }} /></div><span className="mt-1 block text-[10px] text-black/35 dark:text-white/35">Checkpoint {run.stepIndex} / {run.totalSteps || "—"}</span></td>
+                  <td className="px-4 py-3"><div className="flex items-start justify-between gap-3"><span title={t(run.currentStep)} className="block min-w-0 flex-1 truncate text-black/55 dark:text-white/55">{t(run.currentStep)}</span><strong>{run.progressPercent}%</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${run.appStatus === "failed" ? "bg-red-500" : run.appStatus === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${run.progressPercent}%` }} /></div><span className="mt-1 block text-[10px] text-black/35 dark:text-white/35">Checkpoint {run.stepIndex} / {run.totalSteps || "—"}</span></td>
                   <td className="px-4 py-3 text-black/55 dark:text-white/55"><DateTimeStack value={run.updatedAt} /></td>
                   <td className="px-4 py-3 font-medium">{formatDuration(run.durationMs)}</td>
                   <td className="px-4 py-3"><div className="flex justify-end gap-1.5"><button type="button" onClick={() => setSelectedId(run.operationId)} className="rounded-lg border border-black/10 px-2.5 py-1.5 font-semibold transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5">Inspect</button>{run.canCancel ? <button type="button" onClick={() => runAction(run, "cancel")} className="rounded-lg border border-red-500/25 px-2.5 py-1.5 font-semibold text-red-700 dark:text-red-300">Cancel</button> : null}{run.canRetry ? <button type="button" onClick={() => runAction(run, "retry")} className="rounded-lg border border-emerald-500/25 px-2.5 py-1.5 font-semibold text-emerald-700 dark:text-emerald-300">Retry</button> : null}</div></td>

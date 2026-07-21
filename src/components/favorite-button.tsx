@@ -6,6 +6,7 @@ import {
   toggleFavorite,
   type FavoriteTarget,
 } from "@/app/(app)/favorite-actions";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 function StarIcon({ filled }: { filled: boolean }) {
   return (
@@ -37,13 +38,16 @@ export function FavoriteButton({
   compact?: boolean;
 }) {
   const router = useRouter();
+  const { t } = useAppI18n();
   const [favorite, setOptimisticFavorite] = useOptimistic(
     initialFavorite,
     (_currentFavorite, nextFavorite: boolean) => nextFavorite,
   );
   const [pending, startTransition] = useTransition();
 
-  const actionLabel = favorite ? `Remove ${label} from favorites` : `Add ${label} to favorites`;
+  const actionLabel = favorite
+    ? t("Remove {label} from favorites", { label })
+    : t("Add {label} to favorites", { label });
 
   return (
     <button
