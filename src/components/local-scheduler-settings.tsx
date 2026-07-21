@@ -2,15 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { updateLocalSchedulerEnabled } from "@/app/(app)/settings/profile/actions";
+import {
+  updateLocalSchedulerEnabled,
+  updateLocalSchedulerInterval,
+} from "@/app/(app)/settings/profile/actions";
 
 export function LocalSchedulerSettings({
   initialEnabled,
+  initialInterval,
 }: {
   initialEnabled: boolean;
+  initialInterval: "minute" | "daily";
 }) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
+  const [interval, setIntervalValue] = useState(initialInterval);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -20,6 +26,18 @@ export function LocalSchedulerSettings({
     startTransition(async () => {
       const result = await updateLocalSchedulerEnabled(nextEnabled);
       if (result.status === "error") setEnabled(!nextEnabled);
+      setMessage(result.message);
+      if (result.status === "success") router.refresh();
+    });
+  }
+
+  function updateInterval(nextInterval: "minute" | "daily") {
+    const previousInterval = interval;
+    setMessage("");
+    setIntervalValue(nextInterval);
+    startTransition(async () => {
+      const result = await updateLocalSchedulerInterval(nextInterval);
+      if (result.status === "error") setIntervalValue(previousInterval);
       setMessage(result.message);
       if (result.status === "success") router.refresh();
     });
@@ -36,9 +54,9 @@ export function LocalSchedulerSettings({
             </span>
           </div>
           <p className="mt-2 text-sm leading-6 text-black/45 dark:text-white/45">
-            Check your schedules from this browser every minute. Disable this when
-            Vercel Cron or another development browser is dispatching the same
-            schedules; database claims still prevent duplicate executions.
+            Check your schedules from this browser at the selected interval. Disable
+            this when Vercel Cron or another development browser is dispatching the
+            same schedules; database claims still prevent duplicate executions.
           </p>
         </div>
 
@@ -60,10 +78,18 @@ export function LocalSchedulerSettings({
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-black/8 p-4 dark:border-white/8">
+        <label className="rounded-2xl border border-black/8 p-4 dark:border-white/8">
           <p className="text-xs uppercase tracking-[0.14em] text-black/40 dark:text-white/40">Interval</p>
-          <p className="mt-2 text-sm font-semibold">Every minute</p>
-        </div>
+          <select
+            value={interval}
+            disabled={pending}
+            onChange={(event) => updateInterval(event.target.value as "minute" | "daily")}
+            className="mt-2 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm font-semibold outline-none disabled:opacity-50 dark:border-white/10"
+          >
+            <option value="minute">Every minute</option>
+            <option value="daily">Once per day</option>
+          </select>
+        </label>
         <div className="rounded-2xl border border-black/8 p-4 dark:border-white/8">
           <p className="text-xs uppercase tracking-[0.14em] text-black/40 dark:text-white/40">Scope</p>
           <p className="mt-2 text-sm font-semibold">Your schedules</p>

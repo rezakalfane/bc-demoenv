@@ -4,9 +4,18 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { dispatchLocalDueSchedules } from "@/app/(app)/scheduler/actions";
 
-const LOCAL_SCHEDULER_INTERVAL_MS = 60_000;
+const LOCAL_SCHEDULER_INTERVAL_MS = {
+  minute: 60_000,
+  daily: 86_400_000,
+} as const;
 
-export function LocalSchedulerDispatcher({ enabled }: { enabled: boolean }) {
+export function LocalSchedulerDispatcher({
+  enabled,
+  interval,
+}: {
+  enabled: boolean;
+  interval: "minute" | "daily";
+}) {
   const router = useRouter();
   const runningRef = useRef(false);
 
@@ -28,12 +37,12 @@ export function LocalSchedulerDispatcher({ enabled }: { enabled: boolean }) {
     };
 
     void dispatch();
-    const timer = window.setInterval(() => void dispatch(), LOCAL_SCHEDULER_INTERVAL_MS);
+    const timer = window.setInterval(() => void dispatch(), LOCAL_SCHEDULER_INTERVAL_MS[interval]);
     return () => {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [enabled, router]);
+  }, [enabled, interval, router]);
 
   return null;
 }

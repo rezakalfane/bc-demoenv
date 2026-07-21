@@ -19,7 +19,10 @@ export default async function AppLayout({
   return (
     <CollectionPreferencesProvider initialPreferences={collectionPreferences}>
       <ConfirmationProvider>
-        <LocalSchedulerDispatcher enabled={profile.localSchedulerEnabled} />
+        <LocalSchedulerDispatcher
+          enabled={profile.localSchedulerEnabled}
+          interval={profile.localSchedulerInterval}
+        />
         <AppShell userId={user.id} userEmail={user.email}>{children}</AppShell>
       </ConfirmationProvider>
     </CollectionPreferencesProvider>

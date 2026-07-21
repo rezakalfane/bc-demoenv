@@ -198,8 +198,10 @@ export async function getCatalogOperationList(userId: string) {
     const restoreGroups = readStringArray(result.restoredGroups).length > 0
       ? readStringArray(result.restoredGroups)
       : readStringArray(payload.restoreGroups);
-    const createdTime = Date.parse(operation.createdAt);
-    const updatedTime = Date.parse(operation.updatedAt);
+    const parsedCreatedTime = Date.parse(operation.createdAt);
+    const createdTime = Number.isFinite(parsedCreatedTime) ? parsedCreatedTime : now;
+    const parsedUpdatedTime = Date.parse(operation.updatedAt);
+    const updatedTime = Number.isFinite(parsedUpdatedTime) ? parsedUpdatedTime : createdTime;
     const isActive = operation.status === "queued" || operation.status === "running";
     const durationMs = Math.max((isActive ? now : updatedTime) - createdTime, 0);
     const progressPercent = operation.totalSteps > 0
@@ -399,5 +401,11 @@ export async function getCatalogOperationList(userId: string) {
     }));
 
   return [...catalogRows, ...snapshotEventRows, ...applicationEventRows, ...inferredEnvironmentRows]
-    .toSorted((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+    .toSorted((left, right) => {
+      const leftTime = Date.parse(left.updatedAt);
+      const rightTime = Date.parse(right.updatedAt);
+      const safeLeftTime = Number.isFinite(leftTime) ? leftTime : Number.NEGATIVE_INFINITY;
+      const safeRightTime = Number.isFinite(rightTime) ? rightTime : Number.NEGATIVE_INFINITY;
+      return safeRightTime - safeLeftTime;
+    });
 }

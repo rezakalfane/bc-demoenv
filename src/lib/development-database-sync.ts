@@ -8,6 +8,7 @@ import {
   type InValue,
 } from "@libsql/client";
 import {
+  applyCurrentDatabaseSchema,
   getActiveDatabaseClientForMaintenance,
   getActiveDatabaseClientForDevelopmentSync,
   getDevelopmentDatabaseStatus,
@@ -458,6 +459,14 @@ export async function syncDevelopmentDatabases(
     let result: DevelopmentDatabaseSyncResult;
     try {
       local = await getActiveDatabaseClientForDevelopmentSync();
+      // The remote client is opened specifically for this maintenance action,
+      // so it does not pass through the active-client schema cache in db.ts.
+      // Apply every current table and additive migration to both sides before
+      // comparing them or copying rows.
+      await Promise.all([
+        applyCurrentDatabaseSchema(local),
+        applyCurrentDatabaseSchema(remote),
+      ]);
       await assertCompatibleSchemas(local, remote);
       await Promise.all([
         assertNoActiveOperations(local, "Local SQLite"),

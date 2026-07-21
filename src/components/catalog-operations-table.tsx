@@ -34,6 +34,16 @@ const timeFormatter = new Intl.DateTimeFormat("en", { timeStyle: "short" });
 const numberFormatter = new Intl.NumberFormat("en");
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
+function parseTimestamp(value: string | null | undefined) {
+  const timestamp = Date.parse(value ?? "");
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function formatDateTime(value: string | null | undefined) {
+  const timestamp = parseTimestamp(value);
+  return timestamp === null ? "Date unavailable" : dateTimeFormatter.format(timestamp);
+}
+
 const statusStyles: Record<OperationStatus, string> = {
   queued: "bg-amber-500/12 text-amber-700 dark:text-amber-300",
   running: "bg-sky-500/12 text-sky-700 dark:text-sky-300",
@@ -73,9 +83,18 @@ function DateTimeStack({
   value: string;
   className?: string;
 }) {
-  const date = new Date(value);
+  const timestamp = parseTimestamp(value);
+  if (timestamp === null) {
+    return (
+      <span className={`block leading-tight text-black/40 dark:text-white/40 ${className}`} title={value || "Missing timestamp"}>
+        Date unavailable
+      </span>
+    );
+  }
+
+  const date = new Date(timestamp);
   return (
-    <time dateTime={value} className={`block leading-tight ${className}`}>
+    <time dateTime={date.toISOString()} className={`block leading-tight ${className}`}>
       <span className="block whitespace-nowrap">{dateFormatter.format(date)}</span>
       <span className="mt-1 block whitespace-nowrap text-[11px] opacity-70">
         {timeFormatter.format(date)}
@@ -130,10 +149,11 @@ function SortButton({
     <button
       type="button"
       onClick={() => onSort(sortKey)}
-      className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-black/50 transition hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:text-white/50 dark:hover:text-white"
+      title={`Sort by ${label.toLocaleLowerCase("en-US")}`}
+      className="inline-flex max-w-full items-center gap-0.5 overflow-hidden text-left font-semibold leading-tight text-black/50 transition hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:text-white/50 dark:hover:text-white"
     >
-      {label}
-      <span aria-hidden="true" className={active ? "text-emerald-600 dark:text-emerald-400" : "text-black/20 dark:text-white/20"}>
+      <span className="truncate">{label}</span>
+      <span aria-hidden="true" className={`shrink-0 ${active ? "text-emerald-600 dark:text-emerald-400" : "text-black/20 dark:text-white/20"}`}>
         {active ? sort.direction === "asc" ? "↑" : "↓" : "↕"}
       </span>
     </button>
@@ -249,8 +269,8 @@ function OperationDetailsModal({
           )}
 
           <dl className="grid gap-3 rounded-2xl border border-black/8 bg-black/[0.025] p-4 sm:grid-cols-2 dark:border-white/8 dark:bg-white/[0.025]">
-            <div><dt className="text-xs text-black/40 dark:text-white/40">Started</dt><dd className="mt-1 text-sm">{dateTimeFormatter.format(new Date(operation.createdAt))}</dd></div>
-            <div><dt className="text-xs text-black/40 dark:text-white/40">Last update</dt><dd className="mt-1 text-sm">{dateTimeFormatter.format(new Date(operation.updatedAt))}</dd></div>
+            <div><dt className="text-xs text-black/40 dark:text-white/40">Started</dt><dd className="mt-1 text-sm">{formatDateTime(operation.createdAt)}</dd></div>
+            <div><dt className="text-xs text-black/40 dark:text-white/40">Last update</dt><dd className="mt-1 text-sm">{formatDateTime(operation.updatedAt)}</dd></div>
             <div><dt className="text-xs text-black/40 dark:text-white/40">Duration</dt><dd className="mt-1 text-sm">{formatDuration(operation.durationMs)}</dd></div>
             <div><dt className="text-xs text-black/40 dark:text-white/40">Snapshot</dt><dd className="mt-1 text-sm">{operation.snapshotName}{operation.snapshotVersion ? ` · version ${operation.snapshotVersion}` : ""}</dd></div>
           </dl>
@@ -393,7 +413,7 @@ export function CatalogOperationsTable({
 
   const filteredOperations = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("en-US");
-    const now = Date.parse(generatedAt);
+    const now = parseTimestamp(generatedAt) ?? 0;
     const dateThreshold = dateRange === "today"
       ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
       : dateRange === "7d" ? now - 7 * 86_400_000
@@ -407,7 +427,7 @@ export function CatalogOperationsTable({
         target: [`${left.environmentName} ${left.channelName}`, `${right.environmentName} ${right.channelName}`],
         snapshot: [left.snapshotName, right.snapshotName],
         progress: [left.progressPercent, right.progressPercent],
-        updatedAt: [Date.parse(left.updatedAt), Date.parse(right.updatedAt)],
+        updatedAt: [parseTimestamp(left.updatedAt) ?? Number.NEGATIVE_INFINITY, parseTimestamp(right.updatedAt) ?? Number.NEGATIVE_INFINITY],
         duration: [left.durationMs, right.durationMs],
       };
       const [leftValue, rightValue] = values[sort.key];
@@ -423,7 +443,8 @@ export function CatalogOperationsTable({
       if (environment !== "all" && operation.environmentName !== environment) return false;
       if (attention === "attention" && !hasAttention(operation)) return false;
       if (attention === "clean" && hasAttention(operation)) return false;
-      if (dateThreshold && Date.parse(operation.updatedAt) < dateThreshold) return false;
+      const updatedAt = parseTimestamp(operation.updatedAt);
+      if (dateThreshold && (updatedAt === null || updatedAt < dateThreshold)) return false;
       if (!normalizedQuery) return true;
       return [
         operation.id,
@@ -477,31 +498,31 @@ export function CatalogOperationsTable({
         </div>
       </section>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-black/8 bg-white/55 dark:border-white/8 dark:bg-white/3">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-xs">
+      <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-black/8 bg-white/55 dark:border-white/8 dark:bg-white/3">
+        <div className="min-w-0 overflow-hidden">
+          <table className="w-full table-fixed border-collapse text-left text-xs">
             <colgroup>
-              <col className="w-[4%]" />
+              <col className="w-[4.5%]" />
+              <col className="w-[10.5%]" />
+              <col className="w-[9%]" />
+              <col className="w-[14%]" />
+              <col className="w-[11.5%]" />
+              <col className="w-[23%]" />
               <col className="w-[10%]" />
-              <col className="w-[8%]" />
-              <col className="w-[13%]" />
+              <col className="w-[6.5%]" />
               <col className="w-[11%]" />
-              <col className="w-[24%]" />
-              <col className="w-[10%]" />
-              <col className="w-[8%]" />
-              <col className="w-[12%]" />
             </colgroup>
             <thead className="border-b border-black/8 bg-black/[0.025] dark:border-white/8 dark:bg-white/[0.025]">
               <tr>
-                <th scope="col" aria-sort={sort.key === "id" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="ID" sortKey="id" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "kind" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Operation" sortKey="kind" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "status" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Status" sortKey="status" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "target" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Environment / channel" sortKey="target" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "snapshot" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Snapshot" sortKey="snapshot" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "progress" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Progress / result" sortKey="progress" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "updatedAt" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Last update" sortKey="updatedAt" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "duration" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="px-3 py-3"><SortButton label="Duration" sortKey="duration" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" className="px-3 py-3 text-right font-semibold text-black/50 dark:text-white/50">Actions</th>
+                <th scope="col" aria-sort={sort.key === "id" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="ID" sortKey="id" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "kind" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Operation" sortKey="kind" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "status" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Status" sortKey="status" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "target" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Environment / channel" sortKey="target" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "snapshot" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Snapshot" sortKey="snapshot" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "progress" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Progress / result" sortKey="progress" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "updatedAt" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Last update" sortKey="updatedAt" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "duration" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Duration" sortKey="duration" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" className="px-2 py-3 text-right font-semibold text-black/50 dark:text-white/50">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/6 dark:divide-white/6">
@@ -515,15 +536,15 @@ export function CatalogOperationsTable({
                   title="Double-click to view details"
                   className="align-middle transition hover:bg-black/[0.025] dark:hover:bg-white/[0.025]"
                 >
-                  <td className="px-3 py-3 font-mono text-black/40 dark:text-white/40">#{operation.id}</td>
-                  <td className="px-3 py-3"><span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold ${kindStyles[operation.kind]}`}>{operation.title}</span><DateTimeStack value={operation.createdAt} className="mt-1.5 text-[11px] text-black/35 dark:text-white/35" /></td>
-                  <td className="px-3 py-3"><OperationStatusBadge operation={operation} />{hasAttention(operation) ? <span className="mt-1.5 block text-[11px] font-medium text-amber-700 dark:text-amber-300">Needs attention</span> : null}</td>
-                  <td className="max-w-52 px-3 py-3"><p className="truncate font-medium">{operation.environmentName}</p><p className="mt-1 truncate text-black/45 dark:text-white/45">{operation.channelName}</p></td>
-                  <td className="max-w-48 px-3 py-3"><p className="truncate font-medium">{operation.snapshotName}</p>{operation.snapshotVersion ? <p className="mt-1 text-black/45 dark:text-white/45">Version {operation.snapshotVersion}</p> : null}</td>
-                  <td className="overflow-hidden px-3 py-3" title={operation.currentStep}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-3"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
-                  <td className="px-3 py-3 text-black/50 dark:text-white/50"><DateTimeStack value={operation.updatedAt} /></td>
-                  <td className="whitespace-nowrap px-3 py-3 font-medium">{formatDuration(operation.durationMs)}</td>
-                  <td className="px-3 py-3"><div className="flex items-center justify-end gap-1.5">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} title="Open workflow" className="grid size-6 shrink-0 place-items-center rounded-md border border-sky-500/25 text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300"><WorkflowIcon /></Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} aria-label={`View details for ${operation.title}`} title="View details" className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"><DetailsIcon /></button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} title={operation.resourceLabel} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300"><OpenIcon /></Link> : null}</div></td>
+                  <td className="overflow-hidden px-2 py-3 font-mono text-black/40 dark:text-white/40"><span className="block truncate">#{operation.id}</span></td>
+                  <td className="overflow-hidden px-2 py-3"><span className={`block max-w-full truncate rounded-full px-2 py-1 text-[11px] font-semibold ${kindStyles[operation.kind]}`} title={operation.title}>{operation.title}</span><DateTimeStack value={operation.createdAt} className="mt-1.5 text-[11px] text-black/35 dark:text-white/35" /></td>
+                  <td className="overflow-hidden px-2 py-3"><OperationStatusBadge operation={operation} />{hasAttention(operation) ? <span className="mt-1.5 block truncate text-[11px] font-medium text-amber-700 dark:text-amber-300" title="Needs attention">Needs attention</span> : null}</td>
+                  <td className="overflow-hidden px-2 py-3"><p className="truncate font-medium" title={operation.environmentName}>{operation.environmentName}</p><p className="mt-1 truncate text-black/45 dark:text-white/45" title={operation.channelName}>{operation.channelName}</p></td>
+                  <td className="overflow-hidden px-2 py-3"><p className="truncate font-medium" title={operation.snapshotName}>{operation.snapshotName}</p>{operation.snapshotVersion ? <p className="mt-1 truncate text-black/45 dark:text-white/45">Version {operation.snapshotVersion}</p> : null}</td>
+                  <td className="overflow-hidden px-2 py-3" title={operation.currentStep}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-2"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{operation.currentStep}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{operation.currentStep}</span>}</td>
+                  <td className="overflow-hidden px-2 py-3 text-black/50 dark:text-white/50"><DateTimeStack value={operation.updatedAt} /></td>
+                  <td className="overflow-hidden whitespace-nowrap px-2 py-3 font-medium"><span className="block truncate">{formatDuration(operation.durationMs)}</span></td>
+                  <td className="px-2 py-3"><div className="flex items-center justify-end gap-1">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} title="Open workflow" className="grid size-6 shrink-0 place-items-center rounded-md border border-sky-500/25 text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300"><WorkflowIcon /></Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} aria-label={`View details for ${operation.title}`} title="View details" className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"><DetailsIcon /></button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${operation.resourceLabel} for ${operation.title}`} title={operation.resourceLabel} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300"><OpenIcon /></Link> : null}</div></td>
                 </tr>
               ))}
             </tbody>
