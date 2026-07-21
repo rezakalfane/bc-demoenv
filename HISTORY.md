@@ -2,6 +2,21 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-21 — Fix local SQLite to Turso push failures
+
+### Prompt
+
+> can't push from local sqllite to Turso with error
+>
+> ok you can validate that phase
+
+### Summary
+
+- Diagnosed the HTTP 404 as expiration of Turso's long-lived interactive transaction stream during a whole-database upload, rather than an invalid route or credential.
+- Changed remote replacement to populate uniquely named staging tables through bounded atomic batches and expose the new database image only through one short final atomic batch.
+- Retained transactional local SQLite replacement and extended the resilient Turso path to whole-database backup restoration.
+- Updated the technical documentation and validated the phase before branching, committing, merging, and pushing.
+
 ## 2026-07-21 — Validate deployment and database synchronization hardening
 
 ### Prompt

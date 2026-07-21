@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-21
 
+### Merge — Integrate resilient Turso database replacement
+
+- **Date:** 2026-07-21
+- **Source:** `fix/turso-staged-database-sync`
+- **Target:** `main`
+- **Type:** Non-fast-forward fix merge
+
+Integrated staged, bounded Turso database uploads with a short atomic final replacement, preventing large local-to-Turso pushes from losing their remote transaction stream and failing with HTTP 404.
+
+### Commit — Stage Turso database pushes before atomic replacement
+
+- **Date:** 2026-07-21
+- **Branch:** `fix/turso-staged-database-sync`
+- **Type:** Fix commit
+
+- Replaced the long-lived remote interactive transaction with isolated staging tables and bounded atomic upload batches.
+- Kept the destination database unchanged until one short server-side batch replaces all application rows and removes the staging tables.
+- Preserved the existing single-transaction replacement for local SQLite and applied the remote strategy to Turso backup restoration as well as development push.
+- Documented the remote transaction-expiry failure mode and staged replacement safety model.
+
 ### Merge — Integrate deployment and database synchronization hardening
 
 - **Date:** 2026-07-21
