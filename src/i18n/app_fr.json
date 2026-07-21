@@ -395,6 +395,8 @@
       "add_environment": "Ajouter l’environnement",
       "adding": "Ajout…",
       "save_changes": "Enregistrer les modifications",
+      "remove_environment": "Supprimer l’environnement",
+      "remove_named_environment": "Supprimer {name} ?",
       "connection_name": "Choisissez un nom facilement reconnaissable pour la connexion BigCommerce.",
       "edit_environment": "Modifier l’environnement",
       "saved_bigcommerce_environment_connections": "Connexions BigCommerce enregistrées.",
@@ -410,6 +412,7 @@
       "review_this_environment_in_settings_074db63d": "Vérifier cet environnement dans Paramètres →",
       "token_security": "Enregistrez les boutiques utilisées pour les démos et le développement. Chaque environnement appartient à votre compte et les jetons d’accès sont chiffrés avant stockage.",
       "token_replacement": "Saisissez un nouveau jeton uniquement pour remplacer celui enregistré.",
+      "keep_token_hint": "Laissez vide pour conserver le jeton se terminant par {hint}",
       "paste_the_bigcommerce_api_access_token": "Collez le jeton d’accès à l’API BigCommerce",
       "the_token_is_encrypted_before_it_is_stored": "Le jeton est chiffré avant son stockage.",
       "access_diagnostics": "Ce diagnostic envoie des requêtes d’API en lecture seule. Les jetons BigCommerce n’exposent pas la liste des autorisations ; les droits de lecture manquants sont donc déduits des réponses, sans tester les droits de modification."

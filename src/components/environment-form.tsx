@@ -42,6 +42,7 @@ export function EnvironmentForm({
 }: {
   environment?: BigCommerceEnvironment;
 }) {
+  const { t } = useAppI18n();
   const formRef = useRef<HTMLFormElement>(null);
   const isEditing = Boolean(environment);
   const action = isEditing ? editEnvironment : createEnvironment;
@@ -72,7 +73,7 @@ export function EnvironmentForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm font-medium">
-          Name
+          {t("Name")}
           <input
             name="name"
             type="text"
@@ -85,7 +86,7 @@ export function EnvironmentForm({
         </label>
 
         <label className="block text-sm font-medium">
-          Store hash
+          {t("Store hash")}
           <input
             name="storeHash"
             type="text"
@@ -104,7 +105,7 @@ export function EnvironmentForm({
       </div>
 
       <label className="block text-sm font-medium">
-        Access token
+        {t("Access token")}
         <input
           name="accessToken"
           type="password"
@@ -113,15 +114,17 @@ export function EnvironmentForm({
           autoComplete="new-password"
           placeholder={
             environment
-              ? `Leave blank to keep token ending in ${environment.accessTokenHint}`
-              : "Paste the BigCommerce API access token"
+              ? t("Leave blank to keep token ending in {hint}", {
+                  hint: environment.accessTokenHint,
+                })
+              : t("Paste the BigCommerce API access token")
           }
           className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3.5 py-3 font-mono text-sm shadow-sm outline-none transition placeholder:font-sans placeholder:text-black/30 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:placeholder:text-white/25"
         />
         <span className="mt-2 block text-xs font-normal text-black/40 dark:text-white/40">
           {environment
-            ? "Enter a new token only when you want to replace the saved one."
-            : "The token is encrypted before it is stored."}
+            ? t("Enter a new token only when you want to replace the saved one.")
+            : t("The token is encrypted before it is stored.")}
         </span>
       </label>
 
@@ -135,7 +138,7 @@ export function EnvironmentForm({
               : "text-emerald-700 dark:text-emerald-400"
           }`}
         >
-          {state.message}
+          {t(state.message)}
         </p>
       </div>
     </form>
@@ -144,6 +147,7 @@ export function EnvironmentForm({
 
 function DeleteButton() {
   const { pending } = useFormStatus();
+  const { t } = useAppI18n();
 
   return (
     <button
@@ -151,7 +155,7 @@ function DeleteButton() {
       disabled={pending}
       className="text-sm font-medium text-red-600 transition hover:text-red-700 disabled:cursor-wait disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
     >
-      {pending ? "Removing…" : "Remove"}
+      {t(pending ? "Removing…" : "Remove")}
     </button>
   );
 }
@@ -162,6 +166,7 @@ export function DeleteEnvironmentForm({
   environment: BigCommerceEnvironment;
 }) {
   const confirmation = useConfirmation();
+  const { t } = useAppI18n();
   const confirmedRef = useRef(false);
 
   return (
@@ -176,9 +181,9 @@ export function DeleteEnvironmentForm({
         event.preventDefault();
         const form = event.currentTarget;
         const confirmed = await confirmation({
-          title: `Remove ${environment.name}?`,
-          description: "This removes the saved environment and its credentials from your account. BigCommerce data is not changed.",
-          confirmLabel: "Remove environment",
+          title: t("Remove {name}?", { name: environment.name }),
+          description: t("This removes the saved environment and its credentials from your account. BigCommerce data is not changed."),
+          confirmLabel: t("Remove environment"),
           tone: "danger",
         });
         if (confirmed) {

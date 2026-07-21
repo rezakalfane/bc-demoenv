@@ -395,6 +395,8 @@
       "add_environment": "Add environment",
       "adding": "Adding…",
       "save_changes": "Save changes",
+      "remove_environment": "Remove environment",
+      "remove_named_environment": "Remove {name}?",
       "connection_name": "Create a memorable name for a BigCommerce store connection.",
       "edit_environment": "Edit environment",
       "saved_bigcommerce_environment_connections": "Saved BigCommerce environment connections.",
@@ -410,6 +412,7 @@
       "review_this_environment_in_settings_074db63d": "Review this environment in Settings →",
       "token_security": "Save the stores you use for demos and development. Every environment belongs to your account; access tokens are encrypted before storage.",
       "token_replacement": "Enter a new token only when you want to replace the saved one.",
+      "keep_token_hint": "Leave blank to keep token ending in {hint}",
       "paste_the_bigcommerce_api_access_token": "Paste the BigCommerce API access token",
       "the_token_is_encrypted_before_it_is_stored": "The token is encrypted before it is stored.",
       "access_diagnostics": "This diagnostic sends read-only API requests. BigCommerce tokens do not expose a scope list, so missing read scopes are inferred from API responses and modify access is not exercised."
