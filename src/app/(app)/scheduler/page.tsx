@@ -5,20 +5,20 @@ import { requireAppUser } from "@/lib/auth";
 import {
   getFavoriteResourceKeys,
   getSnapshotFavoriteKey,
+  getBigCommerceEnvironments,
   getCatalogOperation,
   getCatalogSchedules,
   getCatalogSnapshots,
   getUserProfile,
 } from "@/lib/db";
-import { getCatalogRestoreDestinations } from "@/lib/catalog-restore";
 
 export const dynamic = "force-dynamic";
 
 export default async function SchedulerPage() {
   const user = await requireAppUser();
-  const [schedules, destinations, snapshots, snapshotFavoriteKeys, profile] = await Promise.all([
+  const [schedules, environments, snapshots, snapshotFavoriteKeys, profile] = await Promise.all([
     getCatalogSchedules(user.id),
-    getCatalogRestoreDestinations(),
+    getBigCommerceEnvironments(user.id),
     getCatalogSnapshots(user.id),
     getFavoriteResourceKeys(user.id, "snapshot"),
     getUserProfile(user.id, {
@@ -38,14 +38,16 @@ export default async function SchedulerPage() {
       ? getCatalogOperation(user.id, schedule.lastOperationId)
       : null),
   );
-  const destinationById = new Map(destinations.map((environment) => [environment.id, environment]));
+  const environmentById = new Map(environments.map((environment) => [environment.id, environment]));
   const rows = schedules.map((schedule, index) => {
-    const environment = destinationById.get(schedule.environmentId);
-    const channel = environment?.channels.find((candidate) => candidate.id === schedule.channelId);
+    const operationResult = parseRecord(operations[index]?.resultJson);
     return {
       ...schedule,
-      environmentName: environment?.name ?? `Environment #${schedule.environmentId}`,
-      channelName: channel?.name ?? `Channel #${schedule.channelId}`,
+      environmentName: environmentById.get(schedule.environmentId)?.name
+        ?? readString(operationResult.destinationEnvironmentName)
+        ?? `Environment #${schedule.environmentId}`,
+      channelName: readString(operationResult.destinationChannelName)
+        ?? `Channel #${schedule.channelId}`,
       lastStatus: operations[index]?.status ?? null,
     };
   });
@@ -84,7 +86,7 @@ export default async function SchedulerPage() {
         <div className="mt-8">
           <SchedulerWorkspace
             schedules={rows}
-            destinations={destinations}
+            destinations={[]}
             snapshots={snapshotOptions}
             defaultTimezone={profile.timezone}
             dispatchInterval={process.env.NODE_ENV === "development"
@@ -95,4 +97,17 @@ export default async function SchedulerPage() {
       </div>
     </main>
   );
+}
+
+function parseRecord(value: string | null | undefined) {
+  if (!value) return {} as Record<string, unknown>;
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return {} as Record<string, unknown>;
+  }
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

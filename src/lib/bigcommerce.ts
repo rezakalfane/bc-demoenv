@@ -4,11 +4,21 @@ import {
   getChannelFavoriteKey,
   getEnvironmentFavoriteKey,
   getFavoriteResourceKeys,
+  getBigCommerceEnvironmentMetricCache,
   getBigCommerceEnvironmentConnection,
   getBigCommerceEnvironmentConnections,
+  getBigCommerceEnvironments,
+  saveBigCommerceEnvironmentMetricCache,
   type BigCommerceEnvironmentConnection,
 } from "@/lib/db";
 import { requireAppUser } from "@/lib/auth";
+import {
+  type EnvironmentDashboard,
+  type EnvironmentMetric,
+  type MetricKey,
+} from "@/lib/dashboard-types";
+
+export type { EnvironmentDashboard, MetricKey } from "@/lib/dashboard-types";
 
 const API_BASE_URL = "https://api.bigcommerce.com/stores";
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -39,23 +49,6 @@ const metricDefinitions = [
     path: "/catalog/variants?limit=1&include_fields=id",
   },
 ] as const;
-
-type MetricKey = (typeof metricDefinitions)[number]["key"];
-
-export type EnvironmentMetric = {
-  label: string;
-  value: number | null;
-  error: string | null;
-};
-
-export type EnvironmentDashboard = {
-  id: number;
-  name: string;
-  storeHash: string;
-  status: "connected" | "partial" | "unavailable";
-  isFavorite: boolean;
-  metrics: Record<MetricKey, EnvironmentMetric>;
-};
 
 export type EnvironmentChannel = {
   id: number;
@@ -482,6 +475,7 @@ async function loadEnvironmentDashboard(
     name: environment.name,
     storeHash: environment.storeHash,
     isFavorite,
+    refreshedAt: new Date().toISOString(),
     status:
       availableCount === entries.length
         ? "connected"
@@ -490,6 +484,52 @@ async function loadEnvironmentDashboard(
           : "partial",
     metrics,
   };
+}
+
+function sortEnvironmentDashboards(dashboards: EnvironmentDashboard[]) {
+  return dashboards.sort((left, right) => {
+    const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
+    if (favoriteOrder !== 0) return favoriteOrder;
+    const nameOrder = left.name.localeCompare(right.name, undefined, {
+      sensitivity: "base",
+    });
+    return nameOrder !== 0 ? nameOrder : left.id - right.id;
+  });
+}
+
+export async function getCachedEnvironmentDashboards() {
+  const user = await requireAppUser();
+  const [environments, favoriteKeys, cachedMetrics] = await Promise.all([
+    getBigCommerceEnvironments(user.id),
+    getFavoriteResourceKeys(user.id, "environment"),
+    getBigCommerceEnvironmentMetricCache(user.id),
+  ]);
+
+  return sortEnvironmentDashboards(
+    environments.map((environment) => {
+      const cached = cachedMetrics.get(environment.id);
+      const metrics = Object.fromEntries(
+        metricDefinitions.map((definition) => [
+          definition.key,
+          {
+            label: definition.label,
+            value: cached?.[definition.key] ?? null,
+            error: cached?.errors[definition.key] ?? null,
+          },
+        ]),
+      ) as Record<MetricKey, EnvironmentMetric>;
+
+      return {
+        id: environment.id,
+        name: environment.name,
+        storeHash: environment.storeHash,
+        isFavorite: favoriteKeys.has(getEnvironmentFavoriteKey(environment.id)),
+        status: cached?.status ?? "loading",
+        refreshedAt: cached?.refreshedAt ?? null,
+        metrics,
+      } satisfies EnvironmentDashboard;
+    }),
+  );
 }
 
 export async function getEnvironmentDashboards() {
@@ -506,26 +546,33 @@ export async function getEnvironmentDashboards() {
     index += ENVIRONMENT_CONCURRENCY
   ) {
     const batch = environments.slice(index, index + ENVIRONMENT_CONCURRENCY);
-    dashboards.push(
-      ...(await Promise.all(
+    const batchDashboards = await Promise.all(
         batch.map((environment) =>
           loadEnvironmentDashboard(
             environment,
             favoriteKeys.has(getEnvironmentFavoriteKey(environment.id)),
           ),
         ),
-      )),
+      );
+    dashboards.push(...batchDashboards);
+    await Promise.allSettled(
+      batchDashboards.map((dashboard) =>
+        saveBigCommerceEnvironmentMetricCache(user.id, {
+          environmentId: dashboard.id,
+          status: dashboard.status === "loading" ? "unavailable" : dashboard.status,
+          channels: dashboard.metrics.channels.value,
+          categories: dashboard.metrics.categories.value,
+          products: dashboard.metrics.products.value,
+          variants: dashboard.metrics.variants.value,
+          errors: Object.fromEntries(
+            metricDefinitions.map(({ key }) => [key, dashboard.metrics[key].error]),
+          ),
+        }),
+      ),
     );
   }
 
-  return dashboards.sort((left, right) => {
-    const favoriteOrder = Number(right.isFavorite) - Number(left.isFavorite);
-    if (favoriteOrder !== 0) return favoriteOrder;
-    const nameOrder = left.name.localeCompare(right.name, undefined, {
-      sensitivity: "base",
-    });
-    return nameOrder !== 0 ? nameOrder : left.id - right.id;
-  });
+  return sortEnvironmentDashboards(dashboards);
 }
 
 export async function getEnvironmentDetails(environmentId: number) {

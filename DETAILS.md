@@ -99,9 +99,22 @@ erDiagram
         TEXT user_id PK
         TEXT first_name
         TEXT last_name
+        TEXT avatar
         TEXT timezone
         INTEGER local_scheduler_enabled
         TEXT updated_at
+    }
+
+    BIGCOMMERCE_ENVIRONMENT_METRICS {
+        TEXT user_id PK
+        INTEGER environment_id PK
+        INTEGER channels
+        INTEGER categories
+        INTEGER products
+        INTEGER variants
+        TEXT status
+        TEXT errors_json
+        TEXT refreshed_at
     }
 
     CATALOG_OPERATIONS {
@@ -175,6 +188,7 @@ erDiagram
     }
 
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_SNAPSHOTS : "source for"
+    BIGCOMMERCE_ENVIRONMENTS ||..o| BIGCOMMERCE_ENVIRONMENT_METRICS : "cached metrics for"
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_OPERATIONS : "targeted by"
     BIGCOMMERCE_ENVIRONMENTS o|..o{ CATALOG_SCHEDULES : "targeted by"
     BIGCOMMERCE_ENVIRONMENTS o|..o{ FAVORITES : "may be favored as"
@@ -197,7 +211,8 @@ Important uniqueness rules and indexes are:
 - Capture-product rows use the composite primary key `(operation_id, product_index)`.
 - Favorites use the composite primary key `(user_id, resource_type, resource_key)`. Environment keys use the tenant-owned database ID, channel keys combine environment and BigCommerce channel IDs, and snapshot keys combine the owner Clerk ID with the normalized series name so a favorite survives new immutable versions. Snapshot rename and deletion reconcile those keys for every viewer.
 - Collection view preferences use `(user_id, collection_id)` as their composite primary key. Collection IDs represent page types—Dashboard environments, Settings environments, environment channel lists, the Snapshots index, live channel products, captured snapshot products, Operations, and Notes—rather than individual environment, channel, or snapshot IDs. Those records store card/table mode and shared-snapshot visibility. A reserved `app-shell` collection ID stores the user's single desktop-sidebar collapse state for the whole authenticated application.
-- User profiles use the Clerk `user_id` as their primary key and store display names, timezone, and the development-only local scheduler preference; account email remains authoritative and read-only in Clerk.
+- User profiles use the Clerk `user_id` as their primary key and store display names, timezone, avatar, and the development-only local scheduler preference; account email remains authoritative and read-only in Clerk. Uploaded avatars are cropped and resized to a square 256-pixel image before storage. The shell uses that image when available and otherwise falls back to the user's initials.
+- Dashboard metrics use `(user_id, environment_id)` as their composite primary key. Each row stores the last successful tenant-owned environment summary so the Dashboard can render immediately without exposing credentials or waiting for BigCommerce.
 - Schedule names are descriptive labels and are intentionally not unique. Due schedules are indexed by `(enabled, next_run_at)`, while the catalog-operation active-key constraint prevents overlapping work for the same user/action/resource even when multiple schedules share a name or become due together.
 
 ## Scheduled automation
@@ -209,6 +224,8 @@ Vercel Cron calls `/api/scheduler/tick` once per day by default and authenticate
 Manual **Run now** uses the same dispatch path without changing the saved cadence. Pause/resume updates return immediately and recalculate the next occurrence when resumed; editing or deleting a schedule never removes its retained Operations or Workflow history. The Scheduler page shows the user's current timezone clock and warns development users when their local dispatcher is disabled.
 
 Clear, restore, snapshot, and composite refresh actions all become durable Workflow-backed catalog operations. **Clear & Restore** runs channel product unassignment and category cleanup first, then applies the selected snapshot only after clear succeeds. It uses one operation, progress surface, notification, and trace, so navigation, browser closure, Function timeout, and ordinary deployment restarts do not split or restart the sequence. Failures remain visible with their checkpoint and can be diagnosed from Operations and Workflows.
+
+The Scheduler uses a cached-first rendering path. Its Server Component immediately renders saved schedules, snapshot metadata, and stored environment names from libSQL. A tenant-authenticated, no-store endpoint then discovers current BigCommerce environments and channels in the background; destination-dependent controls remain disabled until that live data is ready, and a failed refresh can be retried without discarding the already visible schedule table.
 
 ## Security and tenancy
 
@@ -233,6 +250,8 @@ Snapshot payloads contain catalog data and public image links, but never BigComm
 Favorites are private presentation metadata. Every favorite lookup and toggle includes the current Clerk user ID; the Server Action also verifies ownership of environments and channels or current access to an owned/published snapshot before accepting the mutation. Favorite status never grants access to a resource that is no longer otherwise visible.
 
 Collection browsing keeps resource rendering on the server. A narrow Client Component toolbar controls sibling Server-rendered cards and compact table rows through stable data attributes. Dashboard environments, saved Settings environments, channel lists, snapshot series, and live/captured product browsers expose the same left-aligned instant search and right-aligned 32-pixel card/table controls. Filtering operates only on the already-authorized display model received from the Server Component; credentials, snapshot payloads, and raw BigCommerce responses never cross this boundary. Compact administrative tables preserve primary navigation and resource actions with horizontal overflow on narrow screens; catalog product tables instead use a fixed percentage layout with wrapping and line clamping so all four columns remain visible beside the category tree on desktop. Snapshot collections add a separate eye control that hides or reveals shared read-only series without affecting owned snapshots or in-progress captures, plus a multi-select tag filter. A snapshot must contain every selected tag, enabling increasingly narrow intersections without another server request. Card/table selection and shared-snapshot visibility are persisted by page type through authenticated Server Actions in `collection_view_preferences`; switching one live channel catalog changes the preference for every live channel catalog, while snapshot catalogs and other page types remain independent. Each desktop page also exposes a small arrow on the sidebar edge. Collapsing it converts navigation to an icon rail, removes the shell and page-content maximum widths, and stores one global `app-shell` preference for that user, so the navigation remains consistent while moving between pages. Existing page-scoped collapsed choices are folded into the global value until the user explicitly toggles it. Each write and initial read derives the Clerk user ID server-side, and the saved initial state is rendered on the server to avoid a layout flash. The persistent app layout carries that authorized preference map through client navigation, allowing Dashboard, environment, Snapshots, and product loading boundaries to render card or compact-table skeletons that match the selected mode. Search text and selected tag filters remain intentionally transient.
+
+The Dashboard follows the same cached-first principle for remote catalog metrics. Its Server Component reads the latest tenant-scoped metric rows from libSQL and paints the selected card or compact-table view immediately. A Client Component subsequently calls a tenant-authenticated, no-store Route Handler that refreshes each saved environment from BigCommerce, persists successful results, and updates the visible collection in place. Individual environment failures remain isolated and retain their last useful cached counts while exposing the current connection status.
 
 ## BigCommerce access scopes
 

@@ -37,6 +37,17 @@ export type BigCommerceEnvironmentConnection = {
   accessToken: string | null;
 };
 
+export type BigCommerceEnvironmentMetricCache = {
+  environmentId: number;
+  status: "connected" | "partial" | "unavailable";
+  channels: number | null;
+  categories: number | null;
+  products: number | null;
+  variants: number | null;
+  errors: Record<string, string | null>;
+  refreshedAt: string;
+};
+
 export type CatalogSnapshotSummary = {
   id: number;
   ownerUserId: string;
@@ -115,6 +126,7 @@ export type CollectionViewPreference = {
 export type UserProfile = {
   firstName: string;
   lastName: string;
+  avatar: string;
   timezone: string;
   localSchedulerEnabled: boolean;
   localSchedulerInterval: "minute" | "daily";
@@ -342,6 +354,25 @@ export async function applyCurrentDatabaseSchema(db: Client) {
     );
 
     await db.execute(`
+      CREATE TABLE IF NOT EXISTS bigcommerce_environment_metrics (
+        user_id TEXT NOT NULL,
+        environment_id INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('connected', 'partial', 'unavailable')),
+        channels INTEGER,
+        categories INTEGER,
+        products INTEGER,
+        variants INTEGER,
+        errors_json TEXT NOT NULL DEFAULT '{}',
+        refreshed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, environment_id)
+      )
+    `);
+
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS bigcommerce_environment_metrics_user_idx ON bigcommerce_environment_metrics(user_id, refreshed_at DESC)",
+    );
+
+    await db.execute(`
       CREATE TABLE IF NOT EXISTS catalog_snapshots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL,
@@ -512,6 +543,7 @@ export async function applyCurrentDatabaseSchema(db: Client) {
         user_id TEXT PRIMARY KEY,
         first_name TEXT NOT NULL DEFAULT '',
         last_name TEXT NOT NULL DEFAULT '',
+        avatar TEXT NOT NULL DEFAULT '',
         timezone TEXT NOT NULL DEFAULT 'UTC',
         local_scheduler_enabled INTEGER NOT NULL DEFAULT 1 CHECK(local_scheduler_enabled IN (0, 1)),
         local_scheduler_interval TEXT NOT NULL DEFAULT 'minute' CHECK(local_scheduler_interval IN ('minute', 'daily')),
@@ -521,6 +553,15 @@ export async function applyCurrentDatabaseSchema(db: Client) {
     const userProfileColumns = await db.execute(
       "PRAGMA table_info(user_profiles)",
     );
+    if (
+      !userProfileColumns.rows.some(
+        (column) => String(column.name) === "avatar",
+      )
+    ) {
+      await db.execute(
+        "ALTER TABLE user_profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
+      );
+    }
     if (
       !userProfileColumns.rows.some(
         (column) => String(column.name) === "local_scheduler_enabled",
@@ -1357,7 +1398,7 @@ export async function getUserProfile(
   await ensureSchema();
   const result = await getClient().execute({
     sql: `
-      SELECT first_name, last_name, timezone, local_scheduler_enabled, local_scheduler_interval, updated_at
+      SELECT first_name, last_name, avatar, timezone, local_scheduler_enabled, local_scheduler_interval, updated_at
       FROM user_profiles
       WHERE user_id = ?
       LIMIT 1
@@ -1368,6 +1409,7 @@ export async function getUserProfile(
   return {
     firstName: row ? String(row.first_name) : defaults.firstName ?? "",
     lastName: row ? String(row.last_name) : defaults.lastName ?? "",
+    avatar: row ? String(row.avatar) || defaults.avatar || "" : defaults.avatar ?? "",
     timezone: row ? String(row.timezone) : defaults.timezone ?? "UTC",
     localSchedulerEnabled: row
       ? Number(row.local_scheduler_enabled) === 1
@@ -1381,20 +1423,21 @@ export async function getUserProfile(
 
 export async function saveUserProfile(
   userId: string,
-  profile: Pick<UserProfile, "firstName" | "lastName" | "timezone">,
+  profile: Pick<UserProfile, "firstName" | "lastName" | "avatar" | "timezone">,
 ) {
   await ensureSchema();
   await getClient().execute({
     sql: `
-      INSERT INTO user_profiles (user_id, first_name, last_name, timezone)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO user_profiles (user_id, first_name, last_name, avatar, timezone)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         first_name = excluded.first_name,
         last_name = excluded.last_name,
+        avatar = excluded.avatar,
         timezone = excluded.timezone,
         updated_at = CURRENT_TIMESTAMP
     `,
-    args: [userId, profile.firstName, profile.lastName, profile.timezone],
+    args: [userId, profile.firstName, profile.lastName, profile.avatar, profile.timezone],
   });
 }
 
@@ -1609,6 +1652,83 @@ export async function getBigCommerceEnvironments(
   }));
 }
 
+export async function getBigCommerceEnvironmentMetricCache(
+  userId: string,
+): Promise<Map<number, BigCommerceEnvironmentMetricCache>> {
+  await ensureSchema();
+  const result = await getClient().execute({
+    sql: `
+      SELECT environment_id, status, channels, categories, products, variants,
+             errors_json, refreshed_at
+      FROM bigcommerce_environment_metrics
+      WHERE user_id = ?
+    `,
+    args: [userId],
+  });
+
+  return new Map(
+    result.rows.map((row) => {
+      let errors: Record<string, string | null> = {};
+      try {
+        const parsed = JSON.parse(String(row.errors_json ?? "{}"));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          errors = parsed as Record<string, string | null>;
+        }
+      } catch {
+        // A malformed cache entry should never prevent the Dashboard loading.
+      }
+
+      const environmentId = Number(row.environment_id);
+      return [
+        environmentId,
+        {
+          environmentId,
+          status: row.status as BigCommerceEnvironmentMetricCache["status"],
+          channels: row.channels == null ? null : Number(row.channels),
+          categories: row.categories == null ? null : Number(row.categories),
+          products: row.products == null ? null : Number(row.products),
+          variants: row.variants == null ? null : Number(row.variants),
+          errors,
+          refreshedAt: toIsoDate(row.refreshed_at),
+        },
+      ];
+    }),
+  );
+}
+
+export async function saveBigCommerceEnvironmentMetricCache(
+  userId: string,
+  input: Omit<BigCommerceEnvironmentMetricCache, "refreshedAt">,
+) {
+  await ensureSchema();
+  await getClient().execute({
+    sql: `
+      INSERT INTO bigcommerce_environment_metrics (
+        user_id, environment_id, status, channels, categories, products,
+        variants, errors_json, refreshed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(user_id, environment_id) DO UPDATE SET
+        status = excluded.status,
+        channels = excluded.channels,
+        categories = excluded.categories,
+        products = excluded.products,
+        variants = excluded.variants,
+        errors_json = excluded.errors_json,
+        refreshed_at = CURRENT_TIMESTAMP
+    `,
+    args: [
+      userId,
+      input.environmentId,
+      input.status,
+      input.channels,
+      input.categories,
+      input.products,
+      input.variants,
+      JSON.stringify(input.errors),
+    ],
+  });
+}
+
 export async function getBigCommerceEnvironmentConnections(
   userId: string,
 ): Promise<BigCommerceEnvironmentConnection[]> {
@@ -1815,6 +1935,10 @@ export async function removeBigCommerceEnvironment(
         getEnvironmentFavoriteKey(id),
         `${getChannelFavoriteKey(id, 0).slice(0, -1)}%`,
       ],
+    });
+    await transaction.execute({
+      sql: "DELETE FROM bigcommerce_environment_metrics WHERE user_id = ? AND environment_id = ?",
+      args: [userId, id],
     });
     const result = await transaction.execute({
       sql: "DELETE FROM bigcommerce_environments WHERE id = ? AND user_id = ?",

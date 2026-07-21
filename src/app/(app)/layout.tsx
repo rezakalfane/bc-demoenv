@@ -13,7 +13,11 @@ export default async function AppLayout({
   const user = await requireAppUser();
   const [collectionPreferences, profile] = await Promise.all([
     getCollectionViewPreferences(user.id),
-    getUserProfile(user.id),
+    getUserProfile(user.id, {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatar: user.imageUrl,
+    }),
   ]);
 
   return (
@@ -23,7 +27,15 @@ export default async function AppLayout({
           enabled={profile.localSchedulerEnabled}
           interval={profile.localSchedulerInterval}
         />
-        <AppShell userId={user.id} userEmail={user.email}>{children}</AppShell>
+        <AppShell
+          userId={user.id}
+          userEmail={user.email}
+          userFirstName={profile.firstName}
+          userLastName={profile.lastName}
+          userImageUrl={profile.avatar}
+        >
+          {children}
+        </AppShell>
       </ConfirmationProvider>
     </CollectionPreferencesProvider>
   );
