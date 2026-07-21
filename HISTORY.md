@@ -2,6 +2,28 @@
 
 This file records user prompts and implementation summaries in reverse chronological order. Dates use the project timezone, Europe/Paris.
 
+## 2026-07-21 — Fix notification deletion and Control Panel deep links
+
+### Prompt
+
+> for Restore needs manual action notification, display a warning section in the channel page above the buttons toolbar. closing that section will also delete the matching notification. It's better so users won't miss it
+>
+> Instead of opening history, can you add the link in the notification for future notif?
+>
+> bug: can't delete notifications any longer...
+>
+> The link to display in the notification description in the deep link to BC Control Panel
+>
+> Great, you can validate that phase
+
+### Summary
+
+- Added a channel-level warning for completed restores that require manual work and connected its dismissal to the matching notification entry.
+- Carried validated manual-action metadata from the restore result into the notification feed and linked directly to the relevant BigCommerce Control Panel page instead of routing through History.
+- Made individual and bulk deletion atomic from the browser's perspective by persisting the inbox and acknowledged operation IDs before updating UI state and broadcasting the change.
+- Prevented polling, cross-tab synchronization, and channel warning state from recreating deleted notifications.
+- Validated lint, TypeScript, whitespace, and the optimized production build before branching, committing, merging, and pushing.
+
 ## 2026-07-21 — Fix local SQLite to Turso push failures
 
 ### Prompt

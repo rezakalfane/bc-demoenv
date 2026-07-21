@@ -4,6 +4,26 @@ This file records every commit and merge in reverse chronological order. Entries
 
 ## 2026-07-21
 
+### Merge — Integrate durable notification deletion and Control Panel actions
+
+- **Date:** 2026-07-21
+- **Source:** `fix/notification-deep-links`
+- **Target:** `main`
+- **Type:** Non-fast-forward fix merge
+
+Integrated persistent individual/bulk notification deletion, channel-level manual-action warnings, and validated direct BigCommerce Control Panel action links after lint, TypeScript, whitespace, and production-build validation.
+
+### Commit — Fix notification deletion and manual-action deep links
+
+- **Date:** 2026-07-21
+- **Branch:** `fix/notification-deep-links`
+- **Type:** Fix commit
+
+- Persisted notification removal before updating component state and synchronized deletion across notification-center, channel-warning, tab, and polling surfaces.
+- Prevented acknowledged operation results from being recreated after individual or bulk deletion.
+- Exposed validated HTTPS BigCommerce Control Panel manual actions in restore notifications and channel warnings, opening external actions in a new tab.
+- Documented notification retention, deletion, synchronization, and deep-link behavior.
+
 ### Merge — Integrate resilient Turso database replacement
 
 - **Date:** 2026-07-21

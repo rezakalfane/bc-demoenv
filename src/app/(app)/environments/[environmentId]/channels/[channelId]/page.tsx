@@ -11,6 +11,7 @@ import { CatalogHistory } from "@/components/catalog-history";
 import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
 import { CatalogLocaleSelector } from "@/components/catalog-locale-selector";
+import { ChannelManualActionWarning } from "@/components/channel-manual-action-warning";
 import { requireAppUser } from "@/lib/auth";
 import { getChannelCatalog } from "@/lib/bigcommerce-catalog";
 import {
@@ -144,6 +145,13 @@ export default async function ChannelPage({
                 {products.length === 1 ? "product" : "products"}
               </span>
           </div>
+          {!catalog.error && catalog.channel ? (
+            <ChannelManualActionWarning
+              userId={user.id}
+              environmentId={catalog.environment.id}
+              channelId={catalog.channel.id}
+            />
+          ) : null}
           {!catalog.error && catalog.channel ? <div className="mt-4 flex flex-wrap justify-end gap-1.5">
                 <FavoriteButton
                   target={{

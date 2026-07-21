@@ -17,6 +17,39 @@ function parseRecord(value: string | null) {
   }
 }
 
+type FeedManualAction = {
+  label: string;
+  description: string;
+  href: string;
+};
+
+function parseManualActions(value: unknown): FeedManualAction[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const action = item as Record<string, unknown>;
+    if (
+      typeof action.label !== "string"
+      || typeof action.description !== "string"
+      || typeof action.href !== "string"
+    ) return [];
+    try {
+      const url = new URL(action.href);
+      if (
+        url.protocol !== "https:"
+        || !/^store-[a-z0-9]+\.mybigcommerce\.com$/i.test(url.hostname)
+      ) return [];
+    } catch {
+      return [];
+    }
+    return [{
+      label: action.label,
+      description: action.description,
+      href: action.href,
+    }];
+  });
+}
+
 export async function GET() {
   const user = await requireAppUser();
   const initialOperations = await getRecentCatalogOperations(user.id);
@@ -31,7 +64,7 @@ export async function GET() {
     operations: operations.map((operation) => {
       const payload = parseRecord(operation.payloadJson);
       const result = parseRecord(operation.resultJson);
-      const manualActions = Array.isArray(result.manualActions) ? result.manualActions : [];
+      const manualActions = parseManualActions(result.manualActions);
       return {
         id: operation.id,
         kind: operation.kind,
@@ -58,6 +91,7 @@ export async function GET() {
         currentStep: operation.currentStep,
         error: operation.error,
         manualActionCount: manualActions.length,
+        manualAction: manualActions[0] ?? null,
         updatedAt: operation.updatedAt,
       };
     }),
