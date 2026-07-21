@@ -8,6 +8,17 @@ import {
   finishCatalogOperation,
   readCatalogOperation,
 } from "@/components/catalog-operation-progress";
+import {
+  CATALOG_OPERATION_NOTIFICATIONS_CHANGED,
+  MAX_CATALOG_OPERATION_NOTIFICATIONS,
+  broadcastCatalogOperationNotificationsChanged,
+  catalogOperationNotificationStorageKey,
+  clearCatalogOperationNotifications,
+  readCatalogOperationNotificationInbox,
+  removeCatalogOperationNotification,
+  writeCatalogOperationNotificationInbox,
+  type StoredCatalogOperationNotification,
+} from "@/lib/catalog-operation-notifications";
 
 type OperationStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 type OperationKind = "snapshot" | "restore" | "clear" | "refresh" | "database_sync";
@@ -26,6 +37,11 @@ type OperationFeedItem = {
   currentStep: string;
   error: string | null;
   manualActionCount: number;
+  manualAction: {
+    label: string;
+    description: string;
+    href: string;
+  } | null;
   updatedAt: string;
 };
 
@@ -34,14 +50,7 @@ type OperationFeed = {
   operations: OperationFeedItem[];
 };
 
-type CompletionNotification = OperationFeedItem & {
-  tone: "success" | "danger" | "attention";
-  title: string;
-  description: string;
-  href: string | null;
-  linkLabel: string | null;
-  expiresAt: number;
-};
+type CompletionNotification = StoredCatalogOperationNotification;
 
 type PanelPosition = {
   top: number;
@@ -52,16 +61,10 @@ type PanelPosition = {
 const INITIAL_LOOKBACK_MS = 15 * 60 * 1000;
 const POLL_INTERVAL_MS = 10_000;
 const NOTIFICATION_TIMEOUT_MS = 30_000;
-const MAX_INBOX_NOTIFICATIONS = 50;
-
-function notificationStorageKey(userId: string, suffix: string) {
-  return `bc-demoenv:operation-notifications:${userId}:${suffix}`;
-}
-
 function readSeenIds(userId: string) {
   try {
     const value = JSON.parse(
-      window.localStorage.getItem(notificationStorageKey(userId, "seen")) || "[]",
+      window.localStorage.getItem(catalogOperationNotificationStorageKey(userId, "seen")) || "[]",
     );
     return new Set<number>(
       Array.isArray(value) ? value.filter((id): id is number => typeof id === "number") : [],
@@ -74,7 +77,7 @@ function readSeenIds(userId: string) {
 function writeSeenIds(userId: string, seenIds: Set<number>) {
   try {
     window.localStorage.setItem(
-      notificationStorageKey(userId, "seen"),
+      catalogOperationNotificationStorageKey(userId, "seen"),
       JSON.stringify([...seenIds].slice(-100)),
     );
   } catch {
@@ -82,40 +85,10 @@ function writeSeenIds(userId: string, seenIds: Set<number>) {
   }
 }
 
-function readInbox(userId: string) {
-  try {
-    const value = JSON.parse(
-      window.localStorage.getItem(notificationStorageKey(userId, "inbox")) || "[]",
-    );
-    if (!Array.isArray(value)) return [];
-    return value.filter((item): item is CompletionNotification => (
-      typeof item === "object"
-      && item !== null
-      && typeof item.id === "number"
-      && typeof item.title === "string"
-      && typeof item.description === "string"
-      && (item.tone === "success" || item.tone === "danger" || item.tone === "attention")
-    )).slice(0, MAX_INBOX_NOTIFICATIONS);
-  } catch {
-    return [];
-  }
-}
-
-function writeInbox(userId: string, notifications: CompletionNotification[]) {
-  try {
-    window.localStorage.setItem(
-      notificationStorageKey(userId, "inbox"),
-      JSON.stringify(notifications.slice(0, MAX_INBOX_NOTIFICATIONS)),
-    );
-  } catch {
-    // The current tab retains its in-memory inbox when storage is unavailable.
-  }
-}
-
 function readLastCheckedAt(userId: string) {
   try {
     const stored = Number(
-      window.localStorage.getItem(notificationStorageKey(userId, "checked-at")),
+      window.localStorage.getItem(catalogOperationNotificationStorageKey(userId, "checked-at")),
     );
     return Number.isFinite(stored) && stored > 0 ? stored : null;
   } catch {
@@ -188,9 +161,10 @@ function toNotification(operation: OperationFeedItem, shownAt: number): Completi
       ...operation,
       tone: "attention",
       title: "Restore needs manual action",
-      description: `${operation.manualActionCount} manual action${operation.manualActionCount === 1 ? "" : "s"} remain for ${target}. Open the channel to review History.`,
-      href: link.href,
-      linkLabel: link.label,
+      description: operation.manualAction?.description
+        || `${operation.manualActionCount} manual action${operation.manualActionCount === 1 ? "" : "s"} remain for ${target}.`,
+      href: operation.manualAction?.href || link.href,
+      linkLabel: operation.manualAction?.label || link.label,
       expiresAt: shownAt + NOTIFICATION_TIMEOUT_MS,
     };
   }
@@ -230,6 +204,27 @@ function BellIcon() {
       <path d="M10 21h4" />
     </svg>
   );
+}
+
+function NotificationActionLink({
+  href,
+  label,
+  className,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  className: string;
+  onClick: () => void;
+}) {
+  if (/^https?:\/\//i.test(href)) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" onClick={onClick} className={className}>
+        {label} →
+      </a>
+    );
+  }
+  return <Link href={href} onClick={onClick} className={className}>{label} →</Link>;
 }
 
 function notificationStyles(tone: CompletionNotification["tone"], compact = false) {
@@ -276,10 +271,30 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
     };
   }, []);
 
+  const markNotificationsSeen = useCallback((notificationIds: number[]) => {
+    const nextSeenIds = seenIds.current ?? readSeenIds(userId);
+    notificationIds.forEach((notificationId) => nextSeenIds.add(notificationId));
+    seenIds.current = nextSeenIds;
+    writeSeenIds(userId, nextSeenIds);
+  }, [userId]);
+
   const removeNotification = useCallback((notificationId: number) => {
-    setNotifications((current) => current.filter((item) => item.id !== notificationId));
+    markNotificationsSeen([notificationId]);
+    const nextNotifications = removeCatalogOperationNotification(
+      userId,
+      notificationId,
+      "center",
+    );
+    setNotifications(nextNotifications);
     setToastNotifications((current) => current.filter((item) => item.id !== notificationId));
-  }, []);
+  }, [markNotificationsSeen, userId]);
+
+  const clearNotifications = useCallback(() => {
+    markNotificationsSeen(notifications.map((notification) => notification.id));
+    clearCatalogOperationNotifications(userId, "center");
+    setNotifications([]);
+    setToastNotifications([]);
+  }, [markNotificationsSeen, notifications, userId]);
 
   const poll = useCallback(async () => {
     if (polling.current) return;
@@ -290,7 +305,13 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
       if (disposed.current) return;
       const feed = await response.json() as OperationFeed;
       const now = Date.parse(feed.generatedAt) || Date.now();
-      if (!seenIds.current) seenIds.current = readSeenIds(userId);
+      if (!seenIds.current) {
+        const nextSeenIds = readSeenIds(userId);
+        readCatalogOperationNotificationInbox(userId).forEach(
+          (notification) => nextSeenIds.add(notification.id),
+        );
+        seenIds.current = nextSeenIds;
+      }
       if (lastCheckedAt.current === null) {
         lastCheckedAt.current = readLastCheckedAt(userId) ?? now - INITIAL_LOOKBACK_MS;
       }
@@ -335,7 +356,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
         setNotifications((current) => [
           ...nextNotifications,
           ...current.filter((item) => !nextNotifications.some((next) => next.id === item.id)),
-        ].slice(0, MAX_INBOX_NOTIFICATIONS));
+        ].slice(0, MAX_CATALOG_OPERATION_NOTIFICATIONS));
         setToastNotifications((current) => [
           ...nextNotifications,
           ...current.filter((item) => !nextNotifications.some((next) => next.id === item.id)),
@@ -344,7 +365,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
       lastCheckedAt.current = now;
       try {
         window.localStorage.setItem(
-          notificationStorageKey(userId, "checked-at"),
+          catalogOperationNotificationStorageKey(userId, "checked-at"),
           String(now),
         );
       } catch {
@@ -389,7 +410,12 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
     let cancelled = false;
     window.queueMicrotask(() => {
       if (cancelled) return;
-      setNotifications(readInbox(userId));
+      const inbox = readCatalogOperationNotificationInbox(userId);
+      const nextSeenIds = readSeenIds(userId);
+      inbox.forEach((notification) => nextSeenIds.add(notification.id));
+      seenIds.current = nextSeenIds;
+      writeSeenIds(userId, nextSeenIds);
+      setNotifications(inbox);
       setInboxLoaded(true);
     });
     return () => {
@@ -399,16 +425,45 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (!inboxLoaded) return;
-    writeInbox(userId, notifications);
+    writeCatalogOperationNotificationInbox(userId, notifications);
+    broadcastCatalogOperationNotificationsChanged(userId, "center");
   }, [inboxLoaded, notifications, userId]);
 
   useEffect(() => {
-    const inboxKey = notificationStorageKey(userId, "inbox");
+    const inboxKey = catalogOperationNotificationStorageKey(userId, "inbox");
+    const syncInbox = () => {
+      const inbox = readCatalogOperationNotificationInbox(userId);
+      const inboxIds = new Set(inbox.map((notification) => notification.id));
+      setNotifications(inbox);
+      setToastNotifications((current) => current.filter(
+        (notification) => inboxIds.has(notification.id),
+      ));
+    };
     const onStorage = (event: StorageEvent) => {
-      if (event.key === inboxKey) setNotifications(readInbox(userId));
+      if (event.key === inboxKey) syncInbox();
+    };
+    const onNotificationsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        userId?: string;
+        source?: "center" | "external";
+      }>).detail;
+      if (
+        detail?.source !== "center"
+        && (!detail?.userId || detail.userId === userId)
+      ) syncInbox();
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(
+      CATALOG_OPERATION_NOTIFICATIONS_CHANGED,
+      onNotificationsChanged,
+    );
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(
+        CATALOG_OPERATION_NOTIFICATIONS_CHANGED,
+        onNotificationsChanged,
+      );
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -499,10 +554,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
               {notifications.length > 0 ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    setNotifications([]);
-                    setToastNotifications([]);
-                  }}
+                  onClick={clearNotifications}
                   className="rounded-md border border-black/10 px-2.5 py-1 text-[10px] font-semibold text-black/55 transition hover:bg-black/5 hover:text-black dark:border-white/10 dark:text-white/55 dark:hover:bg-white/8 dark:hover:text-white"
                 >
                   Delete all
@@ -529,9 +581,12 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                             {new Date(notification.updatedAt).toLocaleString()}
                           </time>
                           {notification.href && notification.linkLabel ? (
-                            <Link href={notification.href} onClick={() => setIsOpen(false)} className="shrink-0 text-[10px] font-semibold hover:underline">
-                              {notification.linkLabel} →
-                            </Link>
+                            <NotificationActionLink
+                              href={notification.href}
+                              label={notification.linkLabel}
+                              onClick={() => setIsOpen(false)}
+                              className="shrink-0 text-[10px] font-semibold hover:underline"
+                            />
                           ) : null}
                         </div>
                       </div>
@@ -569,9 +624,12 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                     <p className="text-sm font-semibold">{notification.title}</p>
                     <p className="mt-1 line-clamp-3 text-xs leading-5 text-current/70">{notification.description}</p>
                     {notification.href && notification.linkLabel ? (
-                      <Link href={notification.href} onClick={() => setToastNotifications((current) => current.filter((item) => item.id !== notification.id))} className="mt-3 inline-flex rounded-lg border border-current/25 px-2.5 py-1.5 text-xs font-semibold transition hover:bg-white/10">
-                        {notification.linkLabel} →
-                      </Link>
+                      <NotificationActionLink
+                        href={notification.href}
+                        label={notification.linkLabel}
+                        onClick={() => setToastNotifications((current) => current.filter((item) => item.id !== notification.id))}
+                        className="mt-3 inline-flex rounded-lg border border-current/25 px-2.5 py-1.5 text-xs font-semibold transition hover:bg-white/10"
+                      />
                     ) : null}
                   </div>
                   <button
