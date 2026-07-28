@@ -12,6 +12,7 @@ import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
 import { CatalogLocaleSelector } from "@/components/catalog-locale-selector";
 import { ChannelManualActionWarning } from "@/components/channel-manual-action-warning";
+import { AppTranslatedText } from "@/components/app-i18n-provider";
 import { requireAppUser } from "@/lib/auth";
 import { getChannelCatalog } from "@/lib/bigcommerce-catalog";
 import {
@@ -95,8 +96,7 @@ export default async function ChannelPage({
   });
   const channelTitle = catalog.channel?.name ?? "Channel catalog";
   const channelMetadata = [catalog.channel?.type, catalog.channel?.platform]
-    .filter(Boolean)
-    .join(" · ");
+    .filter((value): value is string => Boolean(value));
   const selectedCategory = Number.isSafeInteger(parsedCategoryId)
     ? findCatalogCategory(catalog.categories, parsedCategoryId)
     : null;
@@ -133,9 +133,14 @@ export default async function ChannelPage({
               <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
                 <span className="inline-flex items-center gap-3">{channelTitle}<CatalogActivityBadge environmentId={catalog.environment.id} channelId={catalog.channel?.id} /></span>
               </h1>
-              {channelMetadata ? (
+              {channelMetadata.length > 0 ? (
                 <p className="mt-3 text-xs capitalize text-black/40 dark:text-white/40">
-                  {channelMetadata}
+                  {channelMetadata.map((value, index) => (
+                    <span key={value}>
+                      {index > 0 ? " · " : null}
+                      <AppTranslatedText message={value.charAt(0).toUpperCase() + value.slice(1)} />
+                    </span>
+                  ))}
                 </p>
               ) : null}
           </div>

@@ -99,10 +99,11 @@ function DateTimeStack({
   value: string;
   className?: string;
 }) {
+  const { t } = useAppI18n();
   const timestamp = parseTimestamp(value);
   if (timestamp === null) {
     return (
-      <span className={`block leading-tight text-black/40 dark:text-white/40 ${className}`} title={value || "Missing timestamp"}>
+      <span className={`block leading-tight text-black/40 dark:text-white/40 ${className}`} title={value || t("Missing timestamp")}>
         Date unavailable
       </span>
     );
@@ -160,12 +161,13 @@ function SortButton({
   sort: SortState;
   onSort: (key: SortKey) => void;
 }) {
+  const { t, locale } = useAppI18n();
   const active = sort.key === sortKey;
   return (
     <button
       type="button"
       onClick={() => onSort(sortKey)}
-      title={`Sort by ${label.toLocaleLowerCase("en-US")}`}
+      title={t("Sort by {column}", { column: label.toLocaleLowerCase(locale) })}
       className="inline-flex max-w-full items-center gap-0.5 overflow-hidden text-left font-semibold leading-tight text-black/50 transition hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:text-white/50 dark:hover:text-white"
     >
       <span className="truncate">{label}</span>
@@ -297,7 +299,7 @@ function OperationDetailsModal({
             <div><dt className="text-xs text-black/40 dark:text-white/40">Started</dt><dd className="mt-1 text-sm">{formatDateTime(operation.createdAt)}</dd></div>
             <div><dt className="text-xs text-black/40 dark:text-white/40">Last update</dt><dd className="mt-1 text-sm">{formatDateTime(operation.updatedAt)}</dd></div>
             <div><dt className="text-xs text-black/40 dark:text-white/40">Duration</dt><dd className="mt-1 text-sm">{formatDuration(operation.durationMs)}</dd></div>
-            <div><dt className="text-xs text-black/40 dark:text-white/40">Snapshot</dt><dd className="mt-1 text-sm">{operation.snapshotName}{operation.snapshotVersion ? ` · version ${operation.snapshotVersion}` : ""}</dd></div>
+            <div><dt className="text-xs text-black/40 dark:text-white/40">Snapshot</dt><dd className="mt-1 text-sm">{operation.snapshotName}{operation.snapshotVersion ? ` ${t("· version {version}", { version: operation.snapshotVersion })}` : ""}</dd></div>
           </dl>
 
           {operation.metrics.length > 0 ? (
@@ -405,7 +407,7 @@ export function CatalogOperationsTable({
   generatedAt: string;
 }) {
   const router = useRouter();
-  const { t } = useAppI18n();
+  const { t, locale } = useAppI18n();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"all" | OperationKind>("all");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -438,7 +440,7 @@ export function CatalogOperationsTable({
   )].toSorted(collator.compare), [operations]);
 
   const filteredOperations = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("en-US");
+    const normalizedQuery = query.trim().toLocaleLowerCase(locale);
     const now = parseTimestamp(generatedAt) ?? 0;
     const dateThreshold = dateRange === "today"
       ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
@@ -482,9 +484,9 @@ export function CatalogOperationsTable({
         operation.currentStep,
         operation.error,
         ...operation.warnings,
-      ].some((value) => String(value ?? "").toLocaleLowerCase("en-US").includes(normalizedQuery));
+      ].some((value) => String(value ?? "").toLocaleLowerCase(locale).includes(normalizedQuery));
     }).toSorted(compare);
-  }, [attention, dateRange, environment, generatedAt, kind, operations, query, sort, status]);
+  }, [attention, dateRange, environment, generatedAt, kind, locale, operations, query, sort, status]);
 
   const hasFilters = Boolean(
     query || kind !== "all" || status !== "all" || environment !== "all" ||
@@ -545,7 +547,7 @@ export function CatalogOperationsTable({
                 <th scope="col" aria-sort={sort.key === "status" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Status" sortKey="status" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "target" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Environment / channel" sortKey="target" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "snapshot" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Snapshot" sortKey="snapshot" sort={sort} onSort={changeSort} /></th>
-                <th scope="col" aria-sort={sort.key === "progress" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Progress / result" sortKey="progress" sort={sort} onSort={changeSort} /></th>
+                <th scope="col" aria-sort={sort.key === "progress" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label={t("Progress / result")} sortKey="progress" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "updatedAt" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Last update" sortKey="updatedAt" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" aria-sort={sort.key === "duration" ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="overflow-hidden px-2 py-3"><SortButton label="Duration" sortKey="duration" sort={sort} onSort={changeSort} /></th>
                 <th scope="col" className="px-2 py-3 text-right font-semibold text-black/50 dark:text-white/50">Actions</th>
@@ -570,7 +572,7 @@ export function CatalogOperationsTable({
                   <td className="overflow-hidden px-2 py-3" title={t(operation.currentStep)}>{operation.showProgress ? <><div className="flex min-w-0 items-center justify-between gap-2"><span className="block min-w-0 truncate text-black/55 dark:text-white/55">{t(operation.currentStep)}</span><span className="shrink-0 font-semibold">{operation.progressPercent}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/10"><div className={`h-full rounded-full ${operation.status === "failed" ? "bg-red-500" : operation.status === "cancelled" ? "bg-neutral-500" : "bg-emerald-500"}`} style={{ width: `${operation.progressPercent}%` }} /></div></> : <span className="block truncate text-black/55 dark:text-white/55">{t(operation.currentStep)}</span>}</td>
                   <td className="overflow-hidden px-2 py-3 text-black/50 dark:text-white/50"><DateTimeStack value={operation.updatedAt} /></td>
                   <td className="overflow-hidden whitespace-nowrap px-2 py-3 font-medium"><span className="block truncate">{formatDuration(operation.durationMs)}</span></td>
-                  <td className="px-2 py-3"><div className="flex items-center justify-end gap-1">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={`Open workflow for ${operation.title}`} title="Open workflow" className="grid size-6 shrink-0 place-items-center rounded-md border border-sky-500/25 text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300"><WorkflowIcon /></Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} aria-label={`View details for ${operation.title}`} title="View details" className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"><DetailsIcon /></button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={`${t(operation.resourceLabel)} for ${operation.title}`} title={t(operation.resourceLabel)} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300"><OpenIcon /></Link> : null}</div></td>
+                  <td className="px-2 py-3"><div className="flex items-center justify-end gap-1">{operation.workflowRunId ? <Link href={`/operations/workflows?operation=${operation.id}`} aria-label={t("{action} for {target}", { action: t("Open workflow"), target: operation.title })} title="Open workflow" className="grid size-6 shrink-0 place-items-center rounded-md border border-sky-500/25 text-sky-700 transition hover:bg-sky-500/8 dark:text-sky-300"><WorkflowIcon /></Link> : null}<button type="button" onClick={() => setSelectedKey(operation.activityKey)} aria-label={t("{action} for {target}", { action: t("View details"), target: operation.title })} title="View details" className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"><DetailsIcon /></button>{operation.resourceHref ? <Link href={operation.resourceHref} aria-label={t("{action} for {target}", { action: t(operation.resourceLabel), target: operation.title })} title={t(operation.resourceLabel)} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 text-emerald-700 transition hover:bg-emerald-500/8 dark:border-white/10 dark:text-emerald-300"><OpenIcon /></Link> : null}</div></td>
                 </tr>
               ))}
             </tbody>

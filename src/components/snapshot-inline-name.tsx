@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { renameSnapshot } from "@/app/(app)/snapshots/rename-actions";
 import { PublishedIcon } from "@/components/action-icons";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 export function SnapshotInlineName({
   snapshotId,
@@ -15,6 +16,7 @@ export function SnapshotInlineName({
   published?: boolean;
 }) {
   const router = useRouter();
+  const { t } = useAppI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [currentName, setCurrentName] = useState(name);
   const [draftName, setDraftName] = useState(name);
@@ -43,7 +45,7 @@ export function SnapshotInlineName({
     startTransition(async () => {
       const result = await renameSnapshot(snapshotId, draftName);
       if (result.error || !result.name) {
-        setError(result.error ?? "The snapshot could not be renamed.");
+        setError(result.error ?? t("The snapshot could not be renamed."));
         return;
       }
       setCurrentName(result.name);
@@ -99,7 +101,7 @@ export function SnapshotInlineName({
         <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
           <button
             type="button"
-            aria-label={`Rename snapshot ${currentName}`}
+            aria-label={t("Rename snapshot {name}", { name: currentName })}
             className="break-words rounded-sm text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600"
             onDoubleClick={beginEditing}
             onKeyDown={(event) => {

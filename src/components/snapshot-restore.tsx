@@ -11,6 +11,7 @@ import {
 import type { CatalogRestoreDestination } from "@/lib/catalog-restore";
 import { finishCatalogOperation, startCatalogOperation, useCatalogOperationActive } from "@/components/catalog-operation-progress";
 import { RestoreIcon } from "@/components/action-icons";
+import { useAppI18n } from "@/components/app-i18n-provider";
 import {
   isSnapshotRestoreGroupRestorable,
   SNAPSHOT_RESTORE_GROUPS,
@@ -88,6 +89,7 @@ type CompletedRestorePreflight = NonNullable<
 >;
 
 function PreflightComparison({ result }: { result: CompletedRestorePreflight }) {
+  const { t } = useAppI18n();
   const catalogRows = result.catalog
     ? [
         {
@@ -220,7 +222,7 @@ function PreflightComparison({ result }: { result: CompletedRestorePreflight }) 
       {result.warnings.length > 0 ? (
         <div className="border-t border-amber-500/20 bg-amber-500/7 px-4 py-3 text-[11px] leading-4 text-amber-950 dark:text-amber-100">
           <p className="font-semibold">Warnings ({result.warnings.length})</p>
-          <ul className="mt-1 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+          <ul className="mt-1 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{t(warning)}</li>)}</ul>
         </div>
       ) : null}
       {result.blockingIssues.length > 0 ? (
@@ -287,6 +289,7 @@ export function SnapshotRestore({
   matchSourceDestination?: boolean;
   stepNames?: string[];
 }) {
+  const { t } = useAppI18n();
   const router = useRouter();
   const isChannelSurface = initialDestinationEnvironmentId !== undefined && initialDestinationChannelId !== undefined;
   const isActionInProgress = useCatalogOperationActive(
@@ -840,12 +843,12 @@ export function SnapshotRestore({
                     )}
 
                     {showActionFeedback && state.status === "error" ? (
-                      <div role="alert" className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/8 p-4 text-sm text-red-800 dark:text-red-200">{state.message}</div>
+                      <div role="alert" className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/8 p-4 text-sm text-red-800 dark:text-red-200">{t(state.message)}</div>
                     ) : null}
 
                     {preflightPassed ? (
                       <div className="mt-4">
-                        <label htmlFor="restore-confirmation" className="text-sm font-medium">Type <span className="font-mono">RESTORE</span> to confirm</label>
+                        <label htmlFor="restore-confirmation" className="text-sm font-medium">{t("Type {code} to confirm", { code: "RESTORE" })}</label>
                         <input
                           id="restore-confirmation"
                           name="confirmation"

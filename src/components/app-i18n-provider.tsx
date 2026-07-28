@@ -216,6 +216,17 @@ export function useAppI18n() {
   return value;
 }
 
+export function AppTranslatedText({
+  message,
+  values,
+}: {
+  message: string;
+  values?: TranslationValues;
+}) {
+  const { t } = useAppI18n();
+  return t(message, values);
+}
+
 export function AppLocaleSynchronizer({ locale }: { locale: AppLocale }) {
   const { locale: activeLocale, setLocale } = useAppI18n();
 

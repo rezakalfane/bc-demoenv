@@ -212,7 +212,7 @@ export function SchedulerWorkspace({
       const result = await toggleSchedule(schedule.id);
       if (result.error || result.enabled === null) {
         setEnabledBySchedule((current) => ({ ...current, [schedule.id]: currentEnabled }));
-        setToggleError(result.error ?? "The schedule could not be updated.");
+        setToggleError(result.error ?? t("The schedule could not be updated."));
       } else {
         setEnabledBySchedule((current) => ({ ...current, [schedule.id]: result.enabled! }));
       }
@@ -237,7 +237,7 @@ export function SchedulerWorkspace({
         error?: string;
       };
       if (!response.ok || !Array.isArray(body.destinations)) {
-        throw new Error(body.error ?? "The live BigCommerce destinations could not be loaded.");
+        throw new Error(body.error ?? t("The live BigCommerce destinations could not be loaded."));
       }
       return body.destinations;
     })();
@@ -252,14 +252,14 @@ export function SchedulerWorkspace({
       return nextDestinations;
     } catch (error) {
       setDestinationsError(
-        error instanceof Error ? error.message : "The live BigCommerce destinations could not be loaded.",
+        error instanceof Error ? error.message : t("The live BigCommerce destinations could not be loaded."),
       );
       return [];
     } finally {
       destinationsRequestRef.current = null;
       setDestinationsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadDestinations(), 0);
@@ -419,17 +419,19 @@ export function SchedulerWorkspace({
                         disabled={mutating || actionResourceActive}
                         onClick={() => startTransition(() => void runScheduleNow(schedule.id))}
                         className="grid size-6 shrink-0 place-items-center rounded-md border border-emerald-500/25 text-emerald-700 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300"
-                        aria-label={actionResourceActive ? `The same action is already running for ${schedule.channelName}` : `Run ${schedule.name} now`}
+                        aria-label={actionResourceActive
+                          ? t("The same action is already running for {channel}", { channel: schedule.channelName })
+                          : t("Run {name} now", { name: schedule.name })}
                         title={actionResourceActive ? "This action is already running for the channel" : "Run now"}
                       ><RunIcon /></button>
-                      <button type="button" onClick={() => openSchedule(schedule)} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5" aria-label={`Edit ${schedule.name}`} title="Edit schedule"><EditIcon /></button>
-                      <button type="button" disabled={togglePending} onClick={() => toggleScheduleOptimistically(schedule)} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 disabled:cursor-wait disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5" aria-label={`${scheduleEnabled ? "Pause" : "Resume"} ${schedule.name}`} title={scheduleEnabled ? "Pause schedule" : "Resume schedule"}>{scheduleEnabled ? <PauseIcon /> : <ResumeIcon />}</button>
+                      <button type="button" onClick={() => openSchedule(schedule)} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5" aria-label={t("Edit {title}", { title: schedule.name })} title="Edit schedule"><EditIcon /></button>
+                      <button type="button" disabled={togglePending} onClick={() => toggleScheduleOptimistically(schedule)} className="grid size-6 shrink-0 place-items-center rounded-md border border-black/10 transition hover:bg-black/5 disabled:cursor-wait disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5" aria-label={t("{action} {target}", { action: t(scheduleEnabled ? "Pause" : "Resume"), target: schedule.name })} title={scheduleEnabled ? "Pause schedule" : "Resume schedule"}>{scheduleEnabled ? <PauseIcon /> : <ResumeIcon />}</button>
                       <button
                         type="button"
                         disabled={mutating}
                         onClick={async () => {
                           const confirmed = await confirmation({
-                            title: `Delete ${schedule.name}?`,
+                            title: t("Delete {name}?", { name: schedule.name }),
                             description: "This schedule will stop running and will be removed. Previous operation history is preserved.",
                             confirmLabel: "Delete schedule",
                             tone: "danger",
@@ -437,7 +439,7 @@ export function SchedulerWorkspace({
                           if (confirmed) startTransition(() => void removeSchedule(schedule.id));
                         }}
                         className="grid size-6 shrink-0 place-items-center rounded-md border border-red-500/20 text-red-600 transition hover:bg-red-500/10 disabled:opacity-40 dark:text-red-300"
-                        aria-label={`Delete ${schedule.name}`}
+                        aria-label={t("Delete {title}", { title: schedule.name })}
                         title="Delete schedule"
                       ><DeleteIcon /></button>
                     </div></td>
@@ -496,7 +498,7 @@ export function SchedulerWorkspace({
                   {frequency === "weekly" ? <label><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Weekday</span><select name="weekday" value={weekday} onChange={(event) => setWeekday(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/12 bg-[#171a18] px-3 py-2.5">{WEEKDAYS.map((day, index) => <option key={day} value={index}>{t(day)}</option>)}</select></label> : null}
                   <label className={frequency === "daily" ? "sm:col-span-2" : ""}><span className="text-xs font-semibold uppercase tracking-wider text-white/45">Timezone</span><input name="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} required className="mt-2 w-full rounded-xl border border-white/12 bg-white/5 px-3 py-2.5" /></label>
                 </div>
-                <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 text-sm text-white/65"><span className="font-semibold text-emerald-300">Cadence preview</span><p className="mt-1">{frequency === "daily" ? "Every day" : `Every ${WEEKDAYS[weekday]}`} at {localTime || "—"} in {timezone || "—"}.</p></div>
+                <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 text-sm text-white/65"><span className="font-semibold text-emerald-300">Cadence preview</span><p className="mt-1">{frequency === "daily" ? "Every day" : t("Every {weekday}", { weekday: t(WEEKDAYS[weekday]) })} at {localTime || "—"} in {timezone || "—"}.</p></div>
               </section>
 
               <section data-scheduler-step="3" hidden={step !== 3}>
@@ -506,8 +508,8 @@ export function SchedulerWorkspace({
                   <div><dt className="text-xs uppercase tracking-wider text-white/35">Schedule</dt><dd className="mt-1 font-semibold">{scheduleName || "Untitled schedule"}</dd></div>
                   <div><dt className="text-xs uppercase tracking-wider text-white/35">Action</dt><dd className="mt-1 font-semibold">{actionLabel(action)}</dd></div>
                   <div><dt className="text-xs uppercase tracking-wider text-white/35">Destination</dt><dd className="mt-1 font-semibold">{selectedEnvironment?.name ?? "—"} · {selectedChannel?.name ?? "—"}</dd></div>
-                  <div><dt className="text-xs uppercase tracking-wider text-white/35">Cadence</dt><dd className="mt-1 font-semibold">{frequency === "daily" ? "Daily" : WEEKDAYS[weekday]} at {localTime} · {timezone}</dd></div>
-                  {["restore", "refresh"].includes(action) ? <div className="sm:col-span-2"><dt className="text-xs uppercase tracking-wider text-white/35">Snapshot source</dt><dd className="mt-1 font-semibold">{selectedSnapshot ? `${selectedSnapshot.name} · version ${selectedSnapshot.snapshotVersion} · ${selectedSnapshot.sourceChannelName}` : "—"}</dd></div> : null}
+                  <div><dt className="text-xs uppercase tracking-wider text-white/35">Cadence</dt><dd className="mt-1 font-semibold">{frequency === "daily" ? t("Daily") : t(WEEKDAYS[weekday])} at {localTime} · {timezone}</dd></div>
+                  {["restore", "refresh"].includes(action) ? <div className="sm:col-span-2"><dt className="text-xs uppercase tracking-wider text-white/35">Snapshot source</dt><dd className="mt-1 font-semibold">{selectedSnapshot ? `${selectedSnapshot.name} ${t("· version {version}", { version: selectedSnapshot.snapshotVersion })} · ${selectedSnapshot.sourceChannelName}` : "—"}</dd></div> : null}
                 </dl>
                 {state.status === "error" ? <p role="alert" className="mt-4 rounded-xl bg-red-500/12 p-3 text-sm text-red-300">{state.message}</p> : null}
               </section>

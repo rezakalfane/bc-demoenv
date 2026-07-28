@@ -58,7 +58,11 @@
       "snapshot_metadata": "Snapshot metadata:",
       "published_read_only_manifest": "Published read-only manifest",
       "restoration_ready_manifest": "Restoration-ready manifest",
-      "settings_in": "Settings in"
+      "settings_in": "Settings in",
+      "count_tag": "{count} tag",
+      "count_tags": "{count} tags",
+      "snapshot_version_number": "Snapshot version {version}",
+      "published_version_number": "Published version {version}"
     },
     "actions": {
       "add_a_custom_snapshot_tag": "Add a custom snapshot tag",
@@ -66,6 +70,8 @@
       "add_custom_tag": "Add custom tag",
       "create_new_version": "Create new version",
       "create_version": "Create version",
+      "create_version_number": "Create version {version}",
+      "capturing_version_number": "Capturing version {version}…",
       "delete_snapshot": "Delete snapshot",
       "delete_version": "Delete version",
       "show_shared_snapshots": "Show shared snapshots",
@@ -90,7 +96,9 @@
       "deleting": "Deleting…",
       "publish": "Publish",
       "unpublish": "Unpublish",
-      "search_snapshots": "Search snapshots…"
+      "search_snapshots": "Search snapshots…",
+      "remove_tag": "Remove tag {tag}",
+      "rename_snapshot_name": "Rename snapshot {name}"
     },
     "help": {
       "catalog_templates": "Browse restoration-ready catalog captures from your demo environments. Create a snapshot from any channel catalog page.",
@@ -125,13 +133,13 @@
       "captured_settings_close": "Close captured settings",
       "captured_tree": "Captured tree",
       "preparing_snapshot": "Preparing snapshot…",
-      "starting_capture": "Starting capture…"
-      ,"capturing_brands_tax_classes_currency": "Capturing brands, tax classes, and store currency"
-      ,"capturing_channel_storefront_configuration": "Capturing channel and storefront configuration"
-      ,"capturing_effective_storefront_settings": "Capturing effective storefront settings"
-      ,"capturing_currency_price_lists": "Capturing currency and price-list configuration"
-      ,"capturing_shipping_configuration": "Capturing shipping configuration"
-      ,"capturing_tax_configuration": "Capturing tax configuration"
+      "starting_capture": "Starting capture…",
+      "capturing_brands_tax_classes_currency": "Capturing brands, tax classes, and store currency",
+      "capturing_channel_storefront_configuration": "Capturing channel and storefront configuration",
+      "capturing_effective_storefront_settings": "Capturing effective storefront settings",
+      "capturing_currency_price_lists": "Capturing currency and price-list configuration",
+      "capturing_shipping_configuration": "Capturing shipping configuration",
+      "capturing_tax_configuration": "Capturing tax configuration"
     },
     "messages": {
       "snapshot_capture_started_in_the_background": "Snapshot capture started in the background.",
@@ -148,7 +156,8 @@
     "errors": {
       "the_tag_could_not_be_removed_please_try_again": "The tag could not be removed. Please try again.",
       "the_tag_could_not_be_saved_please_try_again": "The tag could not be saved. Please try again.",
-      "this_snapshot_does_not_contain_a_category_tree": "This snapshot does not contain a category tree."
+      "this_snapshot_does_not_contain_a_category_tree": "This snapshot does not contain a category tree.",
+      "snapshot_could_not_be_renamed": "The snapshot could not be renamed."
     }
   },
   "settings": {
@@ -194,7 +203,9 @@
       "failure": "Failure",
       "needs_attention": "Needs attention",
       "this_action_cannot_be_undone": "This action cannot be undone.",
-      "date_unavailable": "Date unavailable"
+      "date_unavailable": "Date unavailable",
+      "display_preference_not_saved": "The display preference could not be saved.",
+      "shared_preference_not_saved": "The shared snapshot preference could not be saved."
     },
     "labels": {
       "access_test_completed": "Access test completed.",
@@ -305,6 +316,7 @@
       "status": "Status",
       "updated": "Updated",
       "updated_date": "Updated date",
+      "prelaunch": "Prelaunch",
       "working": "Working…",
       "skipped": "Skipped",
       "unchanged": "Unchanged"
@@ -316,6 +328,8 @@
       "cancelled": "Cancelled",
       "change": "Change",
       "changed": "Changed",
+      "resource_changes": "{resource} changes",
+      "type_code_to_confirm": "Type {code} to confirm",
       "close": "Close",
       "continue": "Continue",
       "copy_run_id": "Copy run ID",
@@ -348,7 +362,14 @@
       "removed": "Removed",
       "tested": "Tested",
       "create_schedule": "Create schedule",
-      "email_login_link": "Email me a login link"
+      "email_login_link": "Email me a login link",
+      "action_for_target": "{action} for {target}",
+      "edit_title": "Edit {title}",
+      "action_target": "{action} {target}",
+      "resume": "Resume",
+      "search_label": "Search {label}",
+      "filter_label_by_tags": "Filter {label} by tags",
+      "label_display_options": "{label} display options"
     },
     "help": {
       "additional_changes_are_omitted_from_this_preview": "additional changes are omitted from this preview.",
@@ -388,7 +409,8 @@
       "connections": "Connections",
       "no_environments_saved": "No environments saved yet.",
       "environment_2": "environment",
-      "environments": "environments"
+      "environments": "environments",
+      "access_report_for_name": "Access report for {name}"
     },
     "actions": {
       "add_an_environment": "Add an environment",
@@ -497,7 +519,9 @@
       "operation_number": "Operation #{id}",
       "operations_sections": "Operations sections",
       "operations_2": "operations",
-      "operation": "Operation #"
+      "operation": "Operation #",
+      "missing_timestamp": "Missing timestamp",
+      "dot_version_number": "· version {version}"
     },
     "status": {
       "new_operation_results_will_appear_here": "New operation results will appear here."
@@ -510,11 +534,12 @@
       "search_operations": "Search operations",
       "search_operations_595dcd21": "Search operations…",
       "close_operation_details": "Close operation details",
-      "open_channel": "Open channel"
-      ,"open_snapshot": "Open snapshot"
-      ,"open_environment": "Open environment"
-      ,"open_database_settings": "Open database settings"
-      ,"view_resource": "View resource"
+      "open_channel": "Open channel",
+      "open_snapshot": "Open snapshot",
+      "open_environment": "Open environment",
+      "open_database_settings": "Open database settings",
+      "view_resource": "View resource",
+      "sort_by_column": "Sort by {column}"
     },
     "errors": {
       "the_clear_operation_could_not_be_started": "The clear operation could not be started."
@@ -569,11 +594,29 @@
       "products_2": "products",
       "prices": "prices",
       "price_unavailable": "Price unavailable",
-      "images": "images"
+      "images": "images",
+      "updated_on_date": "Updated {date}",
+      "created_on_date": "Created {date}",
+      "target_history": "{target} history",
+      "count_categories": "{count} categories",
+      "count_products": "{count} products",
+      "count_variants": "{count} variants",
+      "count_images": "{count} images",
+      "count_metafields": "{count} metafields",
+      "manifest_format_version": "Manifest format v{version}",
+      "snapshot_label_name": "Snapshot: {name}",
+      "snapshot_label_version_id": "Snapshot: {name} · version {version} · ID {id}",
+      "snapshot_updated_version": "Snapshot updated to version {version}",
+      "snapshot_version_published": "Snapshot version {version} published",
+      "history_counts": "{categories} categories · {products} products · {variants} variants",
+      "logo_and_favicon_settings": "logo and favicon settings",
+      "tax_classes": "tax classes"
     },
     "actions": {
       "clear": "Clear",
-      "clear_catalog": "Clear catalog"
+      "clear_catalog": "Clear catalog",
+      "collapse": "Collapse",
+      "expand": "Expand"
     },
     "status": {
       "clearing": "Clearing…"
@@ -602,6 +645,7 @@
       "no_durable_workflows": "No durable workflow runs have been recorded yet.",
       "no_workflows_match_filters": "No workflow runs match these filters.",
       "progress_checkpoint": "Progress / checkpoint",
+      "progress_result": "Progress / result",
       "runtime": "Runtime:"
     },
     "actions": {
@@ -633,6 +677,16 @@
       "fresh_environment_ready": "Fresh environment ready",
       "fresh_environment_warning": "Fresh environment ready with {count} warning",
       "fresh_environment_warnings": "Fresh environment ready with {count} warnings",
+      "loading_source_channel": "Loading source channel details",
+      "loading_category_tree": "Loading category tree {name}",
+      "loading_category_records": "Loading category records {start}–{end} of {total}",
+      "capturing_category_number": "Capturing category {current} of {total}: {name}",
+      "loading_product_records": "Loading product records {start}–{end} of {total}",
+      "capturing_product_number": "Capturing product {current} of {total}: {name} · {variants} variants · {images} images · metadata",
+      "ready_for_product_batches": "Ready to capture {count} products in resumable batches",
+      "capturing_channel_name": "Capturing channel: {name}",
+      "checking_b2b_channel": "Checking whether B2B Edition is enabled for this channel",
+      "capturing_locales_metadata": "Capturing locales, translations, and presentation metadata",
       "completed_warning": "Completed with {count} warning",
       "completed_warnings": "Completed with {count} warnings",
       "pushed_local_to_turso": "Pushed Local SQLite to Turso",
@@ -708,7 +762,8 @@
       "every_minute": "every minute",
       "once_per_day_2": "once per day",
       "dispatcher": "Dispatcher",
-      "this_browser_session": "This browser session"
+      "this_browser_session": "This browser session",
+      "every_weekday": "Every {weekday}"
     },
     "actions": {
       "delete_schedule": "Delete schedule",
@@ -718,7 +773,10 @@
       "weekly_backup": "+ Weekly backup",
       "create_a_schedule": "Create a schedule",
       "pause_schedule": "Pause schedule",
-      "resume_schedule": "Resume schedule"
+      "resume_schedule": "Resume schedule",
+      "same_action_running_for_channel": "The same action is already running for {channel}",
+      "run_name_now": "Run {name} now",
+      "delete_name_confirm": "Delete {name}?"
     },
     "help": {
       "every_minute": "Every minute",
@@ -743,7 +801,9 @@
     "errors": {
       "no_channels_available": "No channels available",
       "no_environments_available": "No environments available",
-      "this_action_is_already_running_for_the_channel": "This action is already running for the channel"
+      "this_action_is_already_running_for_the_channel": "This action is already running for the channel",
+      "schedule_could_not_be_updated": "The schedule could not be updated.",
+      "destinations_could_not_be_loaded": "The live BigCommerce destinations could not be loaded."
     }
   },
   "restore": {
@@ -852,7 +912,9 @@
       "pull_from_turso": "Pull from Turso",
       "push_to_turso": "Push to Turso",
       "download_backup": "Download backup",
-      "restore_backup": "Restore backup"
+      "restore_backup": "Restore backup",
+      "replace_database_from_backup": "Replace {database} from this backup?",
+      "restore_whole_database": "Restore whole database"
     },
     "status": {
       "active_development_database": "Active development DB",
@@ -870,6 +932,21 @@
       "add_your_email_to": "Add your email to",
       "to_enable_these_controls_in_production": "to enable these controls in production.",
       "local_setup": "alongside your Turso variables, then restart the dev server."
+    },
+    "messages": {
+      "restore_replaces_everything": "This completely replaces every application table in {database} with {file}, including all users' data. Current data will be lost. Active catalog workflows block the restore.",
+      "restore_destination_is_source": "The destination is the channel from which this snapshot was captured.",
+      "type_restore_to_confirm": "Type RESTORE to confirm the catalog replacement.",
+      "complete_backup_downloaded": "A complete {database} backup was downloaded.",
+      "preparing_database_backup": "Preparing the {database} backup…",
+      "restoring_database": "Restoring {database}…",
+      "restored_rows_across_tables": "Restored {rows} rows across {tables} tables.",
+      "restored_rows_skipped_note": "Restored {rows} rows across {tables} tables; skipped {skipped} legacy ownerless note.",
+      "restored_rows_skipped_notes": "Restored {rows} rows across {tables} tables; skipped {skipped} legacy ownerless notes."
+    },
+    "errors": {
+      "backup_failed": "The database backup failed.",
+      "restore_failed": "The database restore failed."
     }
   },
   "runtime": {
@@ -900,7 +977,15 @@
       "tags": "Tags",
       "tax": "Tax",
       "type_platform": "Type / platform",
-      "variants": "Variants"
+      "variants": "Variants",
+      "optional_configuration_available_of_total": "{available} of {total} tested optional API groups are available; capture remains best-effort.",
+      "b2b_channel_detected": "{count} B2B-enabled channel detected.",
+      "b2b_channels_detected": "{count} B2B-enabled channels detected.",
+      "capabilities_verified_review": "{count} capabilities verified; review missing scopes and unavailable APIs below.",
+      "b2b_channels_of_total_enabled": "{enabled} of {total} active channels are B2B enabled.",
+      "not_applicable_to_channels": "Not applicable to {platform} channels.",
+      "b2b_edition_channel_name": "B2B Edition · {name}",
+      "stencil_active_theme_channel_name": "Stencil active theme · {name}"
     },
     "actions": {
       "cancel_active_workflow": "Cancel this active workflow?",
@@ -1036,7 +1121,9 @@
       "rename_capture_active": "Wait for the active snapshot capture to finish before renaming it.",
       "backup_email_not_allowed": "Whole-database backup and restore require this email in DATABASE_BACKUP_ALLOWED_EMAILS.",
       "workflow_run_not_found": "Workflow run not found.",
-      "avatar_prepare_failed": "Your browser could not prepare the avatar image."
+      "avatar_prepare_failed": "Your browser could not prepare the avatar image.",
+      "add_scope_read_access": "Add {scope} read access to this API account.",
+      "bigcommerce_returned_http_status": "BigCommerce returned HTTP {status}."
     },
     "workflow_steps": {
       "finalize_refresh": "Finalize refresh",
@@ -1074,7 +1161,8 @@
       "notifications": "Notifications",
       "notifications_count_awaiting_deletion": "Notifications, {count} awaiting deletion",
       "manual_follow_up_action": "manual follow-up action",
-      "catalog_operation_notification_popups": "Catalog operation notification popups"
+      "catalog_operation_notification_popups": "Catalog operation notification popups",
+      "the_selected_catalog": "the selected catalog"
     },
     "messages": {
       "nothing_awaiting_deletion": "Nothing awaiting deletion",
@@ -1090,7 +1178,79 @@
       "clear_restore_failed": "Clear & Restore failed",
       "database_sync_failed": "Database sync failed",
       "target_is_ready": "{target} is ready.",
-      "development_databases_synchronized": "The development databases were synchronized."
+      "development_databases_synchronized": "The development databases were synchronized.",
+      "operation_failed_for_target": "The operation for {target} failed.",
+      "manual_action_remains_for_target": "{count} manual action remain for {target}.",
+      "manual_actions_remain_for_target": "{count} manual actions remain for {target}."
+    }
+  },
+  "diagnostics": {
+    "operations": {
+      "dashboard_and_environment_browsing": "Dashboard and environment browsing",
+      "browse_channel_catalogs": "Browse channel catalogs",
+      "capture_catalog_snapshots": "Capture catalog snapshots",
+      "capture_optional_configuration": "Capture optional configuration",
+      "restore_or_clear_catalog": "Restore or clear catalog",
+      "restore_optional_configuration": "Restore optional configuration",
+      "capture_b2b_edition_data": "Capture B2B Edition data",
+      "restore_b2b_edition_data": "Restore B2B Edition data"
+    },
+    "details": {
+      "channel_and_catalog_read_access_verified": "Channel and catalog read access is verified.",
+      "requires_products_and_channel_settings": "Requires Products and Channel Settings read access.",
+      "products_variants_categories_readable": "Products, variants, category trees, and channel assignments can be read.",
+      "required_catalog_capture_apis_available": "Required catalog capture APIs are available.",
+      "catalog_snapshots_require_read_access": "Catalog snapshots require Products and Channel Settings read access.",
+      "all_optional_configuration_apis_available": "All tested optional configuration APIs are available.",
+      "read_access_verified_products_modify_required": "Read access is verified. Products: modify is required; diagnostics do not send write requests.",
+      "products_read_access_must_work_first": "Products read access must work before restore or clear can be considered.",
+      "matching_modify_scopes_required": "Matching modify scopes are required; diagnostics intentionally verify read access only.",
+      "no_optional_configuration_api_available": "No optional configuration API was available to assess.",
+      "b2b_reachable_no_channel_enabled": "B2B Edition is reachable, but no tested channel is B2B enabled.",
+      "b2b_edition_access_unavailable": "B2B Edition access is unavailable.",
+      "b2b_read_access_verified_modify_required": "B2B read access is verified. B2B Edition: modify is required and is not tested.",
+      "requires_b2b_destination_and_api_access": "Requires a B2B-enabled destination channel and B2B Edition API access.",
+      "add_b2b_read_access_to_determine": "Add B2B Edition read access to determine channel availability.",
+      "b2b_api_reachable_no_active_channel": "The B2B API is reachable, but no active channel is B2B enabled.",
+      "b2b_availability_could_not_be_tested": "B2B availability could not be tested because no active channel was returned.",
+      "b2b_edition_not_installed_or_exposed": "B2B Edition is not installed or exposed for this store.",
+      "all_tested_read_capabilities_available": "All tested read capabilities are available.",
+      "bigcommerce_rejected_saved_token": "BigCommerce rejected the saved token.",
+      "no_tested_capability_could_be_verified": "No tested BigCommerce capability could be verified."
+    },
+    "probes": {
+      "read_access_verified": "Read access verified.",
+      "bigcommerce_rejected_access_token": "BigCommerce rejected the saved access token.",
+      "rate_limiting_prevented_check": "BigCommerce rate limiting prevented this check. Test again shortly.",
+      "took_too_long_to_respond": "BigCommerce took too long to respond.",
+      "unable_to_reach_api": "Unable to reach this BigCommerce API.",
+      "b2b_enabled_for_channel": "B2B Edition is enabled for this channel.",
+      "b2b_api_available_channel_not_enabled": "B2B Edition API access is available, but this channel is not B2B enabled.",
+      "b2b_took_too_long_to_respond": "BigCommerce B2B Edition took too long to respond.",
+      "unable_to_reach_b2b": "Unable to reach BigCommerce B2B Edition.",
+      "b2b_not_installed_or_registered": "B2B Edition is not installed or this channel is not registered with it."
+    },
+    "unavailable": {
+      "channels_api_unavailable": "The Channels API is unavailable for this store.",
+      "store_information_unavailable": "Store information is unavailable for this store.",
+      "catalog_api_unavailable": "The Catalog API is unavailable for this store.",
+      "sites_and_routes_unavailable": "Sites and Routes are unavailable for this store plan or channel setup.",
+      "storefront_settings_unavailable": "Storefront settings are unavailable for this store.",
+      "customers_api_unavailable": "The Customers API is unavailable for this store.",
+      "shipping_zones_unavailable": "Shipping zones are unavailable for this store.",
+      "tax_settings_api_unavailable": "The Tax Settings API is unavailable for this store or tax-provider configuration.",
+      "inventory_locations_unavailable": "Inventory Locations are not enabled or exposed for this store.",
+      "channel_scripts_unavailable": "Channel scripts are unavailable for this channel type.",
+      "currency_assignments_unavailable": "Currency assignments are unavailable for this channel type.",
+      "no_active_stencil_theme": "No active Stencil theme is available for this channel."
+    },
+    "status": {
+      "limited": "Limited",
+      "unavailable": "Unavailable",
+      "write_not_tested": "Write not tested",
+      "missing_scope": "Missing scope",
+      "invalid_token": "Invalid token",
+      "rate_limited": "Rate limited"
     }
   }
 }

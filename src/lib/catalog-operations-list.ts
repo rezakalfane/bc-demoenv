@@ -4,6 +4,7 @@ import {
   getApplicationEvents,
   getBigCommerceEnvironments,
   getCatalogOperations,
+  getCatalogSnapshotSeries,
   getCatalogSnapshotEvents,
   getCatalogSnapshotSummariesByIds,
   type CatalogOperation,
@@ -159,11 +160,12 @@ function operationMetrics(
 }
 
 export async function getCatalogOperationList(userId: string) {
-  const [operations, environments, snapshotEvents, applicationEvents] = await Promise.all([
+  const [operations, environments, snapshotEvents, applicationEvents, snapshotSeries] = await Promise.all([
     getCatalogOperations(userId),
     getBigCommerceEnvironments(userId),
     getCatalogSnapshotEvents(userId),
     getApplicationEvents(userId),
+    getCatalogSnapshotSeries(userId),
   ]);
   const snapshots = await getCatalogSnapshotSummariesByIds(
     userId,
@@ -174,6 +176,9 @@ export async function getCatalogOperationList(userId: string) {
   );
   const environmentsById = new Map(environments.map((environment) => [environment.id, environment]));
   const snapshotsById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]));
+  const latestSnapshotByName = new Map(
+    snapshotSeries.map((snapshot) => [snapshot.name.normalize("NFKC").toLocaleLowerCase(), snapshot]),
+  );
   const now = Date.now();
 
   const catalogRows = operations.map((operation): CatalogOperationListItem => {
@@ -192,6 +197,8 @@ export async function getCatalogOperationList(userId: string) {
       (operation.channelId ? `Channel #${operation.channelId}` : "—");
     const snapshotName = snapshot?.name || readString(result.snapshotName) ||
       readString(payload.name) || (operation.snapshotId ? `Snapshot #${operation.snapshotId}` : "—");
+    const linkedSnapshot = snapshot ??
+      latestSnapshotByName.get(snapshotName.normalize("NFKC").toLocaleLowerCase());
     const snapshotVersion = snapshot?.snapshotVersion || readNumber(result.snapshotVersion) || null;
     const warnings = readStringArray(result.warnings);
     const manualActions = readManualActions(result.manualActions);
@@ -209,11 +216,11 @@ export async function getCatalogOperationList(userId: string) {
       : operation.status === "completed" ? 100 : 0;
     const resourceHref = isDatabaseSync
       ? "/settings#database"
-      : operation.kind === "snapshot" && operation.snapshotId
-      ? `/snapshots/${operation.snapshotId}`
+      : operation.kind === "snapshot" && linkedSnapshot
+      ? `/snapshots/${linkedSnapshot.id}`
       : operation.environmentId && operation.channelId
         ? `/environments/${operation.environmentId}/channels/${operation.channelId}`
-        : operation.snapshotId ? `/snapshots/${operation.snapshotId}` : null;
+        : linkedSnapshot ? `/snapshots/${linkedSnapshot.id}` : null;
 
     return {
       activityKey: `operation-${operation.id}`,
@@ -251,7 +258,7 @@ export async function getCatalogOperationList(userId: string) {
       resourceHref,
       resourceLabel: isDatabaseSync
         ? "Open database settings"
-        : operation.kind === "snapshot" && operation.snapshotId
+        : operation.kind === "snapshot" && linkedSnapshot
         ? "Open snapshot"
         : operation.environmentId && operation.channelId ? "Open channel" : "View resource",
     };
@@ -259,7 +266,8 @@ export async function getCatalogOperationList(userId: string) {
 
   const snapshotEventRows = snapshotEvents.map((event): CatalogOperationListItem => {
     const payload = parseRecord(event.payloadJson);
-    const snapshot = snapshotsById.get(event.snapshotId);
+    const snapshot = snapshotsById.get(event.snapshotId) ??
+      latestSnapshotByName.get(event.snapshotName.normalize("NFKC").toLocaleLowerCase());
     const titles: Record<typeof event.eventType, string> = {
       snapshot_renamed: "Snapshot renamed",
       version_deleted: "Version deleted",

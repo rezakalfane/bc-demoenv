@@ -9,6 +9,7 @@ import {
 } from "@/app/(app)/environments/[environmentId]/channels/[channelId]/actions";
 import { finishCatalogOperation, startCatalogOperation, useCatalogOperationActive } from "@/components/catalog-operation-progress";
 import { TrashIcon } from "@/components/action-icons";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 const initialState: ClearCatalogActionState = {
   status: "idle",
@@ -35,6 +36,7 @@ export function ClearCatalog({ environmentId, channelId, channelName }: {
   channelName: string;
   stepNames?: string[];
 }) {
+  const { t } = useAppI18n();
   const router = useRouter();
   const isActionInProgress = useCatalogOperationActive({ environmentId, channelId });
   const [isOpen, setIsOpen] = useState(false);
@@ -103,13 +105,13 @@ export function ClearCatalog({ environmentId, channelId, channelName }: {
               <button ref={closeRef} type="button" aria-label="Close" onClick={() => setIsOpen(false)} className="grid size-9 place-items-center rounded-full border border-black/10 text-lg dark:border-white/10">×</button>
             </div>
             <p className="mt-4 text-sm leading-6 text-black/60 dark:text-white/60">This removes the channel’s category tree contents and unassigns products from this channel. Products are not deleted and remain available to other channels.</p>
-            {state.status === "error" ? <p role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-800 dark:text-red-200">{state.message}</p> : null}
+            {state.status === "error" ? <p role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-800 dark:text-red-200">{t(state.message)}</p> : null}
             {state.status === "success" && state.result ? <p role="status" className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">{state.message} {state.result.productsUnassigned} products unassigned and {state.result.categoriesRemoved} categories removed.</p> : null}
             {state.status !== "success" ? (
               <form action={formAction} className="mt-5">
                 <input type="hidden" name="environmentId" value={environmentId} />
                 <input type="hidden" name="channelId" value={channelId} />
-                <label htmlFor="clear-confirmation" className="text-sm font-medium">Type <span className="font-mono">CLEAR</span> to confirm</label>
+                <label htmlFor="clear-confirmation" className="text-sm font-medium">{t("Type {code} to confirm", { code: "CLEAR" })}</label>
                 <input id="clear-confirmation" name="confirmation" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" className="mt-2 w-full rounded-xl border border-black/12 bg-transparent px-3 py-2.5 font-mono text-sm outline-none focus:border-red-500 dark:border-white/12" />
                 <div className="mt-5 flex justify-end gap-3 border-t border-black/8 pt-5 dark:border-white/8"><button type="button" onClick={() => setIsOpen(false)} className="rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold dark:border-white/10">Cancel</button><SubmitButton enabled={confirmation === "CLEAR"} /></div>
               </form>

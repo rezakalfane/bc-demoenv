@@ -20,6 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import { CATALOG_OPERATION_KEY, startCatalogOperation, useCatalogOperationActive } from "@/components/catalog-operation-progress";
 import { CameraIcon } from "@/components/action-icons";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 export type SnapshotNameSuggestion = {
   name: string;
@@ -81,6 +82,7 @@ function ConfirmVersionButton({
   buttonRef: RefObject<HTMLButtonElement | null>;
 }) {
   const { pending } = useFormStatus();
+  const { t } = useAppI18n();
 
   return (
     <button
@@ -89,7 +91,9 @@ function ConfirmVersionButton({
       disabled={pending}
       className="inline-flex min-w-36 items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-wait disabled:opacity-55 dark:bg-emerald-400 dark:text-neutral-950 dark:hover:bg-emerald-300"
     >
-      {pending ? `Capturing version ${version}…` : `Create version ${version}`}
+      {pending
+        ? t("Capturing version {version}…", { version })
+        : t("Create version {version}", { version })}
     </button>
   );
 }
@@ -291,6 +295,7 @@ export function SnapshotForm({
   suggestions: SnapshotNameSuggestion[];
 }) {
   const router = useRouter();
+  const { t } = useAppI18n();
   const isActionInProgress = useCatalogOperationActive({ environmentId, channelId });
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState("");
@@ -435,7 +440,7 @@ export function SnapshotForm({
           <SnapshotNameCombobox
             inputId={inputId}
             listboxId={listboxId}
-            placeholder={`${channelName} template`}
+            placeholder={channelName}
             value={name}
             suggestions={suggestions}
             onChange={setName}
@@ -447,7 +452,7 @@ export function SnapshotForm({
           </p>
           {state.status === "error" ? (
             <p role="alert" className="mt-3 text-xs text-red-700 dark:text-red-300">
-              {state.message}
+              {t(state.message)}
             </p>
           ) : null}
           <div className="mt-4">

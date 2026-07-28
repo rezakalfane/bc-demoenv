@@ -6,6 +6,7 @@ import {
   saveCollectionViewMode,
 } from "@/app/(app)/collection-preference-actions";
 import { useCollectionPreference } from "@/components/collection-preferences-provider";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 type CollectionView = "cards" | "table";
 
@@ -57,7 +58,8 @@ export function CollectionToolbar({
   const tagPickerRef = useRef<HTMLDivElement>(null);
   const [, startTransition] = useTransition();
   const { updatePreference } = useCollectionPreference(collectionId);
-  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("en-US"));
+  const { t, locale } = useAppI18n();
+  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase(locale));
 
   function selectView(nextView: CollectionView) {
     setView(nextView);
@@ -68,7 +70,7 @@ export function CollectionToolbar({
         const result = await saveCollectionViewMode(collectionId, nextView);
         if (result.error) setSaveError(result.error);
       } catch {
-        setSaveError("The display preference could not be saved.");
+        setSaveError(t("The display preference could not be saved."));
       }
     });
   }
@@ -86,7 +88,7 @@ export function CollectionToolbar({
         );
         if (result.error) setSaveError(result.error);
       } catch {
-        setSaveError("The shared snapshot preference could not be saved.");
+        setSaveError(t("The shared snapshot preference could not be saved."));
       }
     });
   }
@@ -127,8 +129,8 @@ export function CollectionToolbar({
       const matchesSharing = showShared || entry.dataset.shared !== "true";
       let entryTags: string[] = [];
       try { entryTags = JSON.parse(entry.dataset.tags ?? "[]") as string[]; } catch {}
-      const normalizedEntryTags = new Set(entryTags.map((tag) => tag.toLocaleLowerCase("en-US")));
-      const matchesTag = selectedTags.every((tag) => normalizedEntryTags.has(tag.toLocaleLowerCase("en-US")));
+      const normalizedEntryTags = new Set(entryTags.map((tag) => tag.toLocaleLowerCase(locale)));
+      const matchesTag = selectedTags.every((tag) => normalizedEntryTags.has(tag.toLocaleLowerCase(locale)));
       const visible = matchesSearch && matchesSharing && matchesTag;
       entry.toggleAttribute("hidden", !visible);
       if (visible && entry.parentElement === cards) visibleEntries += 1;
@@ -138,7 +140,7 @@ export function CollectionToolbar({
       cards?.setAttribute("hidden", "");
       table?.setAttribute("hidden", "");
     }
-  }, [collectionId, deferredQuery, itemCount, selectedTags, showShared, view]);
+  }, [collectionId, deferredQuery, itemCount, locale, selectedTags, showShared, view]);
 
   const buttonClass = (active: boolean) => `inline-flex size-8 items-center justify-center rounded-lg border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 ${active ? "border-emerald-600/35 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300" : "border-black/10 bg-white/60 text-black/45 hover:bg-black/5 hover:text-black dark:border-white/10 dark:bg-white/5 dark:text-white/45 dark:hover:bg-white/10 dark:hover:text-white"}`;
 
@@ -146,9 +148,9 @@ export function CollectionToolbar({
     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <label className="relative block w-full max-w-sm">
-          <span className="sr-only">Search {ariaLabel.toLocaleLowerCase("en-US")}</span>
+          <span className="sr-only">{t("Search {label}", { label: ariaLabel.toLocaleLowerCase(locale) })}</span>
           <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-black/35 dark:text-white/35"><SearchIcon /></span>
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} className="h-9 w-full rounded-xl border border-black/10 bg-white/65 pr-3 pl-9 text-sm outline-none transition placeholder:text-black/30 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:placeholder:text-white/30" />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t(searchPlaceholder)} className="h-9 w-full rounded-xl border border-black/10 bg-white/65 pr-3 pl-9 text-sm outline-none transition placeholder:text-black/30 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:placeholder:text-white/30" />
         </label>
         <span className="shrink-0 text-xs tabular-nums text-black/40 dark:text-white/40">{itemCount} items</span>
         {filterTags.length > 0 ? (
@@ -161,7 +163,9 @@ export function CollectionToolbar({
               onClick={() => setTagPickerOpen((open) => !open)}
             >
               <TagIcon />
-              <span>{selectedTags.length > 0 ? `${selectedTags.length} tag${selectedTags.length === 1 ? "" : "s"}` : "All tags"}</span>
+              <span>{selectedTags.length > 0
+                ? t(selectedTags.length === 1 ? "{count} tag" : "{count} tags", { count: selectedTags.length })
+                : t("All tags")}</span>
               <span aria-hidden="true" className="ml-auto text-[10px] opacity-60">⌄</span>
             </button>
             {tagPickerOpen ? (
@@ -170,11 +174,11 @@ export function CollectionToolbar({
                   <span className="text-xs font-semibold">Filter by tags</span>
                   {selectedTags.length > 0 ? <button type="button" className="text-[11px] font-semibold text-emerald-700 hover:underline dark:text-emerald-300" onClick={() => setSelectedTags([])}>Clear</button> : null}
                 </div>
-                <div className="max-h-60 space-y-1 overflow-y-auto px-1" role="listbox" aria-label={`Filter ${ariaLabel.toLocaleLowerCase("en-US")} by tags`} aria-multiselectable="true">
+                <div className="max-h-60 space-y-1 overflow-y-auto px-1" role="listbox" aria-label={t("Filter {label} by tags", { label: ariaLabel.toLocaleLowerCase(locale) })} aria-multiselectable="true">
                   {filterTags.map((tag) => {
                     const selected = selectedTags.includes(tag);
                     return (
-                      <label key={tag.toLocaleLowerCase("en-US")} role="option" aria-selected={selected} className={`flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 text-xs transition ${selected ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300" : "hover:bg-black/5 dark:hover:bg-white/8"}`}>
+                      <label key={tag.toLocaleLowerCase(locale)} role="option" aria-selected={selected} className={`flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 text-xs transition ${selected ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300" : "hover:bg-black/5 dark:hover:bg-white/8"}`}>
                         <input type="checkbox" checked={selected} className="size-4 accent-emerald-600" onChange={() => toggleTag(tag)} />
                         <span className="min-w-0 flex-1 truncate">{tag}</span>
                       </label>
@@ -188,7 +192,7 @@ export function CollectionToolbar({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center justify-end gap-1.5" role="toolbar" aria-label={`${ariaLabel} display options`}>
+      <div className="flex shrink-0 items-center justify-end gap-1.5" role="toolbar" aria-label={t("{label} display options", { label: ariaLabel })}>
         {allowSharedToggle ? <button type="button" aria-label={showShared ? "Hide shared snapshots" : "Show shared snapshots"} aria-pressed={showShared} title={showShared ? "Hide shared snapshots" : "Show shared snapshots"} className={`${buttonClass(showShared)} mr-1 text-blue-600 dark:text-blue-300`} onClick={toggleShared}><SharedIcon visible={showShared} /></button> : null}
         <button type="button" aria-label="Cards view" aria-pressed={view === "cards"} title="Cards view" className={buttonClass(view === "cards")} onClick={() => selectView("cards")}><CardsIcon /></button>
         <button type="button" aria-label="Compact table view" aria-pressed={view === "table"} title="Compact table view" className={buttonClass(view === "table")} onClick={() => selectView("table")}><TableIcon /></button>

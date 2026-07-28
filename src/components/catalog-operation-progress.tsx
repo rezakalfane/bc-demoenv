@@ -168,10 +168,10 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
     : 4;
   const statusLabel = remote?.status === "failed" ? "Failed" : remote?.status === "completed" ? "Complete" : "Working…";
   return <div className="order-last basis-full rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-3" role="status" aria-live="polite">
-    <div className="flex items-center justify-between gap-3 text-xs font-semibold text-emerald-800 dark:text-emerald-200"><span>{title}</span><span>{statusLabel}</span></div>
+    <div className="flex items-center justify-between gap-3 text-xs font-semibold text-emerald-800 dark:text-emerald-200"><span>{t(title)}</span><span>{t(statusLabel)}</span></div>
     <div className="mt-2 h-2 overflow-hidden rounded-full bg-emerald-950/10 dark:bg-white/10"><div className="h-full rounded-full bg-emerald-500 transition-[width] duration-500" style={{ width: `${progress}%` }} /></div>
     <div className="mt-2 flex items-center justify-between gap-3">
-      <p className="text-[11px] text-emerald-900/65 dark:text-emerald-100/65">{remote?.error || t(currentStep)}</p>
+      <p className="text-[11px] text-emerald-900/65 dark:text-emerald-100/65">{t(remote?.error || currentStep)}</p>
       <button type="button" onClick={async () => { if (remote?.status === "failed" || remote?.status === "completed") { finishCatalogOperation(); router.refresh(); return; } if (operation.operationId) await fetch(`/api/catalog-operations/${operation.operationId}`, { method: "DELETE" }); finishCatalogOperation(); if (redirectOnCancelTo) router.push(redirectOnCancelTo); else router.refresh(); }} className="shrink-0 rounded-lg border border-emerald-700/25 px-3 py-1.5 text-[11px] font-semibold text-emerald-900 transition hover:bg-emerald-500/15 dark:border-emerald-300/25 dark:text-emerald-100">{remote?.status === "failed" || remote?.status === "completed" ? "Dismiss" : "Cancel"}</button>
     </div>
   </div>;

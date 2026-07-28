@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { compareSnapshotVersions } from "@/app/(app)/snapshots/diff-actions";
 import { InspectIcon } from "@/components/action-icons";
+import { useAppI18n } from "@/components/app-i18n-provider";
 import type { CatalogSnapshotDiff, SnapshotDiffChangeKind } from "@/lib/catalog-snapshot-diff";
 
 type VersionOption = {
@@ -32,6 +33,7 @@ export function SnapshotVersionDiff({
   currentSnapshotId: number;
   versions: VersionOption[];
 }) {
+  const { t } = useAppI18n();
   const currentIndex = Math.max(0, versions.findIndex((version) => version.id === currentSnapshotId));
   const defaultFrom = versions.find((version) => version.id !== currentSnapshotId) ?? versions[0];
   const defaultTo = versions[currentIndex] ?? versions[0];
@@ -201,7 +203,7 @@ export function SnapshotVersionDiff({
                           <th className="w-[36%] px-4 py-3 font-semibold">Resource</th>
                           <th className="px-2 py-3 text-center font-semibold text-emerald-700 dark:text-emerald-300">Added</th>
                           <th className="px-2 py-3 text-center font-semibold text-red-700 dark:text-red-300">Removed</th>
-                          <th className="px-2 py-3 text-center font-semibold text-amber-700 dark:text-amber-300">Changed</th>
+                          <th className="px-2 py-3 text-center font-semibold text-amber-700 dark:text-amber-300">{t("Changed")}</th>
                           <th className="px-2 py-3 text-center font-semibold">Unchanged</th>
                         </tr>
                       </thead>
@@ -215,7 +217,7 @@ export function SnapshotVersionDiff({
                                 onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
                                 className="font-semibold transition hover:text-emerald-700 disabled:cursor-default disabled:hover:text-inherit dark:hover:text-emerald-300"
                               >
-                                <span aria-hidden>{section.entries.length > 0 ? (expandedSection === section.id ? "▾" : "▸") : "·"}</span>{" "}{section.label}
+                                <span aria-hidden>{section.entries.length > 0 ? (expandedSection === section.id ? "▾" : "▸") : "·"}</span>{" "}{t(section.label)}
                               </button>
                             </td>
                             <td className="px-2 py-3 text-center tabular-nums">{section.added}</td>
@@ -230,7 +232,7 @@ export function SnapshotVersionDiff({
 
                   {diff.sections.map((section) => expandedSection === section.id ? (
                     <section key={section.id} className="mt-4 rounded-2xl border border-black/8 bg-black/2 p-4 dark:border-white/8 dark:bg-white/3">
-                      <h3 className="font-semibold">{section.label} changes</h3>
+                      <h3 className="font-semibold">{t("{resource} changes", { resource: t(section.label) })}</h3>
                       <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-black/7 bg-white dark:border-white/7 dark:bg-neutral-950">
                         <table className="w-full table-fixed text-left text-xs">
                           <thead className="sticky top-0 bg-neutral-100 text-black/50 dark:bg-neutral-900 dark:text-white/50">
@@ -239,8 +241,8 @@ export function SnapshotVersionDiff({
                           <tbody className="divide-y divide-black/7 dark:divide-white/7">
                             {section.entries.map((entry) => (
                               <tr key={`${entry.change}:${entry.key}`}>
-                                <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${changeStyles[entry.change]}`}>{entry.change}</span></td>
-                                <td className="truncate px-3 py-2 font-medium" title={entry.label}>{entry.label}</td>
+                                <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${changeStyles[entry.change]}`}>{t(entry.change === "changed" ? "Changed" : entry.change)}</span></td>
+                                <td className="truncate px-3 py-2 font-medium" title={entry.label}>{entry.label.split(" · ").map((part) => t(part)).join(" · ")}</td>
                                 <td className="truncate px-3 py-2 text-black/45 dark:text-white/45" title={entry.fields.join(", ")}>{entry.fields.length ? entry.fields.join(", ") : "—"}</td>
                               </tr>
                             ))}

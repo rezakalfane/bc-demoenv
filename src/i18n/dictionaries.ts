@@ -41,6 +41,7 @@ const messageIdByEnglishSource = new Map(
 
 type CompiledTemplate = {
   keys: string[];
+  literalLength: number;
   pattern: RegExp;
   translation: string;
 };
@@ -70,8 +71,17 @@ function getTemplates(dictionary: AppDictionary) {
     }
     pattern += `${escapeRegExp(source.slice(cursor))}$`;
 
-    return [{ keys, pattern: new RegExp(pattern), translation }];
-  });
+    return [{
+      keys,
+      literalLength: source.replaceAll(/\{[^{}]+\}/g, "").length,
+      pattern: new RegExp(pattern),
+      translation,
+    }];
+  }).toSorted(
+    (left, right) =>
+      right.literalLength - left.literalLength ||
+      left.keys.length - right.keys.length,
+  );
 
   templateCache.set(dictionary, templates);
   return templates;

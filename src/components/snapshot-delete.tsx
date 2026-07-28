@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { deleteSnapshotSeries } from "@/app/(app)/snapshots/delete-actions";
 import { TrashIcon } from "@/components/action-icons";
 import { useCatalogOperationActive } from "@/components/catalog-operation-progress";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 export function SnapshotDelete({
   snapshotId,
@@ -14,6 +15,7 @@ export function SnapshotDelete({
   snapshotName: string;
   versionCount: number;
 }) {
+  const { t } = useAppI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +107,7 @@ export function SnapshotDelete({
             </div>
 
             <label className="mt-5 block text-sm font-medium">
-              Type <span className="font-mono">DELETE</span> to confirm
+              {t("Type {code} to confirm", { code: "DELETE" })}
               <input
                 value={confirmation}
                 onChange={(event) => setConfirmation(event.target.value)}

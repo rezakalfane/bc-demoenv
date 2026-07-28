@@ -12,6 +12,7 @@ import type {
   CredentialProbeStatus,
 } from "@/lib/bigcommerce-credential-diagnostics";
 import type { BigCommerceEnvironment } from "@/lib/db";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 const initialState: EnvironmentDiagnosticsActionState = {
   status: "idle",
@@ -106,11 +107,12 @@ function ReportStatus({ report }: { report: CredentialDiagnosticsReport }) {
 }
 
 function AccessReport({ report }: { report: CredentialDiagnosticsReport }) {
+  const { t } = useAppI18n();
   const b2bEnabled = report.b2b.status === "enabled";
 
   return (
     <section
-      aria-label={`Access report for ${report.environmentName}`}
+      aria-label={t("Access report for {name}", { name: report.environmentName })}
       className="rounded-2xl border border-black/8 bg-black/[0.025] p-4 sm:p-5 dark:border-white/8 dark:bg-white/[0.025]"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { CatalogCategory } from "@/lib/catalog-types";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 function findAncestorIds(
   categories: CatalogCategory[],
@@ -46,6 +47,7 @@ function CategoryBranch({
   onToggle: (categoryId: number) => void;
   locale?: string;
 }) {
+  const { t } = useAppI18n();
   return (
     <ul className="space-y-1">
       {categories.map((category) => {
@@ -68,7 +70,7 @@ function CategoryBranch({
                   type="button"
                   aria-expanded={isExpanded}
                   aria-controls={childrenId}
-                  aria-label={`${isExpanded ? "Collapse" : "Expand"} ${category.name}`}
+                  aria-label={t("{action} {target}", { action: t(isExpanded ? "Collapse" : "Expand"), target: category.name })}
                   onClick={() => onToggle(category.id)}
                   className="flex size-8 shrink-0 items-center justify-center rounded-lg text-black/40 transition hover:text-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald-600 dark:text-white/40 dark:hover:text-emerald-300"
                 >

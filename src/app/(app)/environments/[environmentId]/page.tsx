@@ -4,6 +4,7 @@ import { getEnvironmentDetails, type EnvironmentChannel } from "@/lib/bigcommerc
 import { CatalogActivityBadge } from "@/components/catalog-operation-progress";
 import { FavoriteButton } from "@/components/favorite-button";
 import { CollectionBrowser } from "@/components/collection-browser";
+import { AppTranslatedText } from "@/components/app-i18n-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ function ChannelUrl({ url }: { url: string }) {
 function ChannelStatus({ status }: { status: string }) {
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClasses(status)}`}>
-      {formatLabel(status)}
+      <AppTranslatedText message={formatLabel(status)} />
     </span>
   );
 }
@@ -119,7 +120,11 @@ function ChannelCard({
 
       <div className="mt-auto flex items-end justify-between gap-4 pt-5">
         <p className="text-[11px] leading-4 text-black/35 dark:text-white/35">
-          {modifiedDate ? `Updated ${modifiedDate}` : createdDate ? `Created ${createdDate}` : "Live channel details"}
+          {modifiedDate
+            ? <AppTranslatedText message="Updated {date}" values={{ date: modifiedDate }} />
+            : createdDate
+              ? <AppTranslatedText message="Created {date}" values={{ date: createdDate }} />
+              : <AppTranslatedText message="Live channel details" />}
         </p>
         <ChannelStatus status={channel.status} />
       </div>

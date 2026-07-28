@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ChangeEvent } from "react";
 import { useConfirmation } from "@/components/confirmation-provider";
+import { useAppI18n } from "@/components/app-i18n-provider";
 
 function ArchiveIcon({ action }: { action: "backup" | "restore" }) {
   return (
@@ -22,6 +23,7 @@ export function DatabaseBackupPanel({
 }) {
   const confirm = useConfirmation();
   const router = useRouter();
+  const { t, locale } = useAppI18n();
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<"backup" | "restore" | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -34,7 +36,7 @@ export function DatabaseBackupPanel({
       const response = await fetch("/api/database-backup", { cache: "no-store" });
       if (!response.ok) {
         const body = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? "The database backup failed.");
+        throw new Error(body.error ?? t("The database backup failed."));
       }
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") ?? "";
@@ -45,9 +47,9 @@ export function DatabaseBackupPanel({
       link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
-      setMessage({ tone: "success", text: `A complete ${databaseLabel} backup was downloaded.` });
+      setMessage({ tone: "success", text: t("A complete {database} backup was downloaded.", { database: databaseLabel }) });
     } catch (error) {
-      setMessage({ tone: "error", text: error instanceof Error ? error.message : "The database backup failed." });
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : t("The database backup failed.") });
     } finally {
       setPending(null);
     }
@@ -58,9 +60,12 @@ export function DatabaseBackupPanel({
     event.target.value = "";
     if (!file) return;
     const accepted = await confirm({
-      title: `Replace ${databaseLabel} from this backup?`,
-      description: `This completely replaces every application table in ${databaseLabel} with ${file.name}, including all users' data. Current data will be lost. Active catalog workflows block the restore.`,
-      confirmLabel: "Restore whole database",
+      title: t("Replace {database} from this backup?", { database: databaseLabel }),
+      description: t(
+        "This completely replaces every application table in {database} with {file}, including all users' data. Current data will be lost. Active catalog workflows block the restore.",
+        { database: databaseLabel, file: file.name },
+      ),
+      confirmLabel: t("Restore whole database"),
       tone: "danger",
     });
     if (!accepted) return;
@@ -81,15 +86,24 @@ export function DatabaseBackupPanel({
         tableCount?: number;
         skippedRowCount?: number;
       };
-      if (!response.ok) throw new Error(body.error ?? "The database restore failed.");
+      if (!response.ok) throw new Error(body.error ?? t("The database restore failed."));
       const skipped = Number(body.skippedRowCount ?? 0);
+      const rows = Number(body.rowCount ?? 0).toLocaleString(locale);
+      const tables = Number(body.tableCount ?? 0);
       setMessage({
         tone: "success",
-        text: `Restored ${Number(body.rowCount ?? 0).toLocaleString("en-US")} rows across ${Number(body.tableCount ?? 0)} tables${skipped ? `; skipped ${skipped} legacy ownerless note${skipped === 1 ? "" : "s"}` : ""}.`,
+        text: skipped
+          ? t(
+            skipped === 1
+              ? "Restored {rows} rows across {tables} tables; skipped {skipped} legacy ownerless note."
+              : "Restored {rows} rows across {tables} tables; skipped {skipped} legacy ownerless notes.",
+            { rows, tables, skipped },
+          )
+          : t("Restored {rows} rows across {tables} tables.", { rows, tables }),
       });
       router.refresh();
     } catch (error) {
-      setMessage({ tone: "error", text: error instanceof Error ? error.message : "The database restore failed." });
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : t("The database restore failed.") });
     } finally {
       setPending(null);
     }
@@ -126,7 +140,11 @@ export function DatabaseBackupPanel({
         </p>
       ) : null}
       <p role="status" className={`mt-4 min-h-5 text-sm ${message?.tone === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
-        {pending === "backup" ? `Preparing the ${databaseLabel} backup…` : pending === "restore" ? `Restoring ${databaseLabel}…` : message?.text ?? ""}
+        {pending === "backup"
+          ? t("Preparing the {database} backup…", { database: databaseLabel })
+          : pending === "restore"
+            ? t("Restoring {database}…", { database: databaseLabel })
+            : message?.text ?? ""}
       </p>
     </div>
   );

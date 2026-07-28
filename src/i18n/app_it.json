@@ -58,7 +58,11 @@
       "snapshot_metadata": "Metadati dell'istantanea:",
       "published_read_only_manifest": "Manifesto di sola lettura pubblicato",
       "restoration_ready_manifest": "Manifesto pronto per il restauro",
-      "settings_in": "Impostazioni in"
+      "settings_in": "Impostazioni in",
+      "count_tag": "{count} tag",
+      "count_tags": "{count} tag",
+      "snapshot_version_number": "Versione dello snapshot {version}",
+      "published_version_number": "Versione pubblicata {version}"
     },
     "actions": {
       "add_a_custom_snapshot_tag": "Aggiungi un tag snapshot personalizzato",
@@ -66,6 +70,8 @@
       "add_custom_tag": "Aggiungi tag personalizzato",
       "create_new_version": "Crea nuova versione",
       "create_version": "Crea versione",
+      "create_version_number": "Crea versione {version}",
+      "capturing_version_number": "Acquisizione della versione {version}…",
       "delete_snapshot": "Elimina istantanea",
       "delete_version": "Elimina versione",
       "show_shared_snapshots": "Mostra istantanee condivise",
@@ -90,7 +96,9 @@
       "deleting": "Eliminazione…",
       "publish": "Pubblicare",
       "unpublish": "Annulla pubblicazione",
-      "search_snapshots": "Cerca istantanee..."
+      "search_snapshots": "Cerca istantanee...",
+      "remove_tag": "Rimuovi tag {tag}",
+      "rename_snapshot_name": "Rinomina lo snapshot {name}"
     },
     "help": {
       "catalog_templates": "Sfoglia le acquisizioni del catalogo pronte per il restauro dai tuoi ambienti demo. Crea un'istantanea da qualsiasi pagina del catalogo canali.",
@@ -148,7 +156,8 @@
     "errors": {
       "the_tag_could_not_be_removed_please_try_again": "Impossibile rimuovere l'etichetta. Per favore riprova.",
       "the_tag_could_not_be_saved_please_try_again": "Impossibile salvare il tag. Per favore riprova.",
-      "this_snapshot_does_not_contain_a_category_tree": "Questa istantanea non contiene un albero di categorie."
+      "this_snapshot_does_not_contain_a_category_tree": "Questa istantanea non contiene un albero di categorie.",
+      "snapshot_could_not_be_renamed": "Non è stato possibile rinominare lo snapshot."
     }
   },
   "settings": {
@@ -194,7 +203,9 @@
       "failure": "Fallimento",
       "needs_attention": "Ha bisogno di attenzione",
       "this_action_cannot_be_undone": "Questa azione non può essere annullata.",
-      "date_unavailable": "Data non disponibile"
+      "date_unavailable": "Data non disponibile",
+      "display_preference_not_saved": "Non è stato possibile salvare la preferenza di visualizzazione.",
+      "shared_preference_not_saved": "Non è stato possibile salvare la preferenza degli snapshot condivisi."
     },
     "labels": {
       "access_test_completed": "Test di accesso completato.",
@@ -305,6 +316,7 @@
       "status": "Stato",
       "updated": "Aggiornato",
       "updated_date": "Data aggiornata",
+      "prelaunch": "Pre-lancio",
       "working": "Lavorando…",
       "skipped": "Saltato",
       "unchanged": "Invariato"
@@ -316,6 +328,8 @@
       "cancelled": "Annullato",
       "change": "Modifica",
       "changed": "Cambiato",
+      "resource_changes": "Modifiche a {resource}",
+      "type_code_to_confirm": "Digita {code} per confermare",
       "close": "Vicino",
       "continue": "Continuare",
       "copy_run_id": "Copia ID esecuzione",
@@ -348,7 +362,14 @@
       "removed": "RIMOSSO",
       "tested": "Testato",
       "create_schedule": "Crea pianificazione",
-      "email_login_link": "Inviami un link di accesso"
+      "email_login_link": "Inviami un link di accesso",
+      "action_for_target": "{action} per {target}",
+      "edit_title": "Modifica {title}",
+      "action_target": "{action} {target}",
+      "resume": "Riprendi",
+      "search_label": "Cerca {label}",
+      "filter_label_by_tags": "Filtra {label} per tag",
+      "label_display_options": "Opzioni di visualizzazione di {label}"
     },
     "help": {
       "additional_changes_are_omitted_from_this_preview": "ulteriori modifiche vengono omesse da questa anteprima.",
@@ -388,7 +409,8 @@
       "connections": "Connessioni",
       "no_environments_saved": "Nessun ambiente ancora salvato.",
       "environment_2": "ambiente",
-      "environments": "ambienti"
+      "environments": "ambienti",
+      "access_report_for_name": "Report di accesso per {name}"
     },
     "actions": {
       "add_an_environment": "Aggiungi un ambiente",
@@ -497,7 +519,9 @@
       "operation_number": "Operazione n.{id}",
       "operations_sections": "Sezioni operative",
       "operations_2": "operazioni",
-      "operation": "Operazione n."
+      "operation": "Operazione n.",
+      "missing_timestamp": "Timestamp mancante",
+      "dot_version_number": "· versione {version}"
     },
     "status": {
       "new_operation_results_will_appear_here": "I risultati delle nuove operazioni verranno visualizzati qui."
@@ -514,7 +538,8 @@
       "open_snapshot": "Apri istantanea",
       "open_environment": "Ambiente aperto",
       "open_database_settings": "Apri le impostazioni del database",
-      "view_resource": "Visualizza risorsa"
+      "view_resource": "Visualizza risorsa",
+      "sort_by_column": "Ordina per {column}"
     },
     "errors": {
       "the_clear_operation_could_not_be_started": "Impossibile avviare l'operazione di cancellazione."
@@ -569,11 +594,29 @@
       "products_2": "prodotti",
       "prices": "prezzi",
       "price_unavailable": "Prezzo non disponibile",
-      "images": "immagini"
+      "images": "immagini",
+      "updated_on_date": "Aggiornato il {date}",
+      "created_on_date": "Creato il {date}",
+      "target_history": "Cronologia di {target}",
+      "count_categories": "{count} categorie",
+      "count_products": "{count} prodotti",
+      "count_variants": "{count} varianti",
+      "count_images": "{count} immagini",
+      "count_metafields": "{count} metacampi",
+      "manifest_format_version": "Formato manifesto v{version}",
+      "snapshot_label_name": "Snapshot: {name}",
+      "snapshot_label_version_id": "Snapshot: {name} · versione {version} · ID {id}",
+      "snapshot_updated_version": "Snapshot aggiornato alla versione {version}",
+      "snapshot_version_published": "Versione {version} dello snapshot pubblicata",
+      "history_counts": "{categories} categorie · {products} prodotti · {variants} varianti",
+      "logo_and_favicon_settings": "impostazioni del logo e della favicon",
+      "tax_classes": "classi fiscali"
     },
     "actions": {
       "clear": "Chiaro",
-      "clear_catalog": "Catalogo chiaro"
+      "clear_catalog": "Catalogo chiaro",
+      "collapse": "Comprimi",
+      "expand": "Espandi"
     },
     "status": {
       "clearing": "Cancellazione…"
@@ -602,6 +645,7 @@
       "no_durable_workflows": "Non è stata ancora registrata alcuna esecuzione del flusso di lavoro durevole.",
       "no_workflows_match_filters": "Nessuna esecuzione del flusso di lavoro corrisponde a questi filtri.",
       "progress_checkpoint": "Progresso/punto di controllo",
+      "progress_result": "Avanzamento / risultato",
       "runtime": "Durata:"
     },
     "actions": {
@@ -633,6 +677,16 @@
       "fresh_environment_ready": "Ambiente fresco pronto",
       "fresh_environment_warning": "Nuovo ambiente pronto con avviso {count}",
       "fresh_environment_warnings": "Nuovo ambiente pronto con avvisi {count}",
+      "loading_source_channel": "Caricamento dei dettagli del canale di origine",
+      "loading_category_tree": "Caricamento dell’albero delle categorie {name}",
+      "loading_category_records": "Caricamento delle categorie da {start} a {end} di {total}",
+      "capturing_category_number": "Acquisizione della categoria {current} di {total}: {name}",
+      "loading_product_records": "Caricamento dei prodotti da {start} a {end} di {total}",
+      "capturing_product_number": "Acquisizione del prodotto {current} di {total}: {name} · varianti: {variants} · immagini: {images} · metadati",
+      "ready_for_product_batches": "{count} prodotti pronti per l’acquisizione in batch ripristinabili",
+      "capturing_channel_name": "Acquisizione del canale: {name}",
+      "checking_b2b_channel": "Verifica dell’abilitazione di B2B Edition per questo canale",
+      "capturing_locales_metadata": "Acquisizione di impostazioni locali, traduzioni e metadati di presentazione",
       "completed_warning": "Completato con avviso {count}",
       "completed_warnings": "Completato con {count} avvisi",
       "pushed_local_to_turso": "Spinto da SQLite locale a Turso",
@@ -708,7 +762,8 @@
       "every_minute": "ogni minuto",
       "once_per_day_2": "una volta al giorno",
       "dispatcher": "Spedizioniere",
-      "this_browser_session": "Questa sessione del browser"
+      "this_browser_session": "Questa sessione del browser",
+      "every_weekday": "Ogni {weekday}"
     },
     "actions": {
       "delete_schedule": "Elimina pianificazione",
@@ -718,7 +773,10 @@
       "weekly_backup": "+ Backup settimanale",
       "create_a_schedule": "Crea un programma",
       "pause_schedule": "Metti in pausa il programma",
-      "resume_schedule": "Programma di ripresa"
+      "resume_schedule": "Programma di ripresa",
+      "same_action_running_for_channel": "La stessa azione è già in esecuzione per {channel}",
+      "run_name_now": "Esegui {name} ora",
+      "delete_name_confirm": "Eliminare {name}?"
     },
     "help": {
       "every_minute": "Ogni minuto",
@@ -743,7 +801,9 @@
     "errors": {
       "no_channels_available": "Nessun canale disponibile",
       "no_environments_available": "Nessun ambiente disponibile",
-      "this_action_is_already_running_for_the_channel": "Questa azione è già in esecuzione per il canale"
+      "this_action_is_already_running_for_the_channel": "Questa azione è già in esecuzione per il canale",
+      "schedule_could_not_be_updated": "Non è stato possibile aggiornare la pianificazione.",
+      "destinations_could_not_be_loaded": "Non è stato possibile caricare le destinazioni BigCommerce live."
     }
   },
   "restore": {
@@ -852,7 +912,9 @@
       "pull_from_turso": "Estrai da Turso",
       "push_to_turso": "Invia a Turso",
       "download_backup": "Scarica il backup",
-      "restore_backup": "Ripristina il backup"
+      "restore_backup": "Ripristina il backup",
+      "replace_database_from_backup": "Sostituire {database} con questo backup?",
+      "restore_whole_database": "Ripristina l'intero database"
     },
     "status": {
       "active_development_database": "DB di sviluppo attivo",
@@ -870,6 +932,21 @@
       "add_your_email_to": "Aggiungi la tua email a",
       "to_enable_these_controls_in_production": "per consentire questi controlli nella produzione.",
       "local_setup": "insieme alle variabili Turso, quindi riavviare il server di sviluppo."
+    },
+    "messages": {
+      "restore_replaces_everything": "Questa operazione sostituisce completamente ogni tabella dell'applicazione in {database} con {file}, inclusi i dati di tutti gli utenti. I dati attuali andranno persi. I flussi di lavoro del catalogo attivi bloccano il ripristino.",
+      "restore_destination_is_source": "La destinazione è il canale da cui è stato acquisito questo snapshot.",
+      "type_restore_to_confirm": "Digita RESTORE per confermare.",
+      "complete_backup_downloaded": "È stato scaricato un backup completo di {database}.",
+      "preparing_database_backup": "Preparazione del backup di {database}…",
+      "restoring_database": "Ripristino di {database}…",
+      "restored_rows_across_tables": "Ripristinate {rows} righe in {tables} tabelle.",
+      "restored_rows_skipped_note": "Ripristinate {rows} righe in {tables} tabelle; saltata {skipped} nota legacy senza proprietario.",
+      "restored_rows_skipped_notes": "Ripristinate {rows} righe in {tables} tabelle; saltate {skipped} note legacy senza proprietario."
+    },
+    "errors": {
+      "backup_failed": "Il backup del database non è riuscito.",
+      "restore_failed": "Il ripristino del database non è riuscito."
     }
   },
   "runtime": {
@@ -900,7 +977,15 @@
       "tags": "Tag",
       "tax": "Tassare",
       "type_platform": "Tipo/piattaforma",
-      "variants": "Varianti"
+      "variants": "Varianti",
+      "optional_configuration_available_of_total": "{available} di {total} gruppi di API opzionali testati sono disponibili; l'acquisizione resta best-effort.",
+      "b2b_channel_detected": "{count} canale abilitato B2B rilevato.",
+      "b2b_channels_detected": "{count} canali abilitati B2B rilevati.",
+      "capabilities_verified_review": "{count} funzionalità verificate; controlla di seguito gli ambiti mancanti e le API non disponibili.",
+      "b2b_channels_of_total_enabled": "{enabled} di {total} canali attivi sono abilitati B2B.",
+      "not_applicable_to_channels": "Non applicabile ai canali {platform}.",
+      "b2b_edition_channel_name": "B2B Edition · {name}",
+      "stencil_active_theme_channel_name": "Tema Stencil attivo · {name}"
     },
     "actions": {
       "cancel_active_workflow": "Annullare questo flusso di lavoro attivo?",
@@ -1028,7 +1113,7 @@
       "snapshot_payload_invalid": "Questo payload dello snapshot non è valido.",
       "turso_url_missing_marketplace": "Manca TURSO_DATABASE_URL. Connetti l'integrazione Turso Marketplace a questo progetto Vercel.",
       "turso_url_not_configured": "TURSO_DATABASE_URL non è configurato.",
-      "delete_confirmation_required": "Digita CANCELLA per confermare.",
+      "delete_confirmation_required": "Digita DELETE per confermare.",
       "unauthorized": "Non autorizzato",
       "published_snapshot_delete_forbidden": "Annulla la pubblicazione della versione condivisa prima di eliminare questo snapshot.",
       "snapshot_format_unsupported": "Formato snapshot non supportato.",
@@ -1036,7 +1121,9 @@
       "rename_capture_active": "Attendi il completamento dell'acquisizione dell'istantanea attiva prima di rinominarla.",
       "backup_email_not_allowed": "Il backup e il ripristino dell'intero database richiedono questo indirizzo email in DATABASE_BACKUP_ALLOWED_EMAILS.",
       "workflow_run_not_found": "Esecuzione del flusso di lavoro non trovata.",
-      "avatar_prepare_failed": "Il tuo browser non è riuscito a preparare l'immagine dell'avatar."
+      "avatar_prepare_failed": "Il tuo browser non è riuscito a preparare l'immagine dell'avatar.",
+      "add_scope_read_access": "Aggiungi l'accesso in lettura {scope} a questo account API.",
+      "bigcommerce_returned_http_status": "BigCommerce ha restituito HTTP {status}."
     },
     "workflow_steps": {
       "finalize_refresh": "Finalizzare l'aggiornamento",
@@ -1074,7 +1161,8 @@
       "notifications": "Notifiche",
       "notifications_count_awaiting_deletion": "Notifiche, {count} in attesa di eliminazione",
       "manual_follow_up_action": "azione di follow-up manuale",
-      "catalog_operation_notification_popups": "Popup di notifica delle operazioni del catalogo"
+      "catalog_operation_notification_popups": "Popup di notifica delle operazioni del catalogo",
+      "the_selected_catalog": "il catalogo selezionato"
     },
     "messages": {
       "nothing_awaiting_deletion": "Niente in attesa di eliminazione",
@@ -1090,7 +1178,79 @@
       "clear_restore_failed": "Cancellazione e ripristino non riusciti",
       "database_sync_failed": "Sincronizzazione del database non riuscita",
       "target_is_ready": "{target} è pronto.",
-      "development_databases_synchronized": "I database di sviluppo sono stati sincronizzati."
+      "development_databases_synchronized": "I database di sviluppo sono stati sincronizzati.",
+      "operation_failed_for_target": "L'operazione per {target} non è riuscita.",
+      "manual_action_remains_for_target": "Rimane {count} azione manuale per {target}.",
+      "manual_actions_remain_for_target": "Rimangono {count} azioni manuali per {target}."
+    }
+  },
+  "diagnostics": {
+    "operations": {
+      "dashboard_and_environment_browsing": "Navigazione nella dashboard e negli ambienti",
+      "browse_channel_catalogs": "Sfoglia i cataloghi dei canali",
+      "capture_catalog_snapshots": "Acquisisci snapshot del catalogo",
+      "capture_optional_configuration": "Acquisisci configurazione opzionale",
+      "restore_or_clear_catalog": "Ripristina o svuota il catalogo",
+      "restore_optional_configuration": "Ripristina configurazione opzionale",
+      "capture_b2b_edition_data": "Acquisisci dati B2B Edition",
+      "restore_b2b_edition_data": "Ripristina dati B2B Edition"
+    },
+    "details": {
+      "channel_and_catalog_read_access_verified": "L'accesso in lettura al canale e al catalogo è verificato.",
+      "requires_products_and_channel_settings": "Richiede l'accesso in lettura a Prodotti e Impostazioni canale.",
+      "products_variants_categories_readable": "È possibile leggere prodotti, varianti, alberi delle categorie e assegnazioni dei canali.",
+      "required_catalog_capture_apis_available": "Le API richieste per l'acquisizione del catalogo sono disponibili.",
+      "catalog_snapshots_require_read_access": "Gli snapshot del catalogo richiedono l'accesso in lettura a Prodotti e Impostazioni canale.",
+      "all_optional_configuration_apis_available": "Tutte le API di configurazione opzionali testate sono disponibili.",
+      "read_access_verified_products_modify_required": "L'accesso in lettura è verificato. Prodotti: è richiesta la modifica; la diagnostica non invia richieste di scrittura.",
+      "products_read_access_must_work_first": "L'accesso in lettura ai prodotti deve funzionare prima di poter considerare il ripristino o lo svuotamento.",
+      "matching_modify_scopes_required": "Sono richiesti ambiti di modifica corrispondenti; la diagnostica verifica intenzionalmente solo l'accesso in lettura.",
+      "no_optional_configuration_api_available": "Nessuna API di configurazione opzionale era disponibile da valutare.",
+      "b2b_reachable_no_channel_enabled": "B2B Edition è raggiungibile, ma nessun canale testato è abilitato B2B.",
+      "b2b_edition_access_unavailable": "L'accesso a B2B Edition non è disponibile.",
+      "b2b_read_access_verified_modify_required": "L'accesso in lettura B2B è verificato. B2B Edition: la modifica è richiesta e non viene testata.",
+      "requires_b2b_destination_and_api_access": "Richiede un canale di destinazione abilitato B2B e l'accesso all'API di B2B Edition.",
+      "add_b2b_read_access_to_determine": "Aggiungi l'accesso in lettura a B2B Edition per determinare la disponibilità del canale.",
+      "b2b_api_reachable_no_active_channel": "L'API B2B è raggiungibile, ma nessun canale attivo è abilitato B2B.",
+      "b2b_availability_could_not_be_tested": "Non è stato possibile testare la disponibilità B2B perché non è stato restituito alcun canale attivo.",
+      "b2b_edition_not_installed_or_exposed": "B2B Edition non è installato o esposto per questo negozio.",
+      "all_tested_read_capabilities_available": "Tutte le funzionalità di lettura testate sono disponibili.",
+      "bigcommerce_rejected_saved_token": "BigCommerce ha rifiutato il token salvato.",
+      "no_tested_capability_could_be_verified": "Non è stato possibile verificare alcuna funzionalità BigCommerce testata."
+    },
+    "probes": {
+      "read_access_verified": "Accesso in lettura verificato.",
+      "bigcommerce_rejected_access_token": "BigCommerce ha rifiutato il token di accesso salvato.",
+      "rate_limiting_prevented_check": "Il rate limiting di BigCommerce ha impedito questo controllo. Riprova a breve.",
+      "took_too_long_to_respond": "BigCommerce ha impiegato troppo tempo a rispondere.",
+      "unable_to_reach_api": "Impossibile raggiungere questa API BigCommerce.",
+      "b2b_enabled_for_channel": "B2B Edition è abilitato per questo canale.",
+      "b2b_api_available_channel_not_enabled": "L'accesso all'API di B2B Edition è disponibile, ma questo canale non è abilitato B2B.",
+      "b2b_took_too_long_to_respond": "BigCommerce B2B Edition ha impiegato troppo tempo a rispondere.",
+      "unable_to_reach_b2b": "Impossibile raggiungere BigCommerce B2B Edition.",
+      "b2b_not_installed_or_registered": "B2B Edition non è installato o questo canale non è registrato con esso."
+    },
+    "unavailable": {
+      "channels_api_unavailable": "L'API Canali non è disponibile per questo negozio.",
+      "store_information_unavailable": "Le informazioni del negozio non sono disponibili per questo negozio.",
+      "catalog_api_unavailable": "L'API Catalogo non è disponibile per questo negozio.",
+      "sites_and_routes_unavailable": "Siti e Percorsi non sono disponibili per questo piano del negozio o configurazione del canale.",
+      "storefront_settings_unavailable": "Le impostazioni dello storefront non sono disponibili per questo negozio.",
+      "customers_api_unavailable": "L'API Clienti non è disponibile per questo negozio.",
+      "shipping_zones_unavailable": "Le zone di spedizione non sono disponibili per questo negozio.",
+      "tax_settings_api_unavailable": "L'API delle impostazioni fiscali non è disponibile per questo negozio o questa configurazione del provider fiscale.",
+      "inventory_locations_unavailable": "Le sedi di magazzino non sono abilitate o esposte per questo negozio.",
+      "channel_scripts_unavailable": "Gli script del canale non sono disponibili per questo tipo di canale.",
+      "currency_assignments_unavailable": "Le assegnazioni di valuta non sono disponibili per questo tipo di canale.",
+      "no_active_stencil_theme": "Nessun tema Stencil attivo è disponibile per questo canale."
+    },
+    "status": {
+      "limited": "Limitato",
+      "unavailable": "Non disponibile",
+      "write_not_tested": "Scrittura non testata",
+      "missing_scope": "Ambito mancante",
+      "invalid_token": "Token non valido",
+      "rate_limited": "Limitato dal rate"
     }
   }
 }
