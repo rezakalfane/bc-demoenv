@@ -582,7 +582,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold">{t(notification.title)}</p>
                         <p className="mt-1 line-clamp-3 text-[11px] leading-4 text-current/65">{t(notification.description)}</p>
-                        <div className="mt-2 flex items-center justify-between gap-3">
+                        <div className="mt-2 flex min-w-0 items-start justify-between gap-3">
                           <time dateTime={notification.updatedAt} className="text-[10px] text-current/50">
                             {new Date(notification.updatedAt).toLocaleString(locale)}
                           </time>
@@ -591,7 +591,7 @@ export function CatalogOperationNotifications({ userId }: { userId: string }) {
                               href={notification.href}
                               label={t(notification.linkLabel)}
                               onClick={() => setIsOpen(false)}
-                              className="shrink-0 text-[10px] font-semibold hover:underline"
+                              className="min-w-0 max-w-[65%] break-words text-right text-[10px] font-semibold whitespace-normal hover:underline"
                             />
                           ) : null}
                         </div>

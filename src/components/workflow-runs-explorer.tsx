@@ -56,16 +56,32 @@ function DateTimeStack({ value }: { value: string }) {
 }
 
 function StatusBadge({ run }: { run: WorkflowRunListItem }) {
+  const { t } = useAppI18n();
   const active = run.appStatus === "queued" || run.appStatus === "running";
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold capitalize ${statusStyles[run.appStatus]}`}>
       {active ? <span className="size-1.5 animate-pulse rounded-full bg-current" /> : null}
-      {run.appStatus}
+      {t(run.appStatus)}
     </span>
   );
 }
 
 function StageCard({ stage, index }: { stage: WorkflowStage; index: number }) {
+  const { t } = useAppI18n();
+  const restoreLabel = stage.label.match(/^Restore (.+)$/);
+  const reconcileDescription = stage.description.match(
+    /^Reconcile the (.+) section from the selected snapshot\.$/,
+  );
+  const sectionName = (value: string) =>
+    t(value.replace(/\b\w/g, (letter) => letter.toUpperCase()));
+  const label = restoreLabel
+    ? t("Restore {section}", { section: sectionName(restoreLabel[1]) })
+    : t(stage.label);
+  const description = reconcileDescription
+    ? t("Reconcile the {section} section from the selected snapshot.", {
+        section: sectionName(reconcileDescription[1]),
+      })
+    : t(stage.description);
   return (
     <li className={`relative rounded-2xl border p-4 ${stageStyles[stage.status]}`}>
       <div className="flex items-start gap-3">
@@ -74,12 +90,12 @@ function StageCard({ stage, index }: { stage: WorkflowStage; index: number }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-semibold capitalize">{stage.label}</p>
+            <p className="font-semibold capitalize">{label}</p>
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">
-              {stage.status}
+              {t(stage.status)}
             </span>
           </div>
-          <p className="mt-1 text-xs leading-5 opacity-70">{stage.description}</p>
+          <p className="mt-1 text-xs leading-5 opacity-70">{description}</p>
           {stage.progressPercent > 0 && stage.progressPercent < 100 ? (
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-current/10">
               <div className="h-full rounded-full bg-current" style={{ width: `${stage.progressPercent}%` }} />
@@ -127,7 +143,7 @@ function RunDetailsModal({
           <div className="flex items-start justify-between gap-5">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-violet-500/12 px-2 py-1 text-[11px] font-semibold capitalize text-violet-700 dark:text-violet-300">{run.kind}</span>
+                <span className="rounded-full bg-violet-500/12 px-2 py-1 text-[11px] font-semibold capitalize text-violet-700 dark:text-violet-300">{t(run.kind === "refresh" ? "Clear & Restore" : run.kind)}</span>
                 <StatusBadge run={run} />
                 {run.runtimeStatus && run.runtimeStatus !== run.appStatus ? (
                   <span className="rounded-full border border-amber-500/25 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
@@ -136,7 +152,7 @@ function RunDetailsModal({
                 ) : null}
               </div>
               <h2 id={`workflow-title-${run.operationId}`} className="mt-3 text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">
-                {run.workflowName}
+                {t(run.workflowName)}
               </h2>
               <p className="mt-2 text-sm text-black/50 dark:text-white/50">
                 Operation #{run.operationId} · {run.environmentName} · {run.channelName}
@@ -177,7 +193,7 @@ function RunDetailsModal({
               {[{ title: "Input", values: run.payloadSummary }, { title: "Result", values: run.resultSummary }].map((group) => (
                 <div key={group.title} className="rounded-2xl border border-black/8 p-4 dark:border-white/8">
                   <h3 className="text-sm font-semibold">{group.title}</h3>
-                  {group.values.length > 0 ? <dl className="mt-3 space-y-2 text-xs">{group.values.map((entry) => <div key={entry.label} className="flex justify-between gap-4"><dt className="capitalize text-black/45 dark:text-white/45">{entry.label}</dt><dd className="text-right font-medium">{entry.value}</dd></div>)}</dl> : <p className="mt-3 text-xs text-black/40 dark:text-white/40">No structured values recorded.</p>}
+                  {group.values.length > 0 ? <dl className="mt-3 space-y-2 text-xs">{group.values.map((entry) => <div key={entry.label} className="flex justify-between gap-4"><dt className="capitalize text-black/45 dark:text-white/45">{t(entry.label.replace(/\b\w/g, (letter) => letter.toUpperCase()))}</dt><dd className="text-right font-medium">{t(entry.value)}</dd></div>)}</dl> : <p className="mt-3 text-xs text-black/40 dark:text-white/40">No structured values recorded.</p>}
                 </div>
               ))}
             </section>
