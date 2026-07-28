@@ -12,3 +12,12 @@ export type CatalogProduct = {
   imageUrl: string | null;
   categoryIds: number[];
 };
+
+export type ProductDetailRecord = {
+  data: Record<string, unknown>;
+  metafields: unknown[];
+  variantMetafields: {
+    variantId: number;
+    data: unknown[];
+  }[];
+};

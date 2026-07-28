@@ -1,7 +1,11 @@
 import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
-import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
+import type {
+  CatalogCategory,
+  CatalogProduct,
+  ProductDetailRecord,
+} from "@/lib/catalog-types";
 import {
   applyCatalogTranslations,
   getSnapshotLocaleTranslations,
@@ -111,16 +115,7 @@ type SnapshotCategoryData = {
   categories: SnapshotCategoryRecord[];
 };
 
-export type SnapshotVariantMetafields = {
-  variantId: number;
-  data: unknown[];
-};
-
-export type SnapshotProductRecord = {
-  data: JsonRecord;
-  metafields: unknown[];
-  variantMetafields: SnapshotVariantMetafields[];
-};
+export type SnapshotProductRecord = ProductDetailRecord;
 
 export type CatalogSnapshotManifestV1 = {
   formatVersion: typeof FORMAT_VERSION;

@@ -11,14 +11,13 @@ import {
   type ReactNode,
 } from "react";
 import { useAppI18n } from "@/components/app-i18n-provider";
-import type { CatalogProduct } from "@/lib/catalog-types";
+import type {
+  CatalogProduct,
+  ProductDetailRecord,
+} from "@/lib/catalog-types";
 
 type JsonRecord = Record<string, unknown>;
-type SnapshotProductRecord = {
-  data: JsonRecord;
-  metafields: unknown[];
-  variantMetafields: { variantId: number; data: unknown[] }[];
-};
+type ProductInspectorSource = "snapshot" | "bigcommerce";
 
 const PRODUCT_GROUPS = [
   {
@@ -289,11 +288,13 @@ function InspectorSection({
 
 const ProductInspectorContext = createContext<((product: CatalogProduct) => void) | null>(null);
 
-export function SnapshotProductInspectorProvider({
-  snapshotId,
+export function ProductInspectorProvider({
+  endpoint,
+  source,
   children,
 }: {
-  snapshotId: number;
+  endpoint: string;
+  source: ProductInspectorSource;
   children: ReactNode;
 }) {
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
@@ -316,7 +317,8 @@ export function SnapshotProductInspectorProvider({
         <ProductInspectorDialog
           key={selectedProduct.id}
           product={selectedProduct}
-          snapshotId={snapshotId}
+          endpoint={`${endpoint}/${selectedProduct.id}`}
+          source={source}
           onClose={closeInspector}
         />
       ) : null}
@@ -324,7 +326,7 @@ export function SnapshotProductInspectorProvider({
   );
 }
 
-export function SnapshotProductInspectorTrigger({
+export function ProductInspectorTrigger({
   product,
   trigger,
   triggerClassName,
@@ -337,7 +339,7 @@ export function SnapshotProductInspectorTrigger({
 }) {
   const selectProduct = useContext(ProductInspectorContext);
   if (!selectProduct) {
-    throw new Error("SnapshotProductInspectorTrigger must be inside its provider.");
+    throw new Error("ProductInspectorTrigger must be inside its provider.");
   }
 
   return cardTrigger ? (
@@ -370,17 +372,19 @@ export function SnapshotProductInspectorTrigger({
 
 function ProductInspectorDialog({
   product,
-  snapshotId,
+  endpoint,
+  source,
   onClose,
 }: {
   product: CatalogProduct;
-  snapshotId: number;
+  endpoint: string;
+  source: ProductInspectorSource;
   onClose: () => void;
 }) {
   const { t } = useAppI18n();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [record, setRecord] = useState<SnapshotProductRecord | null>();
+  const [record, setRecord] = useState<ProductDetailRecord | null>();
   const [loadError, setLoadError] = useState(false);
   const data = record?.data ?? {};
   const usedKeys = new Set<string>();
@@ -409,7 +413,14 @@ function ProductInspectorDialog({
     ...collections.map((group) => ({ id: group.key, title: group.title })),
     ...(record?.metafields.length ? [{ id: "metafields", title: "Product metafields" }] : []),
     ...(record?.variantMetafields.length ? [{ id: "variant-metafields", title: "Variant metafields" }] : []),
-    ...(additionalEntries.length ? [{ id: "additional", title: "Additional captured fields" }] : []),
+    ...(additionalEntries.length
+      ? [{
+          id: "additional",
+          title: source === "snapshot"
+            ? "Additional captured fields"
+            : "Additional BigCommerce fields",
+        }]
+      : []),
   ];
 
   useEffect(() => {
@@ -425,13 +436,13 @@ function ProductInspectorDialog({
     if (record !== undefined || loadError) return;
     const controller = new AbortController();
 
-    fetch(`/api/snapshots/${snapshotId}/products/${product.id}`, {
+    fetch(endpoint, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
     })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Unable to load captured product.");
-        return response.json() as Promise<{ record: SnapshotProductRecord }>;
+        if (!response.ok) throw new Error("Unable to load product details.");
+        return response.json() as Promise<{ record: ProductDetailRecord }>;
       })
       .then((payload) => setRecord(payload.record))
       .catch((error: unknown) => {
@@ -441,7 +452,7 @@ function ProductInspectorDialog({
       });
 
     return () => controller.abort();
-  }, [loadError, product.id, record, snapshotId]);
+  }, [endpoint, loadError, record]);
 
   return (
     <dialog
@@ -458,7 +469,7 @@ function ProductInspectorDialog({
           <header className="flex shrink-0 items-start gap-4 border-b border-black/8 bg-[#f7f8f5]/95 px-5 py-4 backdrop-blur sm:px-7 sm:py-5 dark:border-white/8 dark:bg-[#0c100e]/95">
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-400">
-                {t("Captured product")}
+                {t(source === "snapshot" ? "Captured product" : "BigCommerce product")}
               </p>
               <h2
                 id={`product-inspector-title-${product.id}`}
@@ -485,7 +496,7 @@ function ProductInspectorDialog({
           <div className="grid min-h-0 flex-1 lg:grid-cols-[210px_minmax(0,1fr)]">
             <aside className="hidden border-r border-black/8 p-5 lg:block dark:border-white/8">
               <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-black/35 dark:text-white/35">
-                {t("Captured fields")}
+                {t(source === "snapshot" ? "Captured fields" : "BigCommerce fields")}
               </p>
               <nav aria-label={t("Product detail sections")} className="sticky top-5 space-y-0.5">
                 {navItems.map((item) => (
@@ -506,7 +517,7 @@ function ProductInspectorDialog({
                   <div className="text-center">
                     <span className="mx-auto block size-6 animate-spin rounded-full border-2 border-emerald-500/25 border-t-emerald-600" />
                     <p className="mt-3 text-sm text-black/45 dark:text-white/45">
-                      {t("Loading captured fields…")}
+                      {t(source === "snapshot" ? "Loading captured fields…" : "Loading BigCommerce fields…")}
                     </p>
                   </div>
                 </div>
@@ -514,7 +525,9 @@ function ProductInspectorDialog({
 
               {record === null ? (
                 <div className="mt-7 rounded-2xl border border-amber-500/20 bg-amber-500/8 p-4 text-sm text-amber-900 dark:text-amber-200">
-                  {t("The complete captured product record is unavailable.")}
+                  {t(source === "snapshot"
+                    ? "The complete captured product record is unavailable."
+                    : "The complete product record could not be loaded from BigCommerce.")}
                 </div>
               ) : null}
 
@@ -558,7 +571,12 @@ function ProductInspectorDialog({
               ) : null}
 
               {additionalEntries.length ? (
-                <InspectorSection id="additional" title="Additional captured fields">
+                <InspectorSection
+                  id="additional"
+                  title={source === "snapshot"
+                    ? "Additional captured fields"
+                    : "Additional BigCommerce fields"}
+                >
                   <FieldGrid entries={additionalEntries} />
                 </InspectorSection>
               ) : null}
