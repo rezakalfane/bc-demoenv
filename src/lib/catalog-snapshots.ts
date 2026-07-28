@@ -111,12 +111,12 @@ type SnapshotCategoryData = {
   categories: SnapshotCategoryRecord[];
 };
 
-type SnapshotVariantMetafields = {
+export type SnapshotVariantMetafields = {
   variantId: number;
   data: unknown[];
 };
 
-type SnapshotProductRecord = {
+export type SnapshotProductRecord = {
   data: JsonRecord;
   metafields: unknown[];
   variantMetafields: SnapshotVariantMetafields[];
@@ -161,6 +161,7 @@ export type CatalogSnapshotView = {
   isOwner: boolean;
   categories: CatalogCategory[];
   products: CatalogProduct[];
+  productRecords: SnapshotProductRecord[];
   currency: string;
   locales: CatalogLocale[];
   activeLocale: string | null;
@@ -2355,6 +2356,33 @@ export async function getCatalogSnapshotView(
           categories,
           products: parsePreviewProducts(preview.products),
         };
+    const catalog = asRecord(manifest?.catalog);
+    const productRecords = Array.isArray(catalog?.products)
+      ? catalog.products.flatMap((value) => {
+          const record = asRecord(value);
+          const data = asRecord(record?.data);
+          if (!record || !data) return [];
+
+          return [{
+            data,
+            metafields: Array.isArray(record.metafields) ? record.metafields : [],
+            variantMetafields: Array.isArray(record.variantMetafields)
+              ? record.variantMetafields.flatMap((entry) => {
+                  const variantRecord = asRecord(entry);
+                  const variantId = readPositiveInteger(variantRecord?.variantId);
+                  return variantId
+                    ? [{
+                        variantId,
+                        data: Array.isArray(variantRecord?.data)
+                          ? variantRecord.data
+                          : [],
+                      }]
+                    : [];
+                })
+              : [],
+          }];
+        })
+      : [];
     const availableRestoreGroups = SNAPSHOT_RESTORE_GROUPS.flatMap((group) =>
       group.id === "catalog" || asRecord(configuration?.[group.id])
         ? [group.id]
@@ -2367,6 +2395,7 @@ export async function getCatalogSnapshotView(
       isOwner,
       categories: translations.categories,
       products: translations.products,
+      productRecords,
       currency: /^[A-Z]{3}$/.test(currency) ? currency : "USD",
       locales,
       activeLocale: activeLocale?.code ?? null,
@@ -2383,6 +2412,7 @@ export async function getCatalogSnapshotView(
       isOwner,
       categories: [],
       products: [],
+      productRecords: [],
       currency: "USD",
       locales: [],
       activeLocale: null,
