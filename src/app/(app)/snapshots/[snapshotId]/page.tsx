@@ -32,8 +32,8 @@ import { CollectionBrowser } from "@/components/collection-browser";
 import { SnapshotTags } from "@/components/snapshot-tags";
 import { CatalogLocaleSelector } from "@/components/catalog-locale-selector";
 import {
-  SnapshotProductInspectorProvider,
-  SnapshotProductInspectorTrigger,
+  ProductInspectorProvider,
+  ProductInspectorTrigger,
 } from "@/components/snapshot-product-inspector";
 
 export const dynamic = "force-dynamic";
@@ -372,7 +372,10 @@ export default async function SnapshotPage({
                   </p>
                 </div>
               ) : (
-                <SnapshotProductInspectorProvider snapshotId={snapshot.summary.id}>
+                <ProductInspectorProvider
+                  endpoint={`/api/snapshots/${snapshot.summary.id}/products`}
+                  source="snapshot"
+                >
                   <CollectionBrowser
                   collectionId="snapshot-products"
                   ariaLabel={`${snapshot.summary.name} products`}
@@ -389,7 +392,7 @@ export default async function SnapshotPage({
                     id: String(product.id),
                     searchText: `${product.id} ${product.name} ${product.description} ${product.price ?? ""}`,
                     card: (
-                      <SnapshotProductInspectorTrigger
+                      <ProductInspectorTrigger
                         product={product}
                         trigger={<CatalogProductCard product={product} priceFormatter={priceFormatter} />}
                         triggerClassName="block h-full min-w-0 cursor-pointer rounded-2xl text-left focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-emerald-600"
@@ -397,7 +400,7 @@ export default async function SnapshotPage({
                       />
                     ),
                     cells: [
-                      <SnapshotProductInspectorTrigger
+                      <ProductInspectorTrigger
                         key="name"
                         product={product}
                         trigger={<span className="line-clamp-2 break-words">{product.name}</span>}
@@ -409,7 +412,7 @@ export default async function SnapshotPage({
                     ],
                   }))}
                   />
-                </SnapshotProductInspectorProvider>
+                </ProductInspectorProvider>
               )}
             </section>
           </div>

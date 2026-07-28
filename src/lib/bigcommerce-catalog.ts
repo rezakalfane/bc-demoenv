@@ -1,7 +1,11 @@
 import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
-import type { CatalogCategory, CatalogProduct } from "@/lib/catalog-types";
+import type {
+  CatalogCategory,
+  CatalogProduct,
+  ProductDetailRecord,
+} from "@/lib/catalog-types";
 import {
   applyCatalogTranslations,
   parseCatalogLocales,
@@ -21,9 +25,37 @@ const MAX_CATEGORY_DEPTH = 20;
 const DEFAULT_CURRENCY = "USD";
 const CDN_HOST_PATTERN = /^cdn\d+\.bigcommerce\.com$/i;
 const READ_RATE_LIMIT_RETRIES = 3;
+const PRODUCT_DETAIL_CONCURRENCY = 5;
+const PRODUCT_DETAIL_INCLUDES = [
+  "variants",
+  "images",
+  "custom_fields",
+  "bulk_pricing_rules",
+  "primary_image",
+  "videos",
+  "options",
+  "modifiers",
+].join(",");
 
 function wait(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function mapProductDetailsInBatches<T, R>(
+  items: T[],
+  mapper: (item: T) => Promise<R>,
+) {
+  const results: R[] = [];
+  for (let index = 0; index < items.length; index += PRODUCT_DETAIL_CONCURRENCY) {
+    results.push(
+      ...await Promise.all(
+        items
+          .slice(index, index + PRODUCT_DETAIL_CONCURRENCY)
+          .map(mapper),
+      ),
+    );
+  }
+  return results;
 }
 
 type ConnectedEnvironment = BigCommerceEnvironmentConnection & {
@@ -104,6 +136,48 @@ async function fetchBigCommerce(
     await wait(delay);
   }
   throw new CatalogRequestError("BigCommerce rate limit persisted.");
+}
+
+async function fetchBigCommerceCollection(
+  environment: ConnectedEnvironment,
+  path: string,
+  resource: string,
+) {
+  const entries: unknown[] = [];
+  let page = 1;
+
+  while (true) {
+    const separator = path.includes("?") ? "&" : "?";
+    const response = await fetchBigCommerce(
+      environment,
+      `${path}${separator}limit=${PRODUCT_PAGE_SIZE}&page=${page}`,
+    );
+    if (!response.ok) {
+      throw new CatalogRequestError(
+        getApiErrorMessage(
+          response.status,
+          `BigCommerce did not return ${resource}.`,
+        ),
+      );
+    }
+
+    const payload: unknown = await response.json();
+    const data =
+      typeof payload === "object" && payload !== null && "data" in payload
+        ? (payload as { data?: unknown }).data
+        : null;
+    if (!Array.isArray(data)) {
+      throw new CatalogRequestError(
+        `BigCommerce returned an unexpected ${resource} response.`,
+      );
+    }
+
+    entries.push(...data);
+    if (page >= readPaginationTotalPages(payload)) break;
+    page += 1;
+  }
+
+  return entries;
 }
 
 async function fetchBigCommerceGraphql(
@@ -679,4 +753,92 @@ export async function getChannelCatalog(
     productsError: productsResult.error,
     error: null,
   };
+}
+
+export async function getChannelProductDetails(
+  environmentId: number,
+  channelId: number,
+  productId: number,
+): Promise<ProductDetailRecord | null> {
+  const user = await requireAppUser();
+  const environment = await getBigCommerceEnvironmentConnection(
+    user.id,
+    environmentId,
+  );
+  if (!environment?.accessToken) return null;
+
+  const connectedEnvironment = {
+    ...environment,
+    accessToken: environment.accessToken,
+  };
+  const channel = await loadChannel(connectedEnvironment, channelId);
+  if (!channel) return null;
+
+  const assignments = await fetchBigCommerceCollection(
+    connectedEnvironment,
+    `/v3/catalog/products/channel-assignments?channel_id:in=${channelId}&product_id:in=${productId}`,
+    "product channel assignments",
+  );
+  const assigned = assignments.some((assignment) =>
+    typeof assignment === "object" &&
+    assignment !== null &&
+    "product_id" in assignment &&
+    Number(assignment.product_id) === productId
+  );
+  if (!assigned) return null;
+
+  const productResponse = await fetchBigCommerce(
+    connectedEnvironment,
+    `/v3/catalog/products/${productId}?include=${PRODUCT_DETAIL_INCLUDES}`,
+  );
+  if (productResponse.status === 404) return null;
+  if (!productResponse.ok) {
+    throw new CatalogRequestError(
+      getApiErrorMessage(
+        productResponse.status,
+        "BigCommerce did not return the requested product.",
+      ),
+    );
+  }
+
+  const productPayload: unknown = await productResponse.json();
+  const product =
+    typeof productPayload === "object" &&
+    productPayload !== null &&
+    "data" in productPayload &&
+    typeof productPayload.data === "object" &&
+    productPayload.data !== null &&
+    !Array.isArray(productPayload.data)
+      ? productPayload.data as Record<string, unknown>
+      : null;
+  if (!product) {
+    throw new CatalogRequestError(
+      "BigCommerce returned an unexpected product detail response.",
+    );
+  }
+
+  const variants = Array.isArray(product.variants)
+    ? product.variants.flatMap((variant) => {
+        if (typeof variant !== "object" || variant === null) return [];
+        const variantId = "id" in variant ? readPositiveInteger(variant.id) : null;
+        return variantId ? [{ variantId }] : [];
+      })
+    : [];
+  const [metafields, variantMetafields] = await Promise.all([
+    fetchBigCommerceCollection(
+      connectedEnvironment,
+      `/v3/catalog/products/${productId}/metafields`,
+      `metafields for product ${productId}`,
+    ),
+    mapProductDetailsInBatches(variants, async ({ variantId }) => ({
+      variantId,
+      data: await fetchBigCommerceCollection(
+        connectedEnvironment,
+        `/v3/catalog/products/${productId}/variants/${variantId}/metafields`,
+        `metafields for variant ${variantId}`,
+      ),
+    })),
+  ]);
+
+  return { data: product, metafields, variantMetafields };
 }
