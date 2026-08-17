@@ -3296,6 +3296,7 @@ async function reconcileProducts(
   const sourceToTargetVariant = new Map<number, number>();
   const newlyCreatedSourceIds = new Set<number>();
   const restoredProductIds: number[] = [];
+  const categoryAssignments: Array<{ product_id: number; category_id: number }> = [];
   let created = 0;
   let updated = 0;
   const warnings: string[] = [];
@@ -3377,20 +3378,16 @@ async function reconcileProducts(
     sourceToTargetProduct.set(sourceId, productId);
     restoredProductIds.push(productId);
 
-    for (const batch of chunk(categories, 50)) {
-      await apiRequest(environment, "/catalog/products/category-assignments", {
-        method: "PUT",
-        body: batch.map((categoryId) => ({
-          product_id: productId,
-          category_id: categoryId,
-        })),
-        resource: `category assignments for product ${name}`,
-      });
+    for (const categoryId of categories) {
+      categoryAssignments.push({ product_id: productId, category_id: categoryId });
     }
 
     // Existing products are deliberately preserved. Restore only associates
     // them with this channel and the snapshot categories; their attributes,
-    // variants, images, modifiers, and metadata remain unchanged.
+    // variants, images, modifiers, and metadata remain unchanged. Category
+    // and channel assignments are batched after this loop instead of one
+    // BigCommerce request per product, which is what made re-running a
+    // restore against an already-populated store slow.
     if (!newlyCreatedSourceIds.has(sourceId)) {
       for (const [sourceVariantId, targetVariantId] of mapExistingVariants(sourceRecord, target)) {
         sourceToTargetVariant.set(sourceVariantId, targetVariantId);
@@ -3472,6 +3469,23 @@ async function reconcileProducts(
       });
     } catch (error) {
       warnings.push(`Related products for product ${targetId}: ${error instanceof Error ? error.message : "Update failed."}`);
+    }
+  }
+
+  for (const batch of chunk(categoryAssignments, 50)) {
+    await onProgress?.(
+      `Assigning ${batch.length} product-category pairs`,
+      totalProgressSteps - 1,
+      totalProgressSteps,
+    );
+    try {
+      await apiRequest(environment, "/catalog/products/category-assignments", {
+        method: "PUT",
+        body: batch,
+        resource: "product category assignments",
+      });
+    } catch (error) {
+      warnings.push(`Category assignment batch: ${error instanceof Error ? error.message : "Assignment failed."}`);
     }
   }
 
