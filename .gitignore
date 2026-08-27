@@ -43,3 +43,20 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /.swc
+# Added by code-review-graph
+.code-review-graph/
+
+# .gitignore additions
+#AGENTS.md
+#GEMINI.md
+# keep only .mcp.example.json
+.mcp.json
+.cursorrules
+.windsurfrules
+.opencode.json
+.kiro/
+.cursor/
+
+# graph tooling artifacts (regenerable)
+ai-vault/
+graphify-out/
