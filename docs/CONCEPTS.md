@@ -55,6 +55,22 @@ A **Snapshot** is an immutable, point-in-time capture of a BigCommerce store's c
 
 In short: a **Snapshot** = a versioned, immutable backup of a store's catalog, capturable/restorable/diffable/schedulable, with durable resumable capture and safe cross-environment reuse.
 
+## What a Restore is
+
+A **Restore** is the operation that writes a captured snapshot version back into a live BigCommerce environment + channel — either the same one it was captured from or a different one entirely.
+
+### Key characteristics
+
+- **Version-pinned**: a restore targets a specific snapshot version, and a Schedule retains its selected version + groups so a later publish elsewhere can't silently change what gets restored.
+- **Selective via restore groups**: Catalog (products/categories) is always included; every other section is an opt-in configuration group (Storefront settings, Checkout, Pricing & currencies, Shipping, Tax, Inventory, B2B Edition, Localization) — see "What Restore Groups / Configuration Groups are".
+- **Additive, not destructive**: restore reconciles by stable identity — categories by URL slug/path, products by SKU/slug, zones by name — adding/updating rather than deleting, so unrelated existing destination data is preserved.
+- **Cross-channel and cross-store**: identity matching by slug/SKU (not BigCommerce IDs) means a snapshot captured from one channel — even in a different store — restores cleanly into another channel.
+- **Preflighted**: a Snapshot → Destination comparison runs first (`preflightSnapshotRestore`), then the durable restore Operation is created (`restoreSnapshot`), with progress tracked like any other catalog operation.
+- **Safe by design**: secrets (domains, SSL, carrier/payment/tax credentials) are never copied; contact email, sites, and routes stay inspect-only; anything that can't be safely applied is recorded in the manifest and surfaced as a restore warning (e.g. payment gateway channel visibility, finished manually via the **Payments → Manage Channel Visibility** deep link).
+- **Audited**: restore events are logged in the Operations audit feed alongside capture, publish, rename, and deletion.
+
+In short: a **Restore** = a preflighted, group-selective, additive reconciliation of a pinned snapshot version into a destination channel — safe against deleting existing data, explicit about anything it can't apply.
+
 ## What an Operation is
 
 A **catalog Operation** (`CATALOG_OPERATIONS`) is the persisted, tenant-owned record of a single unit of catalog work — capture, restore, clear, or Clear & Restore. It's the row that ties a background Workflow run to something the UI can show progress, results, and history for.
