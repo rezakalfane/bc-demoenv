@@ -9,6 +9,7 @@ import {
   getCatalogSnapshotSummariesByIds,
   type CatalogOperation,
 } from "@/lib/db";
+import { operationProgressPercent } from "@/lib/operation-progress";
 
 export type OperationKind = CatalogOperation["kind"] |
   "snapshot_renamed" |
@@ -211,9 +212,7 @@ export async function getCatalogOperationList(userId: string) {
     const updatedTime = Number.isFinite(parsedUpdatedTime) ? parsedUpdatedTime : createdTime;
     const isActive = operation.status === "queued" || operation.status === "running";
     const durationMs = Math.max((isActive ? now : updatedTime) - createdTime, 0);
-    const progressPercent = operation.totalSteps > 0
-      ? Math.min(Math.max(Math.round((operation.stepIndex / operation.totalSteps) * 100), 0), 100)
-      : operation.status === "completed" ? 100 : 0;
+    const progressPercent = operationProgressPercent(operation);
     const resourceHref = isDatabaseSync
       ? "/settings#database"
       : operation.kind === "snapshot" && linkedSnapshot

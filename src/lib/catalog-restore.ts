@@ -35,6 +35,7 @@ const PRODUCT_INCLUDES = [
 ].join(",");
 
 const RATE_LIMIT_RETRIES = 4;
+const RATE_LIMIT_FLOOR = 3;
 const BIGCOMMERCE_CDN_HOST = /^cdn\d+\.bigcommerce\.com$/i;
 const STOREFRONT_ASSET_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -260,11 +261,34 @@ async function apiRequest(
       );
     }
 
-    if (response.status !== 429 || attempt === RATE_LIMIT_RETRIES) break;
+    const requestsLeft = Number(response.headers.get("x-rate-limit-requests-left"));
+    const resetMilliseconds = Number(response.headers.get("x-rate-limit-time-reset-ms"));
+
+    if (response.status !== 429) {
+      // Concurrent product restores share the store quota; pause before the
+      // window is exhausted instead of waiting for BigCommerce to reject us.
+      if (
+        Number.isFinite(requestsLeft) &&
+        requestsLeft <= RATE_LIMIT_FLOOR &&
+        Number.isFinite(resetMilliseconds) &&
+        resetMilliseconds > 0
+      ) {
+        await wait(Math.min(resetMilliseconds + 250, 15_000));
+      }
+      break;
+    }
+    console.warn("BigCommerce rate limited a catalog restore request", {
+      storeHash: environment.storeHash,
+      resource: options.resource,
+      attempt: attempt + 1,
+    });
+    if (attempt === RATE_LIMIT_RETRIES) break;
     const retryAfter = Number(response.headers.get("retry-after"));
     const delay = Number.isFinite(retryAfter) && retryAfter > 0
       ? Math.min(retryAfter * 1000, 15_000)
-      : Math.min(750 * 2 ** attempt, 12_000);
+      : Number.isFinite(resetMilliseconds) && resetMilliseconds > 0
+        ? Math.min(resetMilliseconds + 250, 15_000)
+        : Math.min(750 * 2 ** attempt, 12_000);
     await wait(delay);
   }
 
@@ -2855,23 +2879,30 @@ async function syncImages(
   // its previous images. Invalid/rejected images are skipped; the rest of the
   // catalog restore remains useful and can be retried after fixing the URL.
   let uploaded = 0;
+  let rejected = 0;
+  let firstError: string | null = null;
   for (const value of sourceImages) {
     const body = imageInput(value);
-    if (body) {
-      try {
-        await apiRequest(environment, `/catalog/products/${productId}/images`, {
-          method: "POST",
-          body,
-          resource: `images for product ${productId}`,
-        });
-        uploaded += 1;
-      } catch (error) {
-        if (!(error instanceof CatalogRestoreError)) throw error;
-      }
+    if (!body) {
+      rejected += 1;
+      firstError ??= "The snapshot image has no usable URL.";
+      continue;
+    }
+    try {
+      await apiRequest(environment, `/catalog/products/${productId}/images`, {
+        method: "POST",
+        body,
+        resource: `images for product ${productId}`,
+      });
+      uploaded += 1;
+    } catch (error) {
+      if (!(error instanceof CatalogRestoreError)) throw error;
+      rejected += 1;
+      firstError ??= `${error.message.replace(/ The restore may be partially complete\.$/, "")} (${body.image_url})`;
     }
   }
 
-  if (sourceImages.length > 0 && uploaded === 0) return;
+  if (sourceImages.length > 0 && uploaded === 0) return { rejected, firstError };
 
   for (const value of targetImages) {
     const imageId = readPositiveInteger(asRecord(value)?.id);
@@ -2882,6 +2913,7 @@ async function syncImages(
       });
     }
   }
+  return { rejected, firstError };
 }
 
 async function loadProduct(
@@ -3263,14 +3295,57 @@ function mapExistingVariants(sourceRecord: SnapshotProduct, target: JsonRecord) 
   return result;
 }
 
-async function reconcileProducts(
-  environment: ConnectedEnvironment,
-  channelId: number,
-  manifest: CatalogSnapshotManifestV1,
-  categoryMap: Map<number, number>,
-  onProgress?: (currentStep: string, stepIndex?: number, totalSteps?: number) => Promise<void>,
+type RestoreProgress = (
+  currentStep: string,
+  stepIndex?: number,
+  totalSteps?: number,
+) => Promise<void>;
+
+// Durable restores process new products in small batches, one workflow step
+// per batch, so no single step can approach the Vercel function time limit.
+// The weight approximates the number of BigCommerce requests a product needs.
+const PRODUCT_BATCH_MAX_PRODUCTS = 12;
+const PRODUCT_BATCH_MAX_WEIGHT = 240;
+const PRODUCT_RESTORE_CONCURRENCY = 6;
+
+function productRestoreWeight(sourceRecord: SnapshotProduct) {
+  const source = sourceRecord.data;
+  const count = (value: unknown) => (Array.isArray(value) ? value.length : 0);
+  return (
+    6 +
+    count(source.images) +
+    count(source.variants) +
+    count(source.options) +
+    count(source.modifiers) +
+    count(source.custom_fields) +
+    count(source.bulk_pricing_rules) +
+    count(source.videos) +
+    sourceRecord.metafields.length +
+    sourceRecord.variantMetafields.reduce((sum, value) => sum + value.data.length, 0)
+  );
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
 ) {
-  const targetProducts = (
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await mapper(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, worker),
+  );
+  return results;
+}
+
+async function fetchDestinationProducts(environment: ConnectedEnvironment) {
+  return (
     await fetchCollection(
       environment,
       "/catalog/products?include=variants",
@@ -3280,7 +3355,115 @@ async function reconcileProducts(
     const record = asRecord(value);
     return record ? [record] : [];
   });
-  let taxClasses: JsonRecord[] | null = null;
+}
+
+function findProductMatches(source: JsonRecord, candidates: Iterable<JsonRecord>) {
+  const sourceKey = productMatchKey(source);
+  return [...candidates].filter((target) => {
+    const targetKey = productMatchKey(target);
+    return Boolean(
+      [...sourceKey.skus].some((sku) => targetKey.skus.has(sku)) ||
+      (sourceKey.slug && targetKey.slug === sourceKey.slug),
+    );
+  });
+}
+
+type ProductRestorePlan = {
+  // Source product ID -> matched destination product ID. Matched products are
+  // preserved and only receive category and channel assignments.
+  existingProducts: Array<[number, number]>;
+  existingVariants: Array<[number, number]>;
+  // Source product IDs to create, grouped into restore batches.
+  newProductBatches: number[][];
+  warnings: string[];
+};
+
+async function planProductRestore(
+  environment: ConnectedEnvironment,
+  manifest: CatalogSnapshotManifestV1,
+): Promise<ProductRestorePlan> {
+  const availableTargets = new Set(await fetchDestinationProducts(environment));
+  const existingProducts: Array<[number, number]> = [];
+  const existingVariants: Array<[number, number]> = [];
+  const newProducts: SnapshotProduct[] = [];
+  const warnings: string[] = [];
+
+  for (const sourceRecord of manifest.catalog.products) {
+    const source = sourceRecord.data;
+    const sourceId = readPositiveInteger(source.id);
+    const name = readString(source.name);
+    if (!sourceId || !name) {
+      throw new CatalogRestoreError("The snapshot contains an invalid product.");
+    }
+
+    const matches = findProductMatches(source, availableTargets);
+    if (matches.length > 1) {
+      warnings.push(
+        `${name}: Product ${name} matches more than one destination product by SKU or slug. Resolve the duplicate before restoring.`,
+      );
+      continue;
+    }
+
+    const target = matches[0];
+    if (target) {
+      availableTargets.delete(target);
+      existingProducts.push([sourceId, readPositiveInteger(target.id)!]);
+      existingVariants.push(...mapExistingVariants(sourceRecord, target));
+    } else {
+      newProducts.push(sourceRecord);
+    }
+  }
+
+  const newProductBatches: number[][] = [];
+  let batch: number[] = [];
+  let batchWeight = 0;
+  for (const sourceRecord of newProducts) {
+    const weight = productRestoreWeight(sourceRecord);
+    if (
+      batch.length > 0 &&
+      (batch.length >= PRODUCT_BATCH_MAX_PRODUCTS ||
+        batchWeight + weight > PRODUCT_BATCH_MAX_WEIGHT)
+    ) {
+      newProductBatches.push(batch);
+      batch = [];
+      batchWeight = 0;
+    }
+    batch.push(readPositiveInteger(sourceRecord.data.id)!);
+    batchWeight += weight;
+  }
+  if (batch.length > 0) newProductBatches.push(batch);
+
+  return { existingProducts, existingVariants, newProductBatches, warnings };
+}
+
+type ProductBatchResult = {
+  // Source product ID -> created destination product ID.
+  products: Array<[number, number]>;
+  variants: Array<[number, number]>;
+  warnings: string[];
+};
+
+async function restoreNewProductBatch(
+  environment: ConnectedEnvironment,
+  manifest: CatalogSnapshotManifestV1,
+  categoryMap: Map<number, number>,
+  sourceIds: number[],
+  options: {
+    // Set when this batch is being retried. Products the interrupted attempt
+    // already created are then found in the destination and fully restored
+    // instead of being treated as pre-existing products and left incomplete.
+    recoverPartialProducts?: boolean;
+    reservedTargetIds?: number[];
+    progressLabel?: string;
+    onProgress?: RestoreProgress;
+  } = {},
+): Promise<ProductBatchResult> {
+  const sourceById = new Map(
+    manifest.catalog.products.flatMap((record) => {
+      const id = readPositiveInteger(record.data.id);
+      return id ? [[id, record] as const] : [];
+    }),
+  );
   const sourceTaxClasses = manifest.catalog.taxClasses.flatMap((value) => {
     const record = asRecord(value);
     return record ? [record] : [];
@@ -3291,158 +3474,147 @@ async function reconcileProducts(
       return id ? [[id, readString(value.name)] as const] : [];
     }),
   );
-  const availableTargets = new Set(targetProducts);
-  const sourceToTargetProduct = new Map<number, number>();
-  const sourceToTargetVariant = new Map<number, number>();
-  const newlyCreatedSourceIds = new Set<number>();
-  const restoredProductIds: number[] = [];
-  const categoryAssignments: Array<{ product_id: number; category_id: number }> = [];
-  let created = 0;
-  let updated = 0;
+  const reserved = new Set(options.reservedTargetIds ?? []);
+  const recoveryCandidates = options.recoverPartialProducts
+    ? new Set(
+        (await fetchDestinationProducts(environment)).filter((target) => {
+          const id = readPositiveInteger(target.id);
+          return id && !reserved.has(id);
+        }),
+      )
+    : null;
+  let taxClasses: Promise<JsonRecord[]> | null = null;
   const warnings: string[] = [];
-  let progressIndex = 1;
-  const totalProgressSteps = Math.max(manifest.catalog.products.length * 2 + 2, 2);
+  const products: Array<[number, number]> = [];
+  const variants: Array<[number, number]> = [];
+  let finished = 0;
 
-  for (const sourceRecord of manifest.catalog.products) {
+  await mapWithConcurrency(sourceIds, PRODUCT_RESTORE_CONCURRENCY, async (sourceId) => {
+    const sourceRecord = sourceById.get(sourceId);
+    if (!sourceRecord) return;
     const source = sourceRecord.data;
-    const sourceId = readPositiveInteger(source.id);
     const name = readString(source.name);
-    if (!sourceId || !name) {
-      throw new CatalogRestoreError("The snapshot contains an invalid product.");
-    }
+
     try {
-    const sourceKey = productMatchKey(source);
-    const matches = [...availableTargets].filter((target) => {
-      const targetKey = productMatchKey(target);
-      return Boolean(
-        ([...sourceKey.skus].some((sku) => targetKey.skus.has(sku))) ||
-        (sourceKey.slug && targetKey.slug === sourceKey.slug),
+      const variantCount = Array.isArray(source.variants) ? source.variants.length : 0;
+      const imageCount = Array.isArray(source.images) ? source.images.length : 0;
+      await options.onProgress?.(
+        `${options.progressLabel ? `${options.progressLabel}: ` : ""}Restoring “${name}” — ${variantCount} variants, ${imageCount} images, and product metadata`,
+        finished,
+        sourceIds.length,
       );
-    });
 
-    if (matches.length > 1) {
-      throw new CatalogRestoreError(
-        `Product ${name} matches more than one destination product by SKU or slug. Resolve the duplicate before restoring.`,
-      );
-    }
+      const categories = sourceProductCategoryIds(source, categoryMap);
+      let productId: number | null = null;
 
-    const categories = sourceProductCategoryIds(source, categoryMap);
+      if (recoveryCandidates) {
+        const matches = findProductMatches(source, recoveryCandidates);
+        if (matches.length > 1) {
+          throw new CatalogRestoreError(
+            `Product ${name} matches more than one destination product by SKU or slug. Resolve the duplicate before restoring.`,
+          );
+        }
+        if (matches[0]) {
+          recoveryCandidates.delete(matches[0]);
+          productId = readPositiveInteger(matches[0].id);
+        }
+      }
 
-    let target: JsonRecord;
-    let productId: number;
-
-    if (matches[0]) {
-      await onProgress?.(
-        `Using existing product “${name}” — preserving attributes, variants, images, and metadata`,
-        progressIndex++,
-        totalProgressSteps,
-      );
-      target = matches[0];
-      productId = readPositiveInteger(target.id)!;
-      availableTargets.delete(target);
-      // The product record itself is preserved, but its destination channel
-      // and category assignments are updated by this restore.
-      updated += 1;
-    } else {
-      await onProgress?.(
-        `Creating product “${name}”`,
-        progressIndex++,
-        totalProgressSteps,
-      );
-      taxClasses ??= await resolveTaxClassMap(environment);
-      const base: JsonRecord = { ...pick(source, PRODUCT_FIELDS) };
-      const brandName = readString(source.brand_name) || sourceBrands.get(Number(source.brand_id));
-      if (brandName) base.brand_name = brandName;
-      const sourceTaxClass = sourceTaxClasses.find(
-        (value) => Number(value.id) === Number(source.tax_class_id),
-      );
-      const sourceTaxName = readString(sourceTaxClass?.name);
-      const targetTaxClass = taxClasses.find(
-        (value) => normalizeText(value.name) === normalizeText(sourceTaxName),
-      );
-      if (targetTaxClass) base.tax_class_id = Number(targetTaxClass.id);
-      const payload = await apiRequest(environment, "/catalog/products", {
-        method: "POST",
-        body: { ...base, categories },
-        resource: `product ${name}`,
-      });
-      target = asRecord(asRecord(payload)?.data) ?? {};
-      productId = readPositiveInteger(target.id) ?? 0;
       if (!productId) {
-        throw new CatalogRestoreError(`BigCommerce did not return the ID for product ${name}.`);
+        taxClasses ??= resolveTaxClassMap(environment);
+        const targetTaxClasses = await taxClasses;
+        const base: JsonRecord = { ...pick(source, PRODUCT_FIELDS) };
+        const brandName = readString(source.brand_name) || sourceBrands.get(Number(source.brand_id));
+        if (brandName) base.brand_name = brandName;
+        const sourceTaxClass = sourceTaxClasses.find(
+          (value) => Number(value.id) === Number(source.tax_class_id),
+        );
+        const sourceTaxName = readString(sourceTaxClass?.name);
+        const targetTaxClass = targetTaxClasses.find(
+          (value) => normalizeText(value.name) === normalizeText(sourceTaxName),
+        );
+        if (targetTaxClass) base.tax_class_id = Number(targetTaxClass.id);
+        const payload = await apiRequest(environment, "/catalog/products", {
+          method: "POST",
+          body: { ...base, categories },
+          resource: `product ${name}`,
+        });
+        productId = readPositiveInteger(asRecord(asRecord(payload)?.data)?.id);
+        if (!productId) {
+          throw new CatalogRestoreError(`BigCommerce did not return the ID for product ${name}.`);
+        }
       }
-      created += 1;
-      newlyCreatedSourceIds.add(sourceId);
-    }
 
-    sourceToTargetProduct.set(sourceId, productId);
-    restoredProductIds.push(productId);
+      // Record the product before the slower detail work so category and
+      // channel assignment still happen if a later sub-resource fails.
+      products.push([sourceId, productId]);
 
-    for (const categoryId of categories) {
-      categoryAssignments.push({ product_id: productId, category_id: categoryId });
-    }
-
-    // Existing products are deliberately preserved. Restore only associates
-    // them with this channel and the snapshot categories; their attributes,
-    // variants, images, modifiers, and metadata remain unchanged. Category
-    // and channel assignments are batched after this loop instead of one
-    // BigCommerce request per product, which is what made re-running a
-    // restore against an already-populated store slow.
-    if (!newlyCreatedSourceIds.has(sourceId)) {
-      for (const [sourceVariantId, targetVariantId] of mapExistingVariants(sourceRecord, target)) {
-        sourceToTargetVariant.set(sourceVariantId, targetVariantId);
-      }
-      await onProgress?.(
-        `Assigned “${name}” to ${categories.length} snapshot categories; channel assignment queued`,
-        progressIndex++,
-        totalProgressSteps,
+      // Every call below reconciles against the product's current state, so
+      // re-running it after an interrupted attempt converges on the snapshot.
+      const target = await loadProduct(environment, productId);
+      const images = await syncImages(
+        environment,
+        productId,
+        Array.isArray(target.images) ? target.images : [],
+        Array.isArray(source.images) ? source.images : [],
       );
-      continue;
-    }
+      if (images.rejected > 0) {
+        // Snapshots keep image URLs, not image files. URLs on the source store's
+        // CDN stop resolving once the source product or image is deleted.
+        warnings.push(
+          `${name}: ${images.rejected} of ${imageCount} snapshot images were not restored. ${images.firstError}`,
+        );
+      }
+      await replaceProductChildren(environment, productId, target, source);
+      const variantMap = await rebuildVariants(environment, productId, target, sourceRecord);
+      variants.push(...variantMap);
 
-    const variantCount = Array.isArray(source.variants) ? source.variants.length : 0;
-    const imageCount = Array.isArray(source.images) ? source.images.length : 0;
-    await onProgress?.(
-      `Restoring “${name}” — ${variantCount} variants, ${imageCount} images, and product metadata`,
-      progressIndex++,
-      totalProgressSteps,
-    );
-
-    target = await loadProduct(environment, productId);
-    await syncImages(
-      environment,
-      productId,
-      Array.isArray(target.images) ? target.images : [],
-      Array.isArray(source.images) ? source.images : [],
-    );
-    await replaceProductChildren(environment, productId, target, source);
-    const variantMap = await rebuildVariants(environment, productId, target, sourceRecord);
-    for (const [sourceVariantId, targetVariantId] of variantMap) {
-      sourceToTargetVariant.set(sourceVariantId, targetVariantId);
-    }
-
-    await syncMetafields(
-      environment,
-      `/catalog/products/${productId}/metafields`,
-      sourceRecord.metafields,
-      `metafields for product ${name}`,
-    );
+      await syncMetafields(
+        environment,
+        `/catalog/products/${productId}/metafields`,
+        sourceRecord.metafields,
+        `metafields for product ${name}`,
+      );
     } catch (error) {
-      const warning = `${name}: ${error instanceof Error ? error.message : "Product restore failed."}`;
-      warnings.push(warning);
-      await onProgress?.(
+      warnings.push(`${name}: ${error instanceof Error ? error.message : "Product restore failed."}`);
+      await options.onProgress?.(
         `Skipped remaining work for “${name}” after an error; continuing with the next product`,
-        progressIndex++,
-        totalProgressSteps,
+        finished,
+        sourceIds.length,
       );
+    } finally {
+      finished += 1;
     }
-  }
+  });
+
+  return { products, variants, warnings };
+}
+
+async function finalizeProductRestore(
+  environment: ConnectedEnvironment,
+  channelId: number,
+  manifest: CatalogSnapshotManifestV1,
+  categoryMap: Map<number, number>,
+  sourceToTargetProduct: Map<number, number>,
+  newlyCreatedSourceIds: Set<number>,
+  onProgress?: RestoreProgress,
+) {
+  const warnings: string[] = [];
+  const relatedUpdates: Array<{ id: number; related_products: number[] }> = [];
+  const categoryAssignments: Array<{ product_id: number; category_id: number }> = [];
 
   for (const sourceRecord of manifest.catalog.products) {
     const sourceId = readPositiveInteger(sourceRecord.data.id);
-    if (!sourceId || !newlyCreatedSourceIds.has(sourceId)) continue;
     const targetId = sourceId ? sourceToTargetProduct.get(sourceId) : undefined;
-    if (!targetId) continue;
+    if (!sourceId || !targetId) continue;
+
+    for (const categoryId of sourceProductCategoryIds(sourceRecord.data, categoryMap)) {
+      categoryAssignments.push({ product_id: targetId, category_id: categoryId });
+    }
+
+    // Existing products are deliberately preserved: they only receive the
+    // snapshot category and channel assignments below.
+    if (!newlyCreatedSourceIds.has(sourceId)) continue;
 
     const sourceRelatedProducts = Array.isArray(sourceRecord.data.related_products)
       ? sourceRecord.data.related_products
@@ -3457,26 +3629,45 @@ async function reconcileProducts(
         : undefined;
       return relatedTargetId ? [relatedTargetId] : [];
     });
-    const relatedProducts = automaticRelatedProducts || mappedRelatedProducts.length === 0
-      ? [-1]
-      : mappedRelatedProducts;
+    relatedUpdates.push({
+      id: targetId,
+      related_products: automaticRelatedProducts || mappedRelatedProducts.length === 0
+        ? [-1]
+        : mappedRelatedProducts,
+    });
+  }
 
+  const restoredProductIds = [...new Set(sourceToTargetProduct.values())];
+  // The batch product endpoint accepts at most 10 products per request.
+  const relatedBatches = chunk(relatedUpdates, 10);
+  const categoryBatches = chunk(categoryAssignments, 50);
+  const channelBatches = chunk(restoredProductIds, 50);
+  const totalRequests =
+    relatedBatches.length + categoryBatches.length + channelBatches.length;
+  let requestIndex = 0;
+
+  for (const batch of relatedBatches) {
+    await onProgress?.(
+      `Linking related products for ${batch.length} restored products`,
+      requestIndex++,
+      totalRequests,
+    );
     try {
-      await apiRequest(environment, `/catalog/products/${targetId}`, {
+      await apiRequest(environment, "/catalog/products", {
         method: "PUT",
-        body: { related_products: relatedProducts },
-        resource: `related products for product ${targetId}`,
+        body: batch,
+        resource: "related products",
       });
     } catch (error) {
-      warnings.push(`Related products for product ${targetId}: ${error instanceof Error ? error.message : "Update failed."}`);
+      warnings.push(`Related products for products ${batch.map((value) => value.id).join(", ")}: ${error instanceof Error ? error.message : "Update failed."}`);
     }
   }
 
-  for (const batch of chunk(categoryAssignments, 50)) {
+  for (const batch of categoryBatches) {
     await onProgress?.(
       `Assigning ${batch.length} product-category pairs`,
-      totalProgressSteps - 1,
-      totalProgressSteps,
+      requestIndex++,
+      totalRequests,
     );
     try {
       await apiRequest(environment, "/catalog/products/category-assignments", {
@@ -3489,11 +3680,11 @@ async function reconcileProducts(
     }
   }
 
-  for (const batch of chunk(restoredProductIds, 50)) {
+  for (const batch of channelBatches) {
     await onProgress?.(
       `Assigning ${batch.length} restored products to the destination channel`,
-      totalProgressSteps - 1,
-      totalProgressSteps,
+      requestIndex++,
+      totalRequests,
     );
     try {
       await apiRequest(environment, "/catalog/products/channel-assignments", {
@@ -3506,19 +3697,189 @@ async function reconcileProducts(
     }
   }
 
+  return warnings;
+}
+
+async function reconcileProducts(
+  environment: ConnectedEnvironment,
+  channelId: number,
+  manifest: CatalogSnapshotManifestV1,
+  categoryMap: Map<number, number>,
+  onProgress?: RestoreProgress,
+) {
+  const plan = await planProductRestore(environment, manifest);
+  const sourceToTargetProduct = new Map(plan.existingProducts);
+  const sourceToTargetVariant = new Map(plan.existingVariants);
+  const newlyCreatedSourceIds = new Set<number>();
+  const warnings = [...plan.warnings];
+  const newProductCount = plan.newProductBatches.flat().length;
+
+  for (const [batchIndex, sourceIds] of plan.newProductBatches.entries()) {
+    const result = await restoreNewProductBatch(environment, manifest, categoryMap, sourceIds, {
+      progressLabel: `Batch ${batchIndex + 1} of ${plan.newProductBatches.length}`,
+      onProgress,
+    });
+    for (const [sourceId, targetId] of result.products) {
+      sourceToTargetProduct.set(sourceId, targetId);
+      newlyCreatedSourceIds.add(sourceId);
+    }
+    for (const [sourceId, targetId] of result.variants) sourceToTargetVariant.set(sourceId, targetId);
+    warnings.push(...result.warnings);
+  }
+
+  warnings.push(...await finalizeProductRestore(
+    environment,
+    channelId,
+    manifest,
+    categoryMap,
+    sourceToTargetProduct,
+    newlyCreatedSourceIds,
+    onProgress,
+  ));
   await onProgress?.(
-    `Product restore complete: ${created} created and ${updated} existing products assigned`,
-    totalProgressSteps,
-    totalProgressSteps,
+    `Product restore complete: ${newlyCreatedSourceIds.size} of ${newProductCount} created and ${plan.existingProducts.length} existing products assigned`,
   );
 
   return {
-    created,
-    updated,
+    created: newlyCreatedSourceIds.size,
+    updated: plan.existingProducts.length,
     assignmentsRemoved: 0,
     warnings,
     sourceToTargetProduct,
     sourceToTargetVariant,
+  };
+}
+
+async function loadRestoreContext(input: {
+  snapshotId: number;
+  destinationEnvironmentId: number;
+  destinationChannelId: number;
+  userId: string;
+}) {
+  const snapshot = await getAccessibleCatalogSnapshot(input.userId, input.snapshotId);
+  if (!snapshot) {
+    throw new CatalogRestoreError("The selected snapshot was not found.");
+  }
+  const manifest = parseManifest(snapshot);
+  const { environment, channelName } = await resolveDestination(
+    input.userId,
+    input.destinationEnvironmentId,
+    input.destinationChannelId,
+  );
+  return { snapshot, manifest, environment, channelName };
+}
+
+type DurableRestoreInput = {
+  snapshotId: number;
+  destinationEnvironmentId: number;
+  destinationChannelId: number;
+  userId: string;
+  onProgress?: RestoreProgress;
+};
+
+export type DurableCatalogRestorePlan = {
+  categoriesCreated: number;
+  categoriesUpdated: number;
+  categoryMap: Array<[number, number]>;
+  existingProducts: Array<[number, number]>;
+  newProductBatches: number[][];
+  warnings: string[];
+};
+
+export type DurableCatalogProductBatchResult = {
+  products: Array<[number, number]>;
+  warnings: string[];
+};
+
+/**
+ * First durable catalog step: restores categories and decides which snapshot
+ * products match existing destination products and which must be created.
+ */
+export async function prepareDurableCatalogRestore(
+  input: DurableRestoreInput,
+): Promise<DurableCatalogRestorePlan> {
+  const { manifest, environment, channelName } = await loadRestoreContext(input);
+  await input.onProgress?.("Creating and updating categories", 0, 2);
+  const categoryState = await reconcileCategories(
+    environment,
+    input.destinationChannelId,
+    channelName,
+    manifest.catalog.categories,
+  );
+  await input.onProgress?.("Matching snapshot products with destination products", 1, 2);
+  const plan = await planProductRestore(environment, manifest);
+  return {
+    categoriesCreated: categoryState.created,
+    categoriesUpdated: categoryState.updated,
+    categoryMap: [...categoryState.sourceToTarget],
+    existingProducts: plan.existingProducts,
+    newProductBatches: plan.newProductBatches,
+    warnings: plan.warnings,
+  };
+}
+
+/** Creates and fully restores one batch of new products. Safe to retry. */
+export async function restoreDurableCatalogProductBatch(
+  input: DurableRestoreInput & {
+    categoryMap: Array<[number, number]>;
+    reservedTargetIds: number[];
+    sourceIds: number[];
+    isRetry: boolean;
+    progressLabel: string;
+  },
+): Promise<DurableCatalogProductBatchResult> {
+  const { manifest, environment } = await loadRestoreContext(input);
+  const result = await restoreNewProductBatch(
+    environment,
+    manifest,
+    new Map(input.categoryMap),
+    input.sourceIds,
+    {
+      recoverPartialProducts: input.isRetry,
+      reservedTargetIds: input.reservedTargetIds,
+      progressLabel: input.progressLabel,
+      onProgress: input.onProgress,
+    },
+  );
+  return { products: result.products, warnings: result.warnings };
+}
+
+/** Last durable catalog step: related products and batched assignments. */
+export async function finalizeDurableCatalogRestore(
+  input: DurableRestoreInput & {
+    plan: DurableCatalogRestorePlan;
+    batches: DurableCatalogProductBatchResult[];
+  },
+): Promise<CatalogRestoreResult> {
+  const { snapshot, manifest, environment, channelName } = await loadRestoreContext(input);
+  const createdProducts = input.batches.flatMap((batch) => batch.products);
+  const assignmentWarnings = await finalizeProductRestore(
+    environment,
+    input.destinationChannelId,
+    manifest,
+    new Map(input.plan.categoryMap),
+    new Map([...input.plan.existingProducts, ...createdProducts]),
+    new Set(createdProducts.map(([sourceId]) => sourceId)),
+    input.onProgress,
+  );
+  return {
+    snapshotName: snapshot.name,
+    snapshotVersion: snapshot.snapshotVersion,
+    categoriesCreated: input.plan.categoriesCreated,
+    categoriesUpdated: input.plan.categoriesUpdated,
+    categoriesRemoved: 0,
+    productsCreated: createdProducts.length,
+    productsUpdated: input.plan.existingProducts.length,
+    productAssignmentsRemoved: 0,
+    warnings: [
+      ...input.plan.warnings,
+      ...input.batches.flatMap((batch) => batch.warnings),
+      ...assignmentWarnings,
+    ],
+    manualActions: [],
+    restoredGroups: ["catalog"],
+    destinationEnvironmentName: environment.name,
+    destinationChannelName: channelName,
   };
 }
 
@@ -3531,18 +3892,10 @@ export async function restoreCatalogSnapshot(input: {
   onProgress?: (currentStep: string, stepIndex?: number, totalSteps?: number) => Promise<void>;
 }): Promise<CatalogRestoreResult> {
   const userId = input.userId ?? (await requireAppUser()).id;
-  const snapshot = await getAccessibleCatalogSnapshot(userId, input.snapshotId);
-
-  if (!snapshot) {
-    throw new CatalogRestoreError("The selected snapshot was not found.");
-  }
-
-  const manifest = parseManifest(snapshot);
-  const { environment, channelName } = await resolveDestination(
+  const { snapshot, manifest, environment, channelName } = await loadRestoreContext({
+    ...input,
     userId,
-    input.destinationEnvironmentId,
-    input.destinationChannelId,
-  );
+  });
   const requestedRestoreGroups = parseSnapshotRestoreGroups(
     input.restoreGroups?.length ? input.restoreGroups : ["catalog"],
   );

@@ -23,7 +23,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ operationI
   await expireStaleSnapshotOperations(user.id);
   op = await getCatalogOperation(user.id, id);
   if (!op) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ id: op.id, kind: op.kind, status: op.status, currentStep: op.currentStep, stepIndex: op.stepIndex, totalSteps: op.totalSteps, snapshotId: op.snapshotId, error: op.error, result: op.resultJson ? JSON.parse(op.resultJson) : null });
+  return NextResponse.json({ id: op.id, kind: op.kind, status: op.status, currentStep: op.currentStep, stepIndex: op.stepIndex, totalSteps: op.totalSteps, stepProgress: op.stepProgress, snapshotId: op.snapshotId, error: op.error, result: op.resultJson ? JSON.parse(op.resultJson) : null });
 }
 
 export async function POST(_: Request, { params }: { params: Promise<{ operationId: string }> }) {
