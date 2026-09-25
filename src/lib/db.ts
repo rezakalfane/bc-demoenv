@@ -140,7 +140,10 @@ export type CatalogOperation = {
   environmentId: number | null; channelId: number | null; snapshotId: number | null;
   operationKey: string | null;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
-  currentStep: string; stepIndex: number; totalSteps: number; payloadJson: string;
+  currentStep: string; stepIndex: number; totalSteps: number;
+  // Fraction (0–1) of the current step that is done, when the step reports it.
+  stepProgress: number | null;
+  payloadJson: string;
   resultJson: string | null; error: string | null; workflowRunId: string | null;
   createdAt: string; updatedAt: string;
 };
@@ -661,6 +664,14 @@ export async function applyCurrentDatabaseSchema(db: Client) {
         "ALTER TABLE catalog_operations ADD COLUMN workflow_run_id TEXT",
       );
     }
+    const hasStepProgress = catalogOperationColumns.rows.some(
+      (column) => column.name === "step_progress",
+    );
+    if (!hasStepProgress) {
+      await db.execute(
+        "ALTER TABLE catalog_operations ADD COLUMN step_progress REAL",
+      );
+    }
     await db.execute("CREATE INDEX IF NOT EXISTS catalog_operations_user_idx ON catalog_operations(user_id, id DESC)");
     await db.execute(
       "CREATE UNIQUE INDEX IF NOT EXISTS catalog_operations_one_active_key_idx ON catalog_operations(user_id, kind, operation_key) WHERE operation_key IS NOT NULL AND status IN ('queued', 'running')",
@@ -773,7 +784,7 @@ export async function getActiveDatabaseClientForMaintenance() {
 }
 
 function toCatalogOperation(row: Record<string, unknown>): CatalogOperation {
-  return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), operationKey: row.operation_key == null ? null : String(row.operation_key), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), workflowRunId: row.workflow_run_id == null ? null : String(row.workflow_run_id), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
+  return { id: Number(row.id), userId: String(row.user_id), kind: row.kind as CatalogOperation["kind"], environmentId: row.environment_id == null ? null : Number(row.environment_id), channelId: row.channel_id == null ? null : Number(row.channel_id), snapshotId: row.snapshot_id == null ? null : Number(row.snapshot_id), operationKey: row.operation_key == null ? null : String(row.operation_key), status: row.status as CatalogOperation["status"], currentStep: String(row.current_step ?? ""), stepIndex: Number(row.step_index ?? 0), totalSteps: Number(row.total_steps ?? 0), stepProgress: row.step_progress == null ? null : Number(row.step_progress), payloadJson: String(row.payload_json), resultJson: row.result_json == null ? null : String(row.result_json), error: row.error == null ? null : String(row.error), workflowRunId: row.workflow_run_id == null ? null : String(row.workflow_run_id), createdAt: toIsoDate(row.created_at), updatedAt: toIsoDate(row.updated_at) };
 }
 
 function toCatalogSchedule(row: Record<string, unknown>): CatalogSchedule {
@@ -971,7 +982,7 @@ export async function createCatalogOperation(userId: string, input: { kind: Cata
   return Number(r.rows[0].id);
 }
 export async function getCatalogOperation(userId: string, id: number) { await ensureSchema(); const r = await getClient().execute({sql:"SELECT * FROM catalog_operations WHERE user_id = ? AND id = ?",args:[userId,id]}); return r.rows[0] ? toCatalogOperation(r.rows[0] as Record<string,unknown>) : null; }
-export async function updateCatalogOperation(userId: string, id: number, patch: Partial<Pick<CatalogOperation,"status"|"currentStep"|"stepIndex"|"totalSteps"|"resultJson"|"error"|"payloadJson"|"snapshotId"|"workflowRunId">>) { await ensureSchema(); const fields: string[]=[]; const args: Array<string | number | null>=[]; for (const [k,v] of Object.entries(patch)) { const col=k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`); fields.push(`${col} = ?`); args.push(v ?? null); } if (!fields.length) return; fields.push("updated_at = CURRENT_TIMESTAMP"); args.push(userId,id); await getClient().execute({sql:`UPDATE catalog_operations SET ${fields.join(", ")} WHERE user_id = ? AND id = ?`,args}); }
+export async function updateCatalogOperation(userId: string, id: number, patch: Partial<Pick<CatalogOperation,"status"|"currentStep"|"stepIndex"|"totalSteps"|"stepProgress"|"resultJson"|"error"|"payloadJson"|"snapshotId"|"workflowRunId">>) { await ensureSchema(); const fields: string[]=[]; const args: Array<string | number | null>=[]; for (const [k,v] of Object.entries(patch)) { const col=k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`); fields.push(`${col} = ?`); args.push(v ?? null); } if (!fields.length) return; fields.push("updated_at = CURRENT_TIMESTAMP"); args.push(userId,id); await getClient().execute({sql:`UPDATE catalog_operations SET ${fields.join(", ")} WHERE user_id = ? AND id = ?`,args}); }
 
 export async function claimCatalogOperationWorkflowRecovery(
   userId: string,

@@ -11,6 +11,7 @@ import {
 } from "@/lib/db";
 import { getCatalogOperationList } from "@/lib/catalog-operations-list";
 import { reconcileCatalogOperationWorkflow } from "@/lib/start-catalog-snapshot-workflow";
+import { operationProgressPercent } from "@/lib/operation-progress";
 
 export type WorkflowStageStatus =
   | "pending"
@@ -110,12 +111,15 @@ function strings(value: unknown) {
 }
 
 function progress(operation: CatalogOperation) {
-  if (operation.status === "completed") return 100;
-  if (operation.totalSteps <= 0) return 0;
-  return Math.min(
-    Math.max(Math.round((operation.stepIndex / operation.totalSteps) * 100), 0),
-    99,
-  );
+  return operationProgressPercent(operation, { maxWhileActive: 99 });
+}
+
+// Progress of the stage that is running now; steps that do not report their
+// own progress keep the previous indeterminate midpoint.
+function currentStageProgress(operation: CatalogOperation) {
+  return operation.stepProgress == null
+    ? 50
+    : Math.min(Math.max(Math.round(operation.stepProgress * 100), 1), 99);
 }
 
 function terminalStageStatus(operation: CatalogOperation): WorkflowStageStatus {
@@ -334,7 +338,7 @@ function operationStages(operation: CatalogOperation, payload: Record<string, un
         label: `Restore ${group.replaceAll("_", " ")}`,
         description: isCurrent ? operation.currentStep : `Reconcile the ${group.replaceAll("_", " ")} section from the selected snapshot.`,
         status: isDone ? "completed" : isStoppedHere ? terminalStageStatus(operation) : isCurrent ? "running" : "pending",
-        progressPercent: isDone ? 100 : isCurrent ? 50 : 0,
+        progressPercent: isDone ? 100 : isCurrent ? currentStageProgress(operation) : 0,
       });
     });
     stages.push({
@@ -429,7 +433,7 @@ function operationStages(operation: CatalogOperation, payload: Record<string, un
       label: group.replaceAll("_", " "),
       description: isCurrent ? operation.currentStep : `Restore the ${group.replaceAll("_", " ")} section.`,
       status: isDone ? "completed" : isStoppedHere ? terminalStageStatus(operation) : isCurrent ? "running" : "pending",
-      progressPercent: isDone ? 100 : isCurrent ? 50 : 0,
+      progressPercent: isDone ? 100 : isCurrent ? currentStageProgress(operation) : 0,
     });
   });
   stages.push({

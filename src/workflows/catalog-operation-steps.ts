@@ -1,4 +1,4 @@
-import { FatalError } from "workflow";
+import { FatalError, getStepMetadata } from "workflow";
 import {
   getCatalogOperation,
   updateCatalogOperation,
@@ -6,10 +6,15 @@ import {
 } from "@/lib/db";
 import {
   clearCatalogChannel,
+  finalizeDurableCatalogRestore,
   getCatalogRestorePreflight,
+  prepareDurableCatalogRestore,
   restoreCatalogSnapshot,
+  restoreDurableCatalogProductBatch,
   type CatalogRestoreResult,
   type ClearCatalogResult,
+  type DurableCatalogProductBatchResult,
+  type DurableCatalogRestorePlan,
 } from "@/lib/catalog-restore";
 import {
   parseSnapshotRestoreGroups,
@@ -159,6 +164,7 @@ export async function restoreCatalogGroupStep(
           currentStep,
           stepIndex: groupIndex,
           totalSteps: totalGroups,
+          stepProgress: null,
         });
       },
     });
@@ -167,6 +173,150 @@ export async function restoreCatalogGroupStep(
   }
 }
 restoreCatalogGroupStep.maxRetries = 3;
+
+// Share of the catalog section's progress bar given to each phase. Product
+// batches do nearly all of the BigCommerce work, so they get most of it.
+const CATALOG_PREPARE_SHARE = 0.08;
+const CATALOG_FINALIZE_SHARE = 0.05;
+
+function phaseProgress(start: number, share: number) {
+  return (done = 0, total = 1) =>
+    start + share * (total > 0 ? Math.min(done / total, 1) : 0);
+}
+
+function batchPhaseProgress(batchIndex: number, totalBatches: number) {
+  const share = 1 - CATALOG_PREPARE_SHARE - CATALOG_FINALIZE_SHARE;
+  return (done = 0, total = 1) =>
+    CATALOG_PREPARE_SHARE +
+    share * ((batchIndex + (total > 0 ? Math.min(done / total, 1) : 0)) / totalBatches);
+}
+
+function durableRestoreInput(
+  userId: string,
+  operationId: number,
+  operation: CatalogOperation,
+  groupIndex: number,
+  totalGroups: number,
+  stepProgress: (done?: number, total?: number) => number,
+) {
+  const payload = parsePayload(operation);
+  return {
+    snapshotId: Number(payload.snapshotId),
+    destinationEnvironmentId: Number(payload.destinationEnvironmentId),
+    destinationChannelId: Number(payload.destinationChannelId),
+    userId,
+    onProgress: async (currentStep: string, done?: number, total?: number) => {
+      await requireActiveOperation(userId, operationId);
+      await updateCatalogOperation(userId, operationId, {
+        currentStep,
+        stepIndex: groupIndex,
+        totalSteps: totalGroups,
+        stepProgress: stepProgress(done, total),
+      });
+    },
+  };
+}
+
+// The catalog group is split into prepare → product batches → finalize steps
+// so each step stays well within the function time limit and a retry only
+// repeats one small batch instead of the entire catalog.
+export async function prepareCatalogRestoreStep(
+  userId: string,
+  operationId: number,
+  groupIndex: number,
+  totalGroups: number,
+): Promise<DurableCatalogRestorePlan> {
+  "use step";
+  console.info("Preparing durable catalog restore", { operationId });
+  try {
+    const operation = await requireActiveOperation(userId, operationId);
+    return await prepareDurableCatalogRestore(
+      durableRestoreInput(
+        userId,
+        operationId,
+        operation,
+        groupIndex,
+        totalGroups,
+        phaseProgress(0, CATALOG_PREPARE_SHARE),
+      ),
+    );
+  } catch (error) {
+    throw asStepError(error);
+  }
+}
+prepareCatalogRestoreStep.maxRetries = 3;
+
+export async function restoreCatalogProductBatchStep(
+  userId: string,
+  operationId: number,
+  plan: Pick<DurableCatalogRestorePlan, "categoryMap" | "existingProducts">,
+  sourceIds: number[],
+  batchIndex: number,
+  totalBatches: number,
+  groupIndex: number,
+  totalGroups: number,
+): Promise<DurableCatalogProductBatchResult> {
+  "use step";
+  const { attempt } = getStepMetadata();
+  console.info("Restoring durable catalog product batch", {
+    operationId,
+    batch: batchIndex + 1,
+    totalBatches,
+    products: sourceIds.length,
+    attempt,
+  });
+  try {
+    const operation = await requireActiveOperation(userId, operationId);
+    return await restoreDurableCatalogProductBatch({
+      ...durableRestoreInput(
+        userId,
+        operationId,
+        operation,
+        groupIndex,
+        totalGroups,
+        batchPhaseProgress(batchIndex, totalBatches),
+      ),
+      categoryMap: plan.categoryMap,
+      reservedTargetIds: plan.existingProducts.map(([, targetId]) => targetId),
+      sourceIds,
+      isRetry: attempt > 1,
+      progressLabel: `Product batch ${batchIndex + 1} of ${totalBatches}`,
+    });
+  } catch (error) {
+    throw asStepError(error);
+  }
+}
+restoreCatalogProductBatchStep.maxRetries = 3;
+
+export async function finalizeCatalogRestoreStep(
+  userId: string,
+  operationId: number,
+  plan: DurableCatalogRestorePlan,
+  batches: DurableCatalogProductBatchResult[],
+  groupIndex: number,
+  totalGroups: number,
+): Promise<CatalogRestoreResult> {
+  "use step";
+  console.info("Finalizing durable catalog restore", { operationId });
+  try {
+    const operation = await requireActiveOperation(userId, operationId);
+    return await finalizeDurableCatalogRestore({
+      ...durableRestoreInput(
+        userId,
+        operationId,
+        operation,
+        groupIndex,
+        totalGroups,
+        phaseProgress(1 - CATALOG_FINALIZE_SHARE, CATALOG_FINALIZE_SHARE),
+      ),
+      plan,
+      batches,
+    });
+  } catch (error) {
+    throw asStepError(error);
+  }
+}
+finalizeCatalogRestoreStep.maxRetries = 3;
 
 export async function clearCatalogStep(
   userId: string,

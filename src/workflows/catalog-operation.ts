@@ -4,11 +4,59 @@ import {
   completeRefreshOperationStep,
   completeRestoreOperationStep,
   failCatalogOperationStep,
+  finalizeCatalogRestoreStep,
   initializeCatalogOperationStep,
+  prepareCatalogRestoreStep,
   preflightRefreshOperationStep,
   restoreCatalogGroupStep,
+  restoreCatalogProductBatchStep,
 } from "./catalog-operation-steps";
-import type { CatalogRestoreResult } from "@/lib/catalog-restore";
+import type {
+  CatalogRestoreResult,
+  DurableCatalogProductBatchResult,
+} from "@/lib/catalog-restore";
+import type { SnapshotRestoreGroup } from "@/lib/snapshot-configuration";
+
+async function restoreGroup(
+  userId: string,
+  operationId: number,
+  restoreGroup: SnapshotRestoreGroup,
+  groupIndex: number,
+  totalGroups: number,
+): Promise<CatalogRestoreResult> {
+  if (restoreGroup !== "catalog") {
+    return await restoreCatalogGroupStep(
+      userId,
+      operationId,
+      restoreGroup,
+      groupIndex,
+      totalGroups,
+    );
+  }
+
+  const plan = await prepareCatalogRestoreStep(userId, operationId, groupIndex, totalGroups);
+  const batches: DurableCatalogProductBatchResult[] = [];
+  for (let index = 0; index < plan.newProductBatches.length; index += 1) {
+    batches.push(await restoreCatalogProductBatchStep(
+      userId,
+      operationId,
+      { categoryMap: plan.categoryMap, existingProducts: plan.existingProducts },
+      plan.newProductBatches[index],
+      index,
+      plan.newProductBatches.length,
+      groupIndex,
+      totalGroups,
+    ));
+  }
+  return await finalizeCatalogRestoreStep(
+    userId,
+    operationId,
+    plan,
+    batches,
+    groupIndex,
+    totalGroups,
+  );
+}
 
 export async function catalogOperationWorkflow(
   userId: string,
@@ -34,7 +82,7 @@ export async function catalogOperationWorkflow(
       );
       const restoreResults: CatalogRestoreResult[] = [];
       for (let index = 0; index < operation.restoreGroups.length; index += 1) {
-        restoreResults.push(await restoreCatalogGroupStep(
+        restoreResults.push(await restoreGroup(
           userId,
           operationId,
           operation.restoreGroups[index],
@@ -52,7 +100,7 @@ export async function catalogOperationWorkflow(
 
     const results: CatalogRestoreResult[] = [];
     for (let index = 0; index < operation.restoreGroups.length; index += 1) {
-      results.push(await restoreCatalogGroupStep(
+      results.push(await restoreGroup(
         userId,
         operationId,
         operation.restoreGroups[index],

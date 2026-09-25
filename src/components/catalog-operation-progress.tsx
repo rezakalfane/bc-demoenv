@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAppI18n } from "@/components/app-i18n-provider";
+import { operationProgressPercent } from "@/lib/operation-progress";
 
 export const CATALOG_OPERATION_KEY = "bc-demoenv:catalog-operation";
 export type CatalogOperationKind = "snapshot" | "restore" | "clear" | "refresh";
@@ -70,7 +71,7 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
   const pathname = usePathname();
   const [operation, setOperation] = useState<CatalogOperation | null>(initialOperation ?? null);
   const [stepIndex, setStepIndex] = useState(0);
-  const [remote, setRemote] = useState<{ status: string; currentStep: string; stepIndex: number; totalSteps: number; snapshotId: number | null; error: string | null } | null>(null);
+  const [remote, setRemote] = useState<{ status: string; currentStep: string; stepIndex: number; totalSteps: number; stepProgress?: number | null; snapshotId: number | null; error: string | null } | null>(null);
 
   useEffect(() => {
     const sync = () => setOperation(readCatalogOperation());
@@ -102,7 +103,7 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
       try {
         const response = await fetch(`/api/catalog-operations/${operationId}`, { cache: "no-store" });
         if (!response.ok) return;
-        const next = await response.json() as { status: string; currentStep: string; stepIndex: number; totalSteps: number; snapshotId: number | null; error: string | null };
+        const next = await response.json() as { status: string; currentStep: string; stepIndex: number; totalSteps: number; stepProgress?: number | null; snapshotId: number | null; error: string | null };
         setRemote(next);
         if (next.status === "completed") {
           const isAtCaptureOrigin = operation.originPath
@@ -164,7 +165,7 @@ export function CatalogOperationProgress({ redirectToCreatedSnapshot = false, en
   const [title, detail] = labels[operation.kind];
   const currentStep = remote?.currentStep || operation.steps?.[stepIndex] || detail;
   const progress = remote?.totalSteps
-    ? Math.max(4, Math.min(100, Math.round((remote.stepIndex / remote.totalSteps) * 100)))
+    ? Math.max(4, operationProgressPercent(remote))
     : 4;
   const statusLabel = remote?.status === "failed" ? "Failed" : remote?.status === "completed" ? "Complete" : "Working…";
   return <div className="order-last basis-full rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-3" role="status" aria-live="polite">
