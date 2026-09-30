@@ -60,3 +60,7 @@ next-env.d.ts
 # graph tooling artifacts (regenerable)
 ai-vault/
 graphify-out/
+
+# electron desktop app build output
+/dist-electron/
+/release/

@@ -10,7 +10,12 @@
     "build": "next build",
     "i18n:check": "node scripts/check-i18n.mjs && node scripts/check-i18n-coverage.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:electron": "node scripts/build-electron.mjs",
+    "electron:dev": "npm run build:electron && electron .",
+    "electron:start": "electron .",
+    "dist:mac": "npm run build:electron && electron-builder --mac --arm64",
+    "icon": "electron scripts/generate-icon.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.20",
@@ -26,9 +31,45 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "description": "BigCommerce demo environment manager",
+  "author": "Reza Kalfane",
+  "main": "electron/main.mjs",
+  "build": {
+    "appId": "com.bigcommerce.demoenv",
+    "productName": "BC DemoEnv",
+    "directories": {
+      "output": "release"
+    },
+    "asar": true,
+    "files": [
+      "electron/main.mjs",
+      "package.json",
+      "!node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-electron",
+        "to": ".",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "npmRebuild": false,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "electron/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
   }
 }
