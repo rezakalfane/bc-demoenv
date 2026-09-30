@@ -4,6 +4,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/verify(.*)",
   "/access-denied(.*)",
+  // Cron has no Clerk session; the route checks CRON_SECRET itself.
+  "/api/scheduler/tick",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
