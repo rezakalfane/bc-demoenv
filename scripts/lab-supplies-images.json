@@ -1,0 +1,686 @@
+{
+ "types": {
+  "Disposable Lab Coat": [
+   [
+    "labcoat",
+    2
+   ]
+  ],
+  "Cleanroom Coverall": [
+   [
+    "shoecover",
+    0
+   ]
+  ],
+  "Sleeve Protector": [
+   [
+    "labcoat",
+    2
+   ]
+  ],
+  "Shoe Cover": [
+   [
+    "shoecover",
+    2
+   ]
+  ],
+  "Nitrile Examination Gloves": [
+   [
+    "nitrile",
+    2
+   ],
+   [
+    "nitrile",
+    0
+   ]
+  ],
+  "Cleanroom Nitrile Gloves": [
+   [
+    "nitrile",
+    2
+   ]
+  ],
+  "Latex Examination Gloves": [
+   [
+    "latex",
+    3
+   ],
+   [
+    "latex",
+    1
+   ]
+  ],
+  "Thermal Protection Gloves": [
+   [
+    "thermal",
+    0
+   ]
+  ],
+  "Neoprene Chemical Gloves": [
+   [
+    "neoprene",
+    1
+   ],
+   [
+    "neoprene",
+    2
+   ]
+  ],
+  "Safety Spectacles": [
+   [
+    "glasses",
+    3
+   ]
+  ],
+  "Laser Safety Glasses": [
+   [
+    "glasses",
+    3
+   ]
+  ],
+  "Chemical Splash Goggles": [
+   [
+    "goggles",
+    3
+   ]
+  ],
+  "Face Shield": [
+   [
+    "faceshield",
+    1
+   ]
+  ],
+  "Bouffant Cap": [
+   [
+    "bouffant",
+    1
+   ]
+  ],
+  "Wide Mouth Safety Wash Bottle": [
+   [
+    "washbottle",
+    0
+   ]
+  ],
+  "LDPE Wash Bottle": [
+   [
+    "washbottle",
+    0
+   ]
+  ],
+  "Right To Know Wash Bottle": [
+   [
+    "washbottle",
+    0
+   ]
+  ],
+  "Solvent Wash Bottle": [
+   [
+    "washbottle",
+    0
+   ]
+  ],
+  "TraceClean Vial": [
+   [
+    "scintvial",
+    0
+   ]
+  ],
+  "Microwave Reaction Vial": [
+   [
+    "autovial",
+    2
+   ]
+  ],
+  "Scintillation Vial": [
+   [
+    "scintvial",
+    0
+   ]
+  ],
+  "Autosampler Vial": [
+   [
+    "autovial",
+    2
+   ]
+  ],
+  "Screw Thread Vial with Cap": [
+   [
+    "autovial",
+    2
+   ]
+  ],
+  "Cryogenic Vial": [
+   [
+    "cryovial",
+    0
+   ]
+  ],
+  "Media Bottle": [
+   [
+    "mediabottle",
+    3
+   ],
+   [
+    "mediabottle",
+    2
+   ]
+  ],
+  "Reagent Bottle": [
+   [
+    "reagentbottle",
+    0
+   ]
+  ],
+  "Sample Container": [
+   [
+    "reagentbottle",
+    0
+   ]
+  ],
+  "Carboy": [
+   [
+    "carboy",
+    0
+   ]
+  ],
+  "Cryogenic Storage Box": [
+   [
+    "cryovial",
+    0
+   ]
+  ],
+  "Centrifuge Tube": [
+   [
+    "centrifugetube",
+    3
+   ]
+  ],
+  "Culture Tube": [
+   [
+    "centrifugetube",
+    3
+   ]
+  ],
+  "Microcentrifuge Tube": [
+   [
+    "pcrtube",
+    3
+   ]
+  ],
+  "PCR Tube": [
+   [
+    "pcrtube",
+    3
+   ]
+  ],
+  "Tube Rack": [
+   [
+    "tuberack",
+    0
+   ]
+  ],
+  "Adjustable Volume Micropipette": [
+   [
+    "micropipette",
+    3
+   ],
+   [
+    "micropipette",
+    2
+   ]
+  ],
+  "Fixed Volume Micropipette": [
+   [
+    "micropipette",
+    2
+   ],
+   [
+    "micropipette",
+    3
+   ]
+  ],
+  "Electronic Micropipette": [
+   [
+    "epipette",
+    0
+   ]
+  ],
+  "Multichannel Micropipette": [
+   [
+    "multichannel",
+    0
+   ]
+  ],
+  "Universal Pipette Tips": [
+   [
+    "tips",
+    0
+   ],
+   [
+    "tips",
+    3
+   ]
+  ],
+  "Filter Pipette Tips": [
+   [
+    "tips",
+    3
+   ]
+  ],
+  "Low Retention Tips": [
+   [
+    "tips",
+    3
+   ],
+   [
+    "tips",
+    0
+   ]
+  ],
+  "Conductive Pipette Tips": [
+   [
+    "tips",
+    0
+   ]
+  ],
+  "Serological Pipet": [
+   [
+    "serological",
+    2
+   ],
+   [
+    "serological",
+    1
+   ]
+  ],
+  "Stripette Pipet": [
+   [
+    "serological",
+    1
+   ],
+   [
+    "serological",
+    2
+   ]
+  ],
+  "Disposable Transfer Pipet": [
+   [
+    "transferpipet",
+    3
+   ]
+  ],
+  "Cell Culture Flask": [
+   [
+    "flask",
+    0
+   ],
+   [
+    "flask",
+    2
+   ]
+  ],
+  "Tissue Culture Plate": [
+   [
+    "plate",
+    1
+   ],
+   [
+    "plate",
+    0
+   ]
+  ],
+  "Cell Culture Dish": [
+   [
+    "petri",
+    3
+   ]
+  ],
+  "Syringe Filter": [
+   [
+    "syringefilter",
+    0
+   ],
+   [
+    "syringefilter",
+    1
+   ]
+  ],
+  "Bottle Top Filter": [
+   [
+    "bottletop",
+    1
+   ]
+  ],
+  "Membrane Filter": [
+   [
+    "syringefilter",
+    2
+   ]
+  ],
+  "Filter Unit": [
+   [
+    "bottletop",
+    3
+   ]
+  ],
+  "Precision Balance": [
+   [
+    "balance",
+    2
+   ]
+  ],
+  "Analytical Balance": [
+   [
+    "balance",
+    2
+   ],
+   [
+    "balance",
+    3
+   ]
+  ],
+  "Weighing Boat": [
+   [
+    "weighboat",
+    0
+   ]
+  ],
+  "Calibration Weight": [
+   [
+    "calweights",
+    3
+   ]
+  ]
+ },
+ "images": {
+  "labcoat#2": {
+   "title": "File:Lab coat and scrubs.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d8/Lab_coat_and_scrubs.jpg/960px-Lab_coat_and_scrubs.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Lab_coat_and_scrubs.jpg"
+  },
+  "shoecover#0": {
+   "title": "File:Senior U S Army Medical leader in Europe visits French Military Hospital (9954059).jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/48/Senior_U_S_Army_Medical_leader_in_Europe_visits_French_Military_Hospital_%289954059%29.jpg/960px-Senior_U_S_Army_Medical_leader_in_Europe_visits_French_Military_Hospital_%289954059%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Senior_U_S_Army_Medical_leader_in_Europe_visits_French_Military_Hospital_(9954059).jpg"
+  },
+  "shoecover#2": {
+   "title": "File:Lyon 6e - Des surchaussures (ou couvre-chaussures) jetables.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9f/Lyon_6e_-_Des_surchaussures_%28ou_couvre-chaussures%29_jetables.jpg/960px-Lyon_6e_-_Des_surchaussures_%28ou_couvre-chaussures%29_jetables.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC0",
+   "page": "https://commons.wikimedia.org/wiki/File:Lyon_6e_-_Des_surchaussures_(ou_couvre-chaussures)_jetables.jpg"
+  },
+  "nitrile#2": {
+   "title": "File:Nitrile Glove for Clean Room.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/Nitrile_Glove_for_Clean_Room.jpg/960px-Nitrile_Glove_for_Clean_Room.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Nitrile_Glove_for_Clean_Room.jpg"
+  },
+  "nitrile#0": {
+   "title": "File:Nitrile Gloves holder 20230316 110111.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/64/Nitrile_Gloves_holder_20230316_110111.jpg/960px-Nitrile_Gloves_holder_20230316_110111.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Nitrile_Gloves_holder_20230316_110111.jpg"
+  },
+  "latex#3": {
+   "title": "File:Latex gloves-pair.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Latex_gloves-pair.jpg/960px-Latex_gloves-pair.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Latex_gloves-pair.jpg"
+  },
+  "latex#1": {
+   "title": "File:PVC-Handschuh.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d5/PVC-Handschuh.jpg/960px-PVC-Handschuh.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:PVC-Handschuh.jpg"
+  },
+  "thermal#0": {
+   "title": "File:Baking glove.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Baking_glove.jpg/960px-Baking_glove.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Baking_glove.jpg"
+  },
+  "neoprene#1": {
+   "title": "File:Gloves DSC 1978.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/Gloves_DSC_1978.jpg/960px-Gloves_DSC_1978.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Gloves_DSC_1978.jpg"
+  },
+  "neoprene#2": {
+   "title": "File:Gloves DSC 1979.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1c/Gloves_DSC_1979.jpg/960px-Gloves_DSC_1979.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Gloves_DSC_1979.jpg"
+  },
+  "glasses#3": {
+   "title": "File:2023 Okulary ochronne (1).jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/2023_Okulary_ochronne_%281%29.jpg/960px-2023_Okulary_ochronne_%281%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:2023_Okulary_ochronne_(1).jpg"
+  },
+  "goggles#3": {
+   "title": "File:Safety Goggles.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Safety_Goggles.jpg/960px-Safety_Goggles.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Safety_Goggles.jpg"
+  },
+  "faceshield#1": {
+   "title": "File:Zshield Flex Face Shield, designed by Scott Henderson, 2020.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Zshield_Flex_Face_Shield%2C_designed_by_Scott_Henderson%2C_2020.jpg/960px-Zshield_Flex_Face_Shield%2C_designed_by_Scott_Henderson%2C_2020.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC0",
+   "page": "https://commons.wikimedia.org/wiki/File:Zshield_Flex_Face_Shield,_designed_by_Scott_Henderson,_2020.jpg"
+  },
+  "bouffant#1": {
+   "title": "File:Medical Bouffant Cap.JPG",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Medical_Bouffant_Cap.JPG/960px-Medical_Bouffant_Cap.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Medical_Bouffant_Cap.JPG"
+  },
+  "washbottle#0": {
+   "title": "File:Lab wash-bottles water EtOH.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Lab_wash-bottles_water_EtOH.jpg/960px-Lab_wash-bottles_water_EtOH.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Lab_wash-bottles_water_EtOH.jpg"
+  },
+  "scintvial#0": {
+   "title": "File:Radiation and the International Atomic Energy Agency (ISEA) - Sample vials (02910080) (53639820054).jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Radiation_and_the_International_Atomic_Energy_Agency_%28ISEA%29_-_Sample_vials_%2802910080%29_%2853639820054%29.jpg/960px-Radiation_and_the_International_Atomic_Energy_Agency_%28ISEA%29_-_Sample_vials_%2802910080%29_%2853639820054%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Radiation_and_the_International_Atomic_Energy_Agency_(ISEA)_-_Sample_vials_(02910080)_(53639820054).jpg"
+  },
+  "autovial#2": {
+   "title": "File:Working in analytical chemistry 4.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/Working_in_analytical_chemistry_4.jpg/960px-Working_in_analytical_chemistry_4.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Working_in_analytical_chemistry_4.jpg"
+  },
+  "cryovial#0": {
+   "title": "File:Cryovial Tube Cardboard Storage Boxes.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/05/Cryovial_Tube_Cardboard_Storage_Boxes.jpg/960px-Cryovial_Tube_Cardboard_Storage_Boxes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Cryovial_Tube_Cardboard_Storage_Boxes.jpg"
+  },
+  "mediabottle#3": {
+   "title": "File:DURAN\u00ae laboratory bottle 250ml.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/DURAN%C2%AE_laboratory_bottle_250ml.jpg/960px-DURAN%C2%AE_laboratory_bottle_250ml.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:DURAN%C2%AE_laboratory_bottle_250ml.jpg"
+  },
+  "mediabottle#2": {
+   "title": "File:DURAN\u00ae laboratory bottle 500ml 2.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/DURAN%C2%AE_laboratory_bottle_500ml_2.jpg/960px-DURAN%C2%AE_laboratory_bottle_500ml_2.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:DURAN%C2%AE_laboratory_bottle_500ml_2.jpg"
+  },
+  "reagentbottle#0": {
+   "title": "File:Reagent bottle.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/eb/Reagent_bottle.jpg/960px-Reagent_bottle.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Reagent_bottle.jpg"
+  },
+  "carboy#0": {
+   "title": "File:Bottled snow.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f3/Bottled_snow.jpg/960px-Bottled_snow.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 2.5",
+   "page": "https://commons.wikimedia.org/wiki/File:Bottled_snow.jpg"
+  },
+  "centrifugetube#3": {
+   "title": "File:Test tube with plastic stopper.JPG",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2c/Test_tube_with_plastic_stopper.JPG/960px-Test_tube_with_plastic_stopper.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Test_tube_with_plastic_stopper.JPG"
+  },
+  "pcrtube#3": {
+   "title": "File:PCR tubes.png",
+   "thumb": "https://upload.wikimedia.org/wikipedia/commons/8/81/PCR_tubes.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+   "license": "CC0",
+   "page": "https://commons.wikimedia.org/wiki/File:PCR_tubes.png"
+  },
+  "tuberack#0": {
+   "title": "File:3D printed test tube rack in use.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/50/3D_printed_test_tube_rack_in_use.jpg/960px-3D_printed_test_tube_rack_in_use.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:3D_printed_test_tube_rack_in_use.jpg"
+  },
+  "micropipette#3": {
+   "title": "File:Pipette de laboratoire sur fond blanc au B\u00e9nin 02.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Pipette_de_laboratoire_sur_fond_blanc_au_B%C3%A9nin_02.jpg/960px-Pipette_de_laboratoire_sur_fond_blanc_au_B%C3%A9nin_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Pipette_de_laboratoire_sur_fond_blanc_au_B%C3%A9nin_02.jpg"
+  },
+  "micropipette#2": {
+   "title": "File:Pipette de laboratoire sur fond blanc au B\u00e9nin 04.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cc/Pipette_de_laboratoire_sur_fond_blanc_au_B%C3%A9nin_04.jpg/960px-Pipette_de_laboratoire_sur_fond_blanc_au_B%C3%A9nin_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Pipette_de_laboratoire_sur_fond_blanc_au_B%C3%A9nin_04.jpg"
+  },
+  "epipette#0": {
+   "title": "File:Air-displacement electronic pipette with maximim volume of 10mL.jpeg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ad/Air-displacement_electronic_pipette_with_maximim_volume_of_10mL.jpeg/960px-Air-displacement_electronic_pipette_with_maximim_volume_of_10mL.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Air-displacement_electronic_pipette_with_maximim_volume_of_10mL.jpeg"
+  },
+  "multichannel#0": {
+   "title": "File:Multichannel pipette-12.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Multichannel_pipette-12.jpg/960px-Multichannel_pipette-12.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Multichannel_pipette-12.jpg"
+  },
+  "tips#0": {
+   "title": "File:Disposable Pipette Tips in Laboratory Tip Boxes.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Disposable_Pipette_Tips_in_Laboratory_Tip_Boxes.jpg/960px-Disposable_Pipette_Tips_in_Laboratory_Tip_Boxes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Disposable_Pipette_Tips_in_Laboratory_Tip_Boxes.jpg"
+  },
+  "tips#3": {
+   "title": "File:Pipette tips boxes.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Pipette_tips_boxes.jpg/960px-Pipette_tips_boxes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Pipette_tips_boxes.jpg"
+  },
+  "serological#2": {
+   "title": "File:Serological pipette.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Serological_pipette.jpg/960px-Serological_pipette.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Serological_pipette.jpg"
+  },
+  "serological#1": {
+   "title": "File:Pipetter and serological pipette.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e4/Pipetter_and_serological_pipette.jpg/960px-Pipetter_and_serological_pipette.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC0",
+   "page": "https://commons.wikimedia.org/wiki/File:Pipetter_and_serological_pipette.jpg"
+  },
+  "transferpipet#3": {
+   "title": "File:Plastic Pasteur pipette.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/Plastic_Pasteur_pipette.jpg/960px-Plastic_Pasteur_pipette.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Plastic_Pasteur_pipette.jpg"
+  },
+  "flask#0": {
+   "title": "File:Small cell culture flat flask.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Small_cell_culture_flat_flask.jpg/960px-Small_cell_culture_flat_flask.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Small_cell_culture_flat_flask.jpg"
+  },
+  "flask#2": {
+   "title": "File:Line of culture flask (385575936).jpg",
+   "thumb": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Line_of_culture_flask_%28385575936%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+   "license": "CC BY-SA 2.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Line_of_culture_flask_(385575936).jpg"
+  },
+  "plate#1": {
+   "title": "File:Smartphone colorimetry \u2013 96-well microplate with serial dilutions of coloured solutions.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5e/Smartphone_colorimetry_%E2%80%93_96-well_microplate_with_serial_dilutions_of_coloured_solutions.jpg/960px-Smartphone_colorimetry_%E2%80%93_96-well_microplate_with_serial_dilutions_of_coloured_solutions.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Smartphone_colorimetry_%E2%80%93_96-well_microplate_with_serial_dilutions_of_coloured_solutions.jpg"
+  },
+  "plate#0": {
+   "title": "File:Microtiter plate.JPG",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Microtiter_plate.JPG/960px-Microtiter_plate.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 2.5",
+   "page": "https://commons.wikimedia.org/wiki/File:Microtiter_plate.JPG"
+  },
+  "petri#3": {
+   "title": "File:Petri Dish with HEK293 (NIH BioArt 653).png",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/Petri_Dish_with_HEK293_%28NIH_BioArt_653%29.png/960px-Petri_Dish_with_HEK293_%28NIH_BioArt_653%29.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "Public domain",
+   "page": "https://commons.wikimedia.org/wiki/File:Petri_Dish_with_HEK293_(NIH_BioArt_653).png"
+  },
+  "syringefilter#0": {
+   "title": "File:Syringe filter-0,22-um-Millex-GV-01 (cropped).jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Syringe_filter-0%2C22-um-Millex-GV-01_%28cropped%29.jpg/960px-Syringe_filter-0%2C22-um-Millex-GV-01_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Syringe_filter-0,22-um-Millex-GV-01_(cropped).jpg"
+  },
+  "syringefilter#1": {
+   "title": "File:Spritzenfilter 04.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3a/Spritzenfilter_04.jpg/960px-Spritzenfilter_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Spritzenfilter_04.jpg"
+  },
+  "bottletop#1": {
+   "title": "File:Bottle top disposable filtration set-Corning-01.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ca/Bottle_top_disposable_filtration_set-Corning-01.jpg/960px-Bottle_top_disposable_filtration_set-Corning-01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Bottle_top_disposable_filtration_set-Corning-01.jpg"
+  },
+  "syringefilter#2": {
+   "title": "File:Syringe filter-0,22-um-Millex-GV-04.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/Syringe_filter-0%2C22-um-Millex-GV-04.jpg/960px-Syringe_filter-0%2C22-um-Millex-GV-04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Syringe_filter-0,22-um-Millex-GV-04.jpg"
+  },
+  "bottletop#3": {
+   "title": "File:Bottle top disposable filtration set-Corning-05.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Bottle_top_disposable_filtration_set-Corning-05.jpg/960px-Bottle_top_disposable_filtration_set-Corning-05.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 3.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Bottle_top_disposable_filtration_set-Corning-05.jpg"
+  },
+  "balance#2": {
+   "title": "File:Analytical balance in biochemical laboratory, \u0410\u043d\u0430\u043b\u0438\u0442\u0438\u0447\u043a\u0430 \u0432\u0430\u0433\u0430.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7e/Analytical_balance_in_biochemical_laboratory%2C_%D0%90%D0%BD%D0%B0%D0%BB%D0%B8%D1%82%D0%B8%D1%87%D0%BA%D0%B0_%D0%B2%D0%B0%D0%B3%D0%B0.jpg/960px-Analytical_balance_in_biochemical_laboratory%2C_%D0%90%D0%BD%D0%B0%D0%BB%D0%B8%D1%82%D0%B8%D1%87%D0%BA%D0%B0_%D0%B2%D0%B0%D0%B3%D0%B0.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Analytical_balance_in_biochemical_laboratory,_%D0%90%D0%BD%D0%B0%D0%BB%D0%B8%D1%82%D0%B8%D1%87%D0%BA%D0%B0_%D0%B2%D0%B0%D0%B3%D0%B0.jpg"
+  },
+  "balance#3": {
+   "title": "File:Measuring density.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/98/Measuring_density.jpg/960px-Measuring_density.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Measuring_density.jpg"
+  },
+  "weighboat#0": {
+   "title": "File:Weighing Boats.jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3a/Weighing_Boats.jpg/960px-Weighing_Boats.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Weighing_Boats.jpg"
+  },
+  "calweights#3": {
+   "title": "File:Funchal, Museu A Cidade do A\u00e7\u00facar (calibration weights).jpg",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Funchal%2C_Museu_A_Cidade_do_A%C3%A7%C3%BAcar_%28calibration_weights%29.jpg/960px-Funchal%2C_Museu_A_Cidade_do_A%C3%A7%C3%BAcar_%28calibration_weights%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "license": "CC BY-SA 4.0",
+   "page": "https://commons.wikimedia.org/wiki/File:Funchal,_Museu_A_Cidade_do_A%C3%A7%C3%BAcar_(calibration_weights).jpg"
+  }
+ }
+}
