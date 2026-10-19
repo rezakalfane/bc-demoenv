@@ -49,6 +49,19 @@ Interface copy lives in the structured resource bundles under `src/i18n/`. Run `
 
 Node.js 20.19 or newer is required. Clerk credentials are required; the database can use a local SQLite file for development.
 
+### Quick start: single-user local mode (no login)
+
+```bash
+npm install
+npm run dev        # open http://localhost:3000
+```
+
+With no Clerk keys configured, the app runs as one default account (`local-user`, `local@localhost`) with no sign-in, no email allowlist and no Clerk setup. The database is `local.db` in the project and saved BigCommerce tokens are encrypted with a key generated into `.local-data/` (gitignored; deleting it means re-entering tokens). Set `AUTH_MODE=local` to force this mode even when Clerk keys exist, or `AUTH_MODE=clerk` to force Clerk. Change the shown identity with `LOCAL_USER_EMAIL`; keep `LOCAL_USER_ID` stable because it owns your data. To keep data that was created under a Clerk account, set `LOCAL_USER_ID` to that Clerk user ID. Restart the dev server after changing these.
+
+Because there is no login, local mode refuses any request that is not addressed to `localhost`/`127.0.0.1`, and it is ignored entirely on Vercel. Do not put it behind a tunnel or reverse proxy.
+
+The Clerk setup below applies when you run with sign-in (`AUTH_MODE=clerk`, or Clerk keys present and `AUTH_MODE` unset).
+
 When `LOCAL_DATABASE_URL` and Turso credentials are both configured, Settings → Development database provides explicit pull and push controls. Every attempt is retained in Operations with its direction, row/table totals, duration, and failure details.
 
 ```bash
@@ -111,8 +124,8 @@ npm run templates:export -- --zip     # writes template-pack/ and template-pack.
 
 **Using a pack** (new machine):
 
-1. Install and configure the app as described in *Local development* (Clerk keys in `.env.local`), run `npm run dev`, and sign in once. This creates the database tables and your user.
-2. Unzip the pack next to the project, then run `npm run templates:import -- template-pack`. This inserts the snapshots as yours and copies the images into `.snapshot-images/`. It is safe to re-run: existing versions are skipped (`--replace` overwrites them; `--user <clerk user id>` is needed only if the database has several users).
+1. Install the app (see *Quick start: single-user local mode*), run `npm run dev`, and open it once so the database tables are created. With Clerk enabled instead, configure Clerk and sign in once.
+2. Unzip the pack next to the project, then run `npm run templates:import -- template-pack`. This inserts the snapshots as yours and copies the images into `.snapshot-images/`. It is safe to re-run: existing versions are skipped (`--replace` overwrites them). It imports for `LOCAL_USER_ID` in local mode, or for the one signed-in user with Clerk; pass `--user <id>` if the database has several users.
 3. Add the destination store under Settings → Environments.
 4. Open Snapshots, choose a Template, and use **Restore Snapshot** with that environment and channel. Images upload from the local copies, so no source store or public hosting is needed.
 

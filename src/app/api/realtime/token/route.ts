@@ -1,20 +1,26 @@
 import { Rest } from "ably";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { getLocalUser, isLocalAuth } from "@/lib/auth-mode";
 import { isAllowedEmail } from "@/lib/email-domain";
 import { SNAPSHOT_REALTIME_CHANNEL } from "@/lib/snapshot-realtime-events";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  let userId: string | null;
+  if (isLocalAuth()) {
+    userId = getLocalUser().id;
+  } else {
+    userId = (await auth()).userId;
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const user = await currentUser();
-  const email = user?.primaryEmailAddress?.emailAddress;
-  if (!email || !isAllowedEmail(email)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
+    const user = await currentUser();
+    const email = user?.primaryEmailAddress?.emailAddress;
+    if (!email || !isAllowedEmail(email)) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const key = process.env.ABLY_API_KEY;

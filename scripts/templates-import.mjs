@@ -2,12 +2,14 @@
 //
 //   npm run templates:import -- <pack folder> [--user <clerk user id>] [--replace]
 //
-// Prerequisites: run the app and sign in once, so the database tables and your
-// user exist. Snapshots are inserted as that user's own, images are copied into
+// Prerequisites: start the app and open it once, so the database tables exist.
+// Snapshots are inserted as the app's user (LOCAL_USER_ID, default "local-user"
+// in single-user local mode; otherwise the one signed-in user), images are copied into
 // the local images folder (SNAPSHOT_IMAGES_DIR, default ./.snapshot-images).
 // Safe to re-run: a snapshot version that already exists is skipped, or
 // replaced with --replace. Snapshot content is imported unchanged, so restores
 // validate exactly as they did where the pack was made.
+import "./load-env.mjs";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@libsql/client";
@@ -38,12 +40,14 @@ if (!hasTable) {
   process.exit(1);
 }
 
-let userId = flag("--user");
+const localMode = process.env.AUTH_MODE?.trim().toLowerCase() === "local" ||
+  (!process.env.AUTH_MODE?.trim() && !(process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY));
+let userId = flag("--user") ?? (localMode ? process.env.LOCAL_USER_ID?.trim() || "local-user" : undefined);
 if (!userId) {
   const users = (await db.execute("SELECT user_id FROM user_profiles")).rows.map((r) => r.user_id);
   if (users.length !== 1) {
     console.error(users.length === 0
-      ? "No user found. Sign in to the app once first, or pass --user <clerk user id>."
+      ? "No user found. Sign in to the app once first (or run it in single-user local mode), or pass --user <clerk user id>."
       : `Several users found (${users.join(", ")}). Pass --user <clerk user id>.`);
     process.exit(1);
   }

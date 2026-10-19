@@ -67,3 +67,4 @@ graphify-out/
 # exported template packs
 /template-pack/
 /template-pack.zip
+/.local-data/

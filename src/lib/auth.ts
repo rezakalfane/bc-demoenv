@@ -3,9 +3,12 @@ import "server-only";
 import { cache } from "react";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { getLocalUser, isLocalAuth } from "@/lib/auth-mode";
 import { isAllowedEmail, normalizeEmail } from "@/lib/email-domain";
 
 export const requireAppUser = cache(async () => {
+  if (isLocalAuth()) return getLocalUser();
+
   const { userId } = await auth();
 
   if (!userId) {

@@ -7,6 +7,7 @@
 // Exports the latest version of every snapshot whose name starts with "Template".
 // The pack contains no credentials and no user IDs; import it with
 // `npm run templates:import`.
+import "./load-env.mjs";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";

@@ -1,5 +1,9 @@
 import "server-only";
 
+import { isLocalAuth } from "@/lib/auth-mode";
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   createCipheriv,
   createDecipheriv,
@@ -11,9 +15,23 @@ const ALGORITHM = "aes-256-gcm";
 const VERSION = "v1";
 const IV_LENGTH = 12;
 
+// Single-user local mode needs no setup: generate a key once and keep it next
+// to the database (gitignored). Losing it means saved tokens must be re-entered.
+function localRootSecret() {
+  const dir = join(process.cwd(), ".local-data");
+  const file = join(dir, "settings-encryption.key");
+  if (existsSync(file)) return readFileSync(file, "utf8").trim();
+  mkdirSync(dir, { recursive: true });
+  const secret = randomBytes(32).toString("base64");
+  writeFileSync(file, `${secret}\n`, { mode: 0o600 });
+  return secret;
+}
+
 function getEncryptionKey() {
   const rootSecret =
-    process.env.SETTINGS_ENCRYPTION_KEY ?? process.env.CLERK_SECRET_KEY;
+    process.env.SETTINGS_ENCRYPTION_KEY ??
+    process.env.CLERK_SECRET_KEY ??
+    (isLocalAuth() ? localRootSecret() : undefined);
 
   if (!rootSecret) {
     throw new Error(

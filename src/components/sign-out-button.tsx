@@ -3,6 +3,9 @@
 import { SignOutButton as ClerkSignOutButton } from "@clerk/nextjs";
 
 export function SignOutButton() {
+  // Single-user local mode has no session to end (flag set in next.config.ts).
+  if (process.env.NEXT_PUBLIC_LOCAL_AUTH === "1") return null;
+
   return (
     <ClerkSignOutButton redirectUrl="/sign-in">
       <button

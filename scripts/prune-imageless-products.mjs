@@ -6,6 +6,7 @@
 //
 //   node scripts/prune-imageless-products.mjs                 # dry run, Template snapshots
 //   node scripts/prune-imageless-products.mjs --apply [ids]   # write (backs up local.db first)
+import "./load-env.mjs";
 import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@libsql/client";

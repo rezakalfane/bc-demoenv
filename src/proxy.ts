@@ -1,4 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { isLocalAuth, isLoopbackHost } from "@/lib/auth-mode";
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
@@ -10,11 +12,27 @@ const isPublicRoute = createRouteMatcher([
   "/api/snapshot-images/(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, request) => {
+const clerk = clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) {
     await auth.protect();
   }
 }, { signInUrl: "/sign-in", signUpUrl: "/sign-in" });
+
+const LOGIN_PAGES = /^\/(?:sign-in|verify|access-denied)(?:\/|$)/;
+
+export default function proxy(request: NextRequest, event: NextFetchEvent) {
+  if (!isLocalAuth()) return clerk(request, event);
+
+  // Single-user local mode: no login. The app holds store admin tokens, so it
+  // must not answer anything that is not addressed to this machine.
+  if (!isLoopbackHost(request.headers.get("host"))) {
+    return new NextResponse("Local mode only answers on localhost.", { status: 403 });
+  }
+  if (LOGIN_PAGES.test(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [

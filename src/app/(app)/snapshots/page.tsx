@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
+import { isLocalAuth } from "@/lib/auth-mode";
 import { requireAppUser } from "@/lib/auth";
 import {
   getActiveSnapshotOperations,
@@ -155,7 +156,8 @@ export default async function SnapshotsPage() {
   const filterTags = [...new Set(sortedSnapshots.flatMap((snapshot) => snapshot.tags))]
     .toSorted((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
 
-  if (sharedOwnerIds.length > 0) {
+  // Single-user local mode has no other publishers to look up.
+  if (sharedOwnerIds.length > 0 && !isLocalAuth()) {
     const client = await clerkClient();
     const publishers = await Promise.all(sharedOwnerIds.map(async (ownerUserId) => {
       try {

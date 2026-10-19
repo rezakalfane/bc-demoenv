@@ -15,6 +15,7 @@
 //   node scripts/repair-snapshot-images.mjs                 # dry run, all snapshots
 //   node scripts/repair-snapshot-images.mjs --apply         # download + write DB
 //   node scripts/repair-snapshot-images.mjs --apply 60 59   # only these snapshot ids
+import "./load-env.mjs";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";

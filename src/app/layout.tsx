@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { AppI18nProvider } from "@/components/app-i18n-provider";
 import { OfflineSupport } from "@/components/offline-support";
+import { isLocalAuth } from "@/lib/auth-mode";
 import { APP_LOCALE_COOKIE, normalizeAppLocale } from "@/i18n/config";
 import "./globals.css";
 
@@ -37,14 +38,18 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <ClerkProvider
-          signInUrl="/sign-in"
-          signUpUrl="/sign-in"
-          signInFallbackRedirectUrl="/"
-          signUpFallbackRedirectUrl="/"
-        >
+        {isLocalAuth() ? (
           <AppI18nProvider initialLocale={locale}>{children}</AppI18nProvider>
-        </ClerkProvider>
+        ) : (
+          <ClerkProvider
+            signInUrl="/sign-in"
+            signUpUrl="/sign-in"
+            signInFallbackRedirectUrl="/"
+            signUpFallbackRedirectUrl="/"
+          >
+            <AppI18nProvider initialLocale={locale}>{children}</AppI18nProvider>
+          </ClerkProvider>
+        )}
         <OfflineSupport />
       </body>
     </html>
