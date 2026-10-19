@@ -1,6 +1,7 @@
 import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
+import { readLocalImage } from "@/lib/snapshot-image-store";
 import {
   getBigCommerceEnvironmentConnection,
   getBigCommerceEnvironmentConnections,
@@ -245,10 +246,17 @@ async function apiRequest(
           method: options.method ?? "GET",
           headers: {
             Accept: "application/json",
-            "Content-Type": "application/json",
+            // fetch derives the multipart boundary header itself for FormData.
+            ...(options.body instanceof FormData
+              ? {}
+              : { "Content-Type": "application/json" }),
             "X-Auth-Token": environment.accessToken,
           },
-          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          body: options.body === undefined
+            ? undefined
+            : options.body instanceof FormData
+              ? options.body
+              : JSON.stringify(options.body),
           cache: "no-store",
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         },
@@ -2777,7 +2785,6 @@ function imageInput(value: unknown) {
   const image = asRecord(value);
   if (!image) return null;
   const imageUrl =
-    readString(image.blob_url) ||
     readString(image.image_url) ||
     readString(image.url_zoom) ||
     readString(image.url_standard) ||
@@ -2803,6 +2810,24 @@ function imageInput(value: unknown) {
   } catch {
     return null;
   }
+}
+
+/** Multipart body for a snapshot image whose bytes are stored locally. */
+async function localImageUpload(value: unknown) {
+  const image = asRecord(value);
+  const local = image ? await readLocalImage(image) : null;
+  if (!image || !local) return null;
+  const form = new FormData();
+  form.append(
+    "image_file",
+    new Blob([new Uint8Array(local.bytes)], { type: local.contentType }),
+    local.file,
+  );
+  form.append("is_thumbnail", String(Boolean(image.is_thumbnail)));
+  form.append("sort_order", String(Number(image.sort_order) || 0));
+  const description = readString(image.description);
+  if (description) form.append("description", description);
+  return form;
 }
 
 function productMatchKey(product: JsonRecord) {
@@ -2883,7 +2908,10 @@ async function syncImages(
   let rejected = 0;
   let firstError: string | null = null;
   for (const value of sourceImages) {
-    const body = imageInput(value);
+    // Prefer the locally stored bytes: the source CDN file may be gone, and
+    // BigCommerce cannot fetch a file from this machine by URL.
+    const upload = await localImageUpload(value);
+    const body = upload ?? imageInput(value);
     if (!body) {
       rejected += 1;
       firstError ??= "The snapshot image has no usable URL.";
@@ -2899,7 +2927,7 @@ async function syncImages(
     } catch (error) {
       if (!(error instanceof CatalogRestoreError)) throw error;
       rejected += 1;
-      firstError ??= `${error.message.replace(/ The restore may be partially complete\.$/, "")} (${body.image_url})`;
+      firstError ??= `${error.message.replace(/ The restore may be partially complete\.$/, "")} (${body instanceof FormData ? "local copy" : body.image_url})`;
     }
   }
 

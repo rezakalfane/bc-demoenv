@@ -1,26 +1,28 @@
-// One-time repair for snapshots whose BigCommerce CDN images were deleted.
+// Repairs snapshots whose BigCommerce CDN images were deleted, using local files.
 //
-// Re-sources each image from the vertical's original products.csv (vendor URL
-// or local file), stores the bytes in Vercel Blob, and writes `blob_url` into
-// the snapshot payload (gallery images, primary image, preview imageUrl).
+// For every Template snapshot in the LOCAL database (or the ids given) it
+//   1. migrates legacy Vercel Blob references (`blob_url`) to `local_image`: the
+//      Blob file name is the content hash, i.e. the file name in the local folder;
+//   2. re-sources images that still have no local copy from the vertical's
+//      original products.csv (vendor URL or local file), a { map } file, or the
+//      still-live CDN, and stores them in the local images folder;
+//   3. points each preview card and primary image at the local copy.
 //
-// Operates on the LOCAL database only (LOCAL_DATABASE_URL, default file:local.db);
-// push it to Turso afterwards with Settings -> Profile -> Push.
+// Images live in SNAPSHOT_IMAGES_DIR (default ./.snapshot-images), named
+// <sha256>.<ext>, and are served by /api/snapshot-images/<file>.
+// Only the LOCAL database is touched (LOCAL_DATABASE_URL, default file:local.db).
 //
 //   node scripts/repair-snapshot-images.mjs                 # dry run, all snapshots
-//   node scripts/repair-snapshot-images.mjs --apply         # upload + write DB
+//   node scripts/repair-snapshot-images.mjs --apply         # download + write DB
 //   node scripts/repair-snapshot-images.mjs --apply 60 59   # only these snapshot ids
-//
-// --apply needs BLOB_READ_WRITE_TOKEN (vercel env pull, or the store's token).
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@libsql/client";
-import { put } from "@vercel/blob";
 
 const WORKSPACES = process.env.WORKSPACES_DIR ?? path.resolve(import.meta.dirname, "../..");
-// snapshot id -> vertical folder holding products.csv (and images/ when local)
+// snapshot id -> vertical folder holding products.csv (and images/ when local),
+// or { map } / { cdn } for snapshots re-sourced another way
 const VERTICALS = {
   54: "TargetComponents/it-components",
   55: "Greenmill/hvac-distribution",
@@ -29,6 +31,17 @@ const VERTICALS = {
   58: "Flawless/vape-distribution",
   59: "VWR/vwr-lab-supplies",
   63: "Veloris/batteries-distribution",
+  // Hardware Manufacturer: Prime-Line Parts images found by
+  // scripts/fetch-primeline-images.py ({image stem: url}).
+  60: { map: "/tmp/primeline-image-map.json" },
+  // Still-live BigCommerce CDN: copy what is still served before it goes away.
+  62: { cdn: true },
+  64: { cdn: true },
+};
+// Hand-picked sources for products no automatic source covers: "<snapshot id>:<sku>".
+const EXTRA_SOURCES = {
+  "58:ECYOP1POD0.8":
+    "https://m2-devbox-vapoholic-co-uk.cfstack.com/media/catalog/product/cache/207e23213cf636ccdef205098cf3c8a3/product_image/99cb431895/p10826-elux_cyberover_p1_replacement_pods_4_pack.jpg",
 };
 const CONTENT_TYPES = {
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
@@ -36,17 +49,12 @@ const CONTENT_TYPES = {
 };
 const MAX_BYTES = 15 * 1024 * 1024;
 const CONCURRENCY = 6;
-const CACHE_FILE = path.join(tmpdir(), "bc-demoenv-repair-snapshot-images.json");
+const IMAGES_DIR = path.resolve(process.env.SNAPSHOT_IMAGES_DIR ?? ".snapshot-images");
+const FILE_PATTERN = /^[a-f0-9]{64}\.(?:jpg|png|webp|gif)$/;
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const requested = args.filter((a) => /^\d+$/.test(a)).map(Number);
-const snapshotIds = requested.length ? requested : Object.keys(VERTICALS).map(Number);
-
-if (apply && !process.env.BLOB_READ_WRITE_TOKEN) {
-  console.error("BLOB_READ_WRITE_TOKEN is required with --apply.");
-  process.exit(1);
-}
 
 // --- CSV (RFC 4180) ---------------------------------------------------------
 function parseCsv(text) {
@@ -81,7 +89,15 @@ const exactStem = (imageFile) =>
 const looseStem = (imageFile) =>
   noExt(imageFile.split("/").pop() ?? "").replace(/__\d.*$/, "").toLowerCase();
 
-function buildIndex(folder) {
+function buildIndex(entry) {
+  if (entry.cdn) {
+    return (_file, image) => image.url_zoom || image.url_standard || image.image_url;
+  }
+  if (entry.map) {
+    const map = JSON.parse(readFileSync(entry.map, "utf8"));
+    return (file) => map[exactStem(file)];
+  }
+  const folder = entry;
   const dir = path.join(WORKSPACES, folder);
   const exact = new Map(), loose = new Map();
   for (const row of parseCsv(readFileSync(path.join(dir, "products.csv"), "utf8"))) {
@@ -96,9 +112,8 @@ function buildIndex(folder) {
   return (imageFile) => exact.get(exactStem(imageFile)) ?? loose.get(looseStem(imageFile));
 }
 
-// --- bytes -> Blob ----------------------------------------------------------
-const cache = existsSync(CACHE_FILE) ? JSON.parse(readFileSync(CACHE_FILE, "utf8")) : {};
-const saveCache = () => writeFileSync(CACHE_FILE, JSON.stringify(cache));
+// --- bytes -> local file ---------------------------------------------------
+const known = new Map(); // source -> file name
 
 async function readSource(source) {
   if (!/^https?:/i.test(source)) {
@@ -116,16 +131,15 @@ async function readSource(source) {
 }
 
 async function mirror(source) {
-  if (cache[source]) return cache[source];
+  if (known.has(source)) return known.get(source);
   const { bytes, contentType, ext } = await readSource(source);
   if (!contentType || !ext) throw new Error("not an image");
   if (bytes.length === 0 || bytes.length > MAX_BYTES) throw new Error(`bad size ${bytes.length}`);
-  const hash = createHash("sha256").update(bytes).digest("hex");
-  const blob = await put(`snapshot-images/${hash}.${ext}`, bytes, {
-    access: "public", contentType, addRandomSuffix: false, allowOverwrite: true,
-  });
-  cache[source] = blob.url;
-  return blob.url;
+  const file = `${createHash("sha256").update(bytes).digest("hex")}.${ext === "jpeg" ? "jpg" : ext}`;
+  if (!FILE_PATTERN.test(file)) throw new Error(`unsupported type ${ext}`);
+  writeFileSync(path.join(IMAGES_DIR, file), bytes);
+  known.set(source, file);
+  return file;
 }
 
 async function mapLimited(items, fn) {
@@ -135,6 +149,14 @@ async function mapLimited(items, fn) {
   }));
 }
 
+const localFile = (image) => {
+  for (const candidate of [image.local_image, String(image.blob_url ?? "").split("/").pop()]) {
+    if (FILE_PATTERN.test(candidate ?? "")) return candidate;
+  }
+  return "";
+};
+const onDisk = (file) => file && existsSync(path.join(IMAGES_DIR, file));
+
 // --- main -------------------------------------------------------------------
 const dbUrl = process.env.LOCAL_DATABASE_URL ?? "file:local.db";
 if (!dbUrl.startsWith("file:")) {
@@ -142,48 +164,63 @@ if (!dbUrl.startsWith("file:")) {
   process.exit(1);
 }
 if (apply) {
+  mkdirSync(IMAGES_DIR, { recursive: true });
   const backup = `${dbUrl.slice(5)}.before-image-repair-${Date.now()}`;
   copyFileSync(dbUrl.slice(5), backup);
   console.log(`Backed up database to ${backup}`);
 }
 const db = createClient({ url: dbUrl });
+const ids = requested.length
+  ? requested
+  : (await db.execute("SELECT id FROM catalog_snapshots WHERE name LIKE 'Template%' ORDER BY id")).rows.map((r) => Number(r.id));
 
-for (const id of snapshotIds) {
-  const folder = VERTICALS[id];
-  if (!folder) { console.log(`#${id}: no vertical folder mapped, skipped`); continue; }
+for (const id of ids) {
   const row = (await db.execute({ sql: "SELECT name, payload_json FROM catalog_snapshots WHERE id = ?", args: [id] })).rows[0];
   if (!row) { console.log(`#${id}: not found in database`); continue; }
-
   const payload = JSON.parse(row.payload_json);
-  const lookup = buildIndex(folder);
+  const products = payload.catalog?.products ?? [];
+
+  // 1. legacy blob_url -> local_image (when the file is on disk)
+  let migrated = 0, total = 0;
   const work = [];
-  let total = 0;
-  for (const product of payload.catalog.products) {
+  const entry = VERTICALS[id];
+  const lookup = entry ? buildIndex(entry) : null;
+  for (const product of products) {
     for (const image of product.data.images ?? []) {
       total += 1;
-      if (image.blob_url) continue;
-      work.push({ image, source: lookup(image.image_file ?? "") });
+      const file = localFile(image);
+      if (onDisk(file)) {
+        if (image.blob_url || image.local_image !== file) migrated += 1;
+        if (apply) { image.local_image = file; delete image.blob_url; }
+        continue;
+      }
+      // 2. still no local copy: re-source it
+      work.push({
+        image,
+        source: EXTRA_SOURCES[`${id}:${product.data.sku}`] ?? lookup?.(image.image_file ?? "", image),
+      });
     }
   }
   const matched = work.filter((w) => w.source);
   const failures = [];
   if (apply) {
     await mapLimited(matched, async (w) => {
-      try { w.image.blob_url = await mirror(w.source); }
-      catch (error) { failures.push(`${w.source}: ${error.message}`); }
+      try {
+        w.image.local_image = await mirror(w.source);
+        delete w.image.blob_url;
+      } catch (error) { failures.push(`${w.source}: ${error.message}`); }
     });
-    saveCache();
-    // Primary image and preview card follow the gallery image with the same id.
+    // 3. primary image and preview card follow the gallery image with the same id
     const previews = new Map((payload.preview?.products ?? []).map((p) => [p.id, p]));
-    for (const product of payload.catalog.products) {
+    for (const product of products) {
       const data = product.data;
-      const gallery = (data.images ?? []).find((i) => i.id === data.primary_image?.id && i.blob_url)
-        ?? (data.images ?? []).find((i) => i.is_thumbnail && i.blob_url)
-        ?? (data.images ?? []).find((i) => i.blob_url);
+      const withFile = (data.images ?? []).filter((i) => onDisk(localFile(i)));
+      const gallery = withFile.find((i) => i.id === data.primary_image?.id)
+        ?? withFile.find((i) => i.is_thumbnail) ?? withFile[0];
       if (!gallery) continue;
-      if (data.primary_image) data.primary_image.blob_url = gallery.blob_url;
+      if (data.primary_image) { data.primary_image.local_image = localFile(gallery); delete data.primary_image.blob_url; }
       const preview = previews.get(data.id);
-      if (preview) preview.imageUrl = gallery.blob_url;
+      if (preview) preview.imageUrl = `/api/snapshot-images/${localFile(gallery)}`;
     }
     const json = JSON.stringify(payload);
     await db.execute({
@@ -191,9 +228,11 @@ for (const id of snapshotIds) {
       args: [json, Buffer.byteLength(json), id],
     });
   }
+  const missingSource = work.length - matched.length;
   console.log(
-    `#${id} ${row.name}: ${matched.length}/${work.length} images matched to a source` +
-      ` (${total} total)${apply ? `, ${matched.length - failures.length} uploaded, ${failures.length} failed` : " [dry run]"}`,
+    `#${id} ${row.name}: ${total} images, ${migrated} already local, ${matched.length}/${work.length} re-sourced` +
+      (missingSource ? `, ${missingSource} without a source` : "") +
+      (apply ? `, ${failures.length} failed` : " [dry run]"),
   );
   for (const f of failures.slice(0, 5)) console.log(`   failed: ${f}`);
 }

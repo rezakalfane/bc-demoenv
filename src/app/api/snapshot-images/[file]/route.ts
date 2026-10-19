@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { snapshotImagesDir } from "@/lib/snapshot-image-blob";
+import { snapshotImagesDir } from "@/lib/snapshot-image-store";
 import { LOCAL_IMAGE_PATTERN } from "@/lib/snapshot-image-src";
 
 // Serves images a local (local dev) capture stored on disk. Public in
@@ -19,7 +19,7 @@ export async function GET(
 ) {
   const { file } = await params;
   const dir = snapshotImagesDir();
-  if (!dir || !LOCAL_IMAGE_PATTERN.test(file)) {
+  if (!LOCAL_IMAGE_PATTERN.test(file)) {
     return new Response("Not found", { status: 404 });
   }
   try {

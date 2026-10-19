@@ -91,12 +91,13 @@ Settings → Database backup & restore works independently of that development m
 
 ### Snapshot images
 
-A snapshot stores BigCommerce CDN URLs, which stop working when the source store deletes its products. Capture therefore also keeps its own copy of every image, named by content hash:
+A snapshot stores BigCommerce CDN URLs, which stop working when the source store deletes its products. Capture therefore also downloads every image into a local folder, named by content hash (`<sha256>.<ext>`):
 
-- **Deployed (Vercel):** with `BLOB_READ_WRITE_TOKEN` set (a public Vercel Blob store connected to Production and Preview), images go to Blob and the snapshot records `blob_url`. These URLs are public, so anyone running the app locally sees the images without any token, as long as they are online. Restore sends the Blob URL to BigCommerce, which downloads the image.
-- **Local capture (no token):** images are written to `.snapshot-images/` (override with `SNAPSHOT_IMAGES_DIR`) and the snapshot records `local_image`, served by `/api/snapshot-images/<file>`. Restore cannot use these, because BigCommerce cannot fetch a file on your disk; it falls back to the original source URL. Set `BLOB_READ_WRITE_TOKEN` in `.env.local` if locally captured snapshots must restore after the source is gone.
-- **Offline viewing:** `node scripts/download-snapshot-images.mjs` downloads the Blob copies of every snapshot in `local.db` into `.snapshot-images/`; the app then serves them from disk.
-- **Repairing old snapshots:** `scripts/repair-snapshot-images.mjs` re-sources images from a vertical's original `products.csv` for snapshots captured before this existed. It edits the local database only; push it to Turso afterwards.
+- **Folder:** `.snapshot-images/` in the project (gitignored), or `SNAPSHOT_IMAGES_DIR`. Each image record in the snapshot keeps the file name as `local_image`, and the app serves it at `/api/snapshot-images/<file>`.
+- **Browsing:** the snapshot grid and product inspector show the local copy, and fall back to the original CDN URL when the file is missing.
+- **Restore:** local images are uploaded to BigCommerce as file uploads, so a restore works even when the original source URLs are gone and needs no public hosting. Without a local copy, restore falls back to the original source URL.
+- **Sharing snapshots:** images are not stored in the database. To move a snapshot to another machine, copy the images folder along with the database (or backup JSON).
+- **Repairing old snapshots:** `scripts/repair-snapshot-images.mjs` re-sources images for Template snapshots captured before this existed, from each vertical's original `products.csv` (and a few other sources listed in the script). `scripts/prune-imageless-products.mjs` then drops products that have no image anywhere. Both edit the local database only and back it up first; both default to a dry run.
 
 To use Turso, add the Marketplace integration and pull the updated environment:
 

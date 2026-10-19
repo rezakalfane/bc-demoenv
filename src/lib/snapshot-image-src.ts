@@ -1,19 +1,14 @@
-// Client-safe helpers for snapshot image references (no Node/Blob imports).
-const BLOB_HOST_PATTERN = /\.public\.blob\.vercel-storage\.com$/i;
+// Client-safe helpers for snapshot image references (no Node imports).
+//
+// Captured images are kept as local files named by content hash. A snapshot
+// image record points at its file with `local_image`; older repaired snapshots
+// carry a dead Vercel Blob `blob_url` whose last path segment is the same hash
+// file name, so it still resolves to the local copy.
 export const LOCAL_IMAGE_PATTERN = /^[a-f0-9]{64}\.(?:jpg|png|webp|gif)$/;
 export const LOCAL_IMAGE_ROUTE = "/api/snapshot-images/";
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-export function isBlobImageUrl(value: unknown) {
-  try {
-    const url = new URL(text(value));
-    return url.protocol === "https:" && BLOB_HOST_PATTERN.test(url.hostname);
-  } catch {
-    return false;
-  }
 }
 
 export function isLocalImagePath(value: unknown) {
@@ -24,25 +19,35 @@ export function isLocalImagePath(value: unknown) {
   );
 }
 
-/** The durable Vercel Blob copy of a captured image, if one was stored. */
-export function blobImageUrl(image: unknown) {
-  const url = text((image as { blob_url?: unknown } | null)?.blob_url);
-  return isBlobImageUrl(url) ? url : "";
+function fileNameOf(value: string) {
+  try {
+    const path = value.startsWith("/") ? value : new URL(value).pathname;
+    return path.split("/").pop() ?? "";
+  } catch {
+    return "";
+  }
 }
 
-/** Route path of the copy a local (local dev) capture stored on disk. */
+/** Local file name for an image record, a legacy blob URL, or a route path. */
+export function localImageFile(image: unknown) {
+  if (typeof image === "string") {
+    const file = fileNameOf(text(image));
+    return LOCAL_IMAGE_PATTERN.test(file) ? file : "";
+  }
+  const record = (image ?? {}) as Record<string, unknown>;
+  for (const candidate of [text(record.local_image), fileNameOf(text(record.blob_url))]) {
+    if (LOCAL_IMAGE_PATTERN.test(candidate)) return candidate;
+  }
+  return "";
+}
+
 export function localImagePath(image: unknown) {
-  const file = text((image as { local_image?: unknown } | null)?.local_image);
-  return LOCAL_IMAGE_PATTERN.test(file) ? `${LOCAL_IMAGE_ROUTE}${file}` : "";
+  const file = localImageFile(image);
+  return file ? `${LOCAL_IMAGE_ROUTE}${file}` : "";
 }
 
-/** What to display for a captured image: durable copy first, source URL last. */
+/** What to display for a captured image: the local copy, else the source URL. */
 export function snapshotImageSrc(image: unknown) {
   const record = (image ?? {}) as Record<string, unknown>;
-  return (
-    blobImageUrl(image) ||
-    localImagePath(image) ||
-    text(record.url_standard) ||
-    text(record.url_zoom)
-  );
+  return localImagePath(image) || text(record.url_standard) || text(record.url_zoom);
 }

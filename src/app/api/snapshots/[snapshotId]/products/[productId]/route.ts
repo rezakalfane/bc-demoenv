@@ -1,5 +1,5 @@
 import { getCatalogSnapshotView } from "@/lib/catalog-snapshots";
-import { withLocalImageCopies } from "@/lib/snapshot-image-blob";
+import { withLocalImageCopies } from "@/lib/snapshot-image-store";
 
 export async function GET(
   _request: Request,

@@ -1,12 +1,8 @@
 import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
-import { localCopyPath, mirrorProductImages } from "@/lib/snapshot-image-blob";
-import {
-  isBlobImageUrl,
-  isLocalImagePath,
-  snapshotImageSrc,
-} from "@/lib/snapshot-image-src";
+import { localCopyPath, mirrorProductImages } from "@/lib/snapshot-image-store";
+import { isLocalImagePath, snapshotImageSrc } from "@/lib/snapshot-image-src";
 import type {
   CatalogCategory,
   CatalogProduct,
@@ -485,8 +481,7 @@ function readImageUrl(value: unknown) {
 
   try {
     const url = new URL(value);
-    return url.protocol === "https:" &&
-      (CDN_HOST_PATTERN.test(url.hostname) || isBlobImageUrl(value))
+    return url.protocol === "https:" && CDN_HOST_PATTERN.test(url.hostname)
       ? url.toString()
       : null;
   } catch {
@@ -725,7 +720,7 @@ async function enrichProduct(
     }),
   ]);
 
-  // Keep a durable copy: the source store may later delete these CDN files.
+  // Keep a local copy: the source store may later delete these CDN files.
   await mirrorProductImages(product);
 
   return { data: product, metafields, variantMetafields };
