@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { snapshotImagesDir } from "@/lib/snapshot-image-blob";
 import { LOCAL_IMAGE_PATTERN } from "@/lib/snapshot-image-src";
 
-// Serves images a local (desktop/dev) capture stored on disk. Public in
+// Serves images a local (local dev) capture stored on disk. Public in
 // src/proxy.ts so <img>/next/image can fetch it without a session; only
 // content-hash file names are accepted.
 const CONTENT_TYPES: Record<string, string> = {

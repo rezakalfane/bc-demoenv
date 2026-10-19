@@ -89,6 +89,15 @@ Without Turso variables, local development creates `local.db` in the project dir
 
 Settings → Database backup & restore works independently of that development mirror. It downloads a versioned JSON backup of every application table from the active database and can transactionally restore the same format to local SQLite or Turso. Restore validates the exact table and column set, refuses to run while catalog workflows are active, and omits inaccessible legacy notes that have no owner. These files contain every tenant's data and encrypted access tokens and must be handled as secrets. Outside development, add a comma-separated allow-list of trusted operator emails as `DATABASE_BACKUP_ALLOWED_EMAILS`; users not on that list can see the section but cannot invoke either action.
 
+### Snapshot images
+
+A snapshot stores BigCommerce CDN URLs, which stop working when the source store deletes its products. Capture therefore also keeps its own copy of every image, named by content hash:
+
+- **Deployed (Vercel):** with `BLOB_READ_WRITE_TOKEN` set (a public Vercel Blob store connected to Production and Preview), images go to Blob and the snapshot records `blob_url`. These URLs are public, so anyone running the app locally sees the images without any token, as long as they are online. Restore sends the Blob URL to BigCommerce, which downloads the image.
+- **Local capture (no token):** images are written to `.snapshot-images/` (override with `SNAPSHOT_IMAGES_DIR`) and the snapshot records `local_image`, served by `/api/snapshot-images/<file>`. Restore cannot use these, because BigCommerce cannot fetch a file on your disk; it falls back to the original source URL. Set `BLOB_READ_WRITE_TOKEN` in `.env.local` if locally captured snapshots must restore after the source is gone.
+- **Offline viewing:** `node scripts/download-snapshot-images.mjs` downloads the Blob copies of every snapshot in `local.db` into `.snapshot-images/`; the app then serves them from disk.
+- **Repairing old snapshots:** `scripts/repair-snapshot-images.mjs` re-sources images from a vertical's original `products.csv` for snapshots captured before this existed. It edits the local database only; push it to Turso afterwards.
+
 To use Turso, add the Marketplace integration and pull the updated environment:
 
 ```bash

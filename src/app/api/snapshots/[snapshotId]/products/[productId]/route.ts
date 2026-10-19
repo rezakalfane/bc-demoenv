@@ -1,4 +1,5 @@
 import { getCatalogSnapshotView } from "@/lib/catalog-snapshots";
+import { withLocalImageCopies } from "@/lib/snapshot-image-blob";
 
 export async function GET(
   _request: Request,
@@ -34,7 +35,7 @@ export async function GET(
   }
 
   return Response.json(
-    { record },
+    { record: withLocalImageCopies(record) },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

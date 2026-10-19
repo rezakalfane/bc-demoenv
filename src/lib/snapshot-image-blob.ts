@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { put } from "@vercel/blob";
 import {
   blobImageUrl,
   localImagePath,
   LOCAL_IMAGE_PATTERN,
+  LOCAL_IMAGE_ROUTE,
 } from "@/lib/snapshot-image-src";
 
 export { blobImageUrl, isBlobImageUrl } from "@/lib/snapshot-image-src";
@@ -36,7 +38,7 @@ function readString(value: unknown) {
 
 type StoredImage = { field: "blob_url" | "local_image"; value: string };
 
-/** Where captured image bytes go: Blob when deployed, a local folder otherwise. */
+/** Where captured image bytes go: Blob when deployed, a local folder when run locally. */
 export function snapshotImagesDir() {
   const configured = process.env.SNAPSHOT_IMAGES_DIR;
   if (configured) return configured;
@@ -99,6 +101,42 @@ export async function storeImageBytes(
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, file), bytes);
   return { field: "local_image", value: file };
+}
+
+/**
+ * In local mode (local dev server), a Blob image whose bytes were
+ * downloaded to the local folder is served from disk, so snapshots keep their
+ * images offline. Blob file names are the content hash, i.e. the local name.
+ */
+export function localCopyPath(blobUrl: unknown) {
+  const dir = snapshotImagesDir();
+  if (!dir || !blobImageUrl({ blob_url: blobUrl })) return "";
+  const file = basename(new URL(String(blobUrl)).pathname);
+  return LOCAL_IMAGE_PATTERN.test(file) && existsSync(join(dir, file))
+    ? `${LOCAL_IMAGE_ROUTE}${file}`
+    : "";
+}
+
+/** Returns a copy of a captured product with Blob images swapped for local files. */
+export function withLocalImageCopies<T extends JsonRecord>(record: T): T {
+  if (!snapshotImagesDir()) return record;
+  const data = asRecord(record.data);
+  if (!data) return record;
+  const swap = (value: unknown) => {
+    const image = asRecord(value);
+    const local = image ? localCopyPath(image.blob_url) : "";
+    return image && local
+      ? { ...image, blob_url: "", local_image: basename(local) }
+      : value;
+  };
+  return {
+    ...record,
+    data: {
+      ...data,
+      images: Array.isArray(data.images) ? data.images.map(swap) : data.images,
+      primary_image: swap(data.primary_image),
+    },
+  };
 }
 
 function sourceUrlOf(image: JsonRecord) {

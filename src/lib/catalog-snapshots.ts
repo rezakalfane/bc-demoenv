@@ -1,7 +1,7 @@
 import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
-import { mirrorProductImages } from "@/lib/snapshot-image-blob";
+import { localCopyPath, mirrorProductImages } from "@/lib/snapshot-image-blob";
 import {
   isBlobImageUrl,
   isLocalImagePath,
@@ -2294,7 +2294,9 @@ function parsePreviewProducts(value: unknown) {
         name,
         description: readString(product.description),
         price: readNonNegativeNumber(product.price),
-        imageUrl: readImageUrl(product.imageUrl),
+        imageUrl: readImageUrl(
+          localCopyPath(product.imageUrl) || product.imageUrl,
+        ),
         categoryIds: Array.isArray(product.categoryIds)
           ? product.categoryIds.flatMap((categoryId) => {
               const parsedId = readPositiveInteger(categoryId);

@@ -30,7 +30,7 @@ export function blobImageUrl(image: unknown) {
   return isBlobImageUrl(url) ? url : "";
 }
 
-/** Route path of the copy a local (desktop/dev) capture stored on disk. */
+/** Route path of the copy a local (local dev) capture stored on disk. */
 export function localImagePath(image: unknown) {
   const file = text((image as { local_image?: unknown } | null)?.local_image);
   return LOCAL_IMAGE_PATTERN.test(file) ? `${LOCAL_IMAGE_ROUTE}${file}` : "";

@@ -61,9 +61,5 @@ next-env.d.ts
 ai-vault/
 graphify-out/
 
-# electron desktop app build output
-/dist-electron/
-/release/
-
-# local snapshot image copies (dev server)
+# local snapshot image copies (local dev server)
 /.snapshot-images/
