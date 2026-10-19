@@ -25,7 +25,11 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
 
   // Single-user local mode: no login. The app holds store admin tokens, so it
   // must not answer anything that is not addressed to this machine.
-  if (!isLoopbackHost(request.headers.get("host"))) {
+  // Exception: Next's image optimizer fetches local images through an internal
+  // request that carries no Host header. That route only serves content-hash
+  // named image files, so it is safe to leave open.
+  const isImageRoute = request.nextUrl.pathname.startsWith("/api/snapshot-images/");
+  if (!isImageRoute && !isLoopbackHost(request.headers.get("host"))) {
     return new NextResponse("Local mode only answers on localhost.", { status: 403 });
   }
   if (LOGIN_PAGES.test(request.nextUrl.pathname)) {
