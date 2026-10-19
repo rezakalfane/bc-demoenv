@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   LOCAL_IMAGE_PATTERN,
@@ -43,6 +43,34 @@ export function localImageExists(file: string) {
   return LOCAL_IMAGE_PATTERN.test(file) && existsSync(join(snapshotImagesDir(), file));
 }
 
+// File names are content hashes, so a source URL cannot be mapped to its file
+// without downloading it. This index (source URL -> file name, next to the
+// images) lets a re-capture skip downloads it has already done. BigCommerce
+// image URLs embed the image id and version, so a URL's bytes do not change.
+const SOURCE_INDEX = "sources.json";
+let sourceIndexLoad: Promise<Map<string, string>> | null = null;
+let sourceIndexDirty = false;
+
+// Cache the promise, not the result: downloads run concurrently and must all
+// share one map.
+function loadSourceIndex() {
+  sourceIndexLoad ??= readFile(join(snapshotImagesDir(), SOURCE_INDEX), "utf8")
+    .then((text) => new Map(Object.entries(JSON.parse(text) as Record<string, string>)))
+    .catch(() => new Map<string, string>());
+  return sourceIndexLoad;
+}
+
+async function saveSourceIndex() {
+  if (!sourceIndexLoad || !sourceIndexDirty) return;
+  const sourceIndex = await sourceIndexLoad;
+  const dir = snapshotImagesDir();
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, SOURCE_INDEX);
+  await writeFile(`${file}.tmp`, JSON.stringify(Object.fromEntries(sourceIndex)));
+  await rename(`${file}.tmp`, file);
+  sourceIndexDirty = false;
+}
+
 /** Stores bytes under a content-hash name, so identical images share one file. */
 export async function storeImageBytes(bytes: Buffer, extension: string) {
   const file = `${createHash("sha256").update(bytes).digest("hex")}.${extension}`;
@@ -59,6 +87,10 @@ export async function storeImageBytes(bytes: Buffer, extension: string) {
  */
 export async function mirrorImageBytes(sourceUrl: string) {
   try {
+    const index = await loadSourceIndex();
+    const known = index.get(sourceUrl);
+    if (known && localImageExists(known)) return known;
+
     const response = await fetch(sourceUrl, {
       cache: "no-store",
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -72,7 +104,12 @@ export async function mirrorImageBytes(sourceUrl: string) {
     if (!extension) return null;
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) return null;
-    return await storeImageBytes(bytes, extension);
+    const file = await storeImageBytes(bytes, extension);
+    if (file) {
+      index.set(sourceUrl, file);
+      sourceIndexDirty = true;
+    }
+    return file;
   } catch {
     return null;
   }
@@ -169,4 +206,5 @@ export async function mirrorProductImages(product: JsonRecord) {
     const file = mirrored.get(sourceUrlOf(image));
     if (file) image.local_image = file;
   }
+  await saveSourceIndex().catch(() => undefined);
 }
