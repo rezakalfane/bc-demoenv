@@ -10,7 +10,9 @@
     "build": "next build",
     "i18n:check": "node scripts/check-i18n.mjs && node scripts/check-i18n-coverage.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "templates:export": "node scripts/templates-export.mjs",
+    "templates:import": "node scripts/templates-import.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.20",

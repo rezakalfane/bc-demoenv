@@ -63,3 +63,7 @@ graphify-out/
 
 # local snapshot image copies (local dev server)
 /.snapshot-images/
+
+# exported template packs
+/template-pack/
+/template-pack.zip

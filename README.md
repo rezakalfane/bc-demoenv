@@ -99,6 +99,25 @@ A snapshot stores BigCommerce CDN URLs, which stop working when the source store
 - **Sharing snapshots:** images are not stored in the database. To move a snapshot to another machine, copy the images folder along with the database (or backup JSON).
 - **Repairing old snapshots:** `scripts/repair-snapshot-images.mjs` re-sources images for Template snapshots captured before this existed, from each vertical's original `products.csv` (and a few other sources listed in the script). `scripts/prune-imageless-products.mjs` then drops products that have no image anywhere. Both edit the local database only and back it up first; both default to a dry run.
 
+### Template pack: getting the Template snapshots on a new machine
+
+Snapshots live in the database and their images in `.snapshot-images/`, neither of which is in git. A **template pack** moves the Template snapshots (latest version of every snapshot named `Template - …`) and their images together. The pack holds no credentials and no user IDs.
+
+**Making a pack** (on a machine that has the snapshots):
+
+```bash
+npm run templates:export -- --zip     # writes template-pack/ and template-pack.zip (about 900 MB)
+```
+
+**Using a pack** (new machine):
+
+1. Install and configure the app as described in *Local development* (Clerk keys in `.env.local`), run `npm run dev`, and sign in once. This creates the database tables and your user.
+2. Unzip the pack next to the project, then run `npm run templates:import -- template-pack`. This inserts the snapshots as yours and copies the images into `.snapshot-images/`. It is safe to re-run: existing versions are skipped (`--replace` overwrites them; `--user <clerk user id>` is needed only if the database has several users).
+3. Add the destination store under Settings → Environments.
+4. Open Snapshots, choose a Template, and use **Restore Snapshot** with that environment and channel. Images upload from the local copies, so no source store or public hosting is needed.
+
+Both scripts only touch the local database (`LOCAL_DATABASE_URL`, default `file:local.db`), and honour `SNAPSHOT_IMAGES_DIR`.
+
 To use Turso, add the Marketplace integration and pull the updated environment:
 
 ```bash
