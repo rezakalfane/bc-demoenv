@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { snapshotImageSrc } from "@/lib/snapshot-image-src";
 import {
   createContext,
   useCallback,
@@ -226,11 +227,7 @@ function ImageCollection({ value }: { value: unknown }) {
     <div className="space-y-3">
       {value.map((entry, index) => {
         const record = asRecord(entry);
-        const url = typeof record?.url_standard === "string"
-          ? record.url_standard
-          : typeof record?.url_zoom === "string"
-            ? record.url_zoom
-            : null;
+        const url = snapshotImageSrc(record) || null;
         return (
           <div
             key={index}

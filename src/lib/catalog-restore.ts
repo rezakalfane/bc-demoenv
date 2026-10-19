@@ -2777,6 +2777,7 @@ function imageInput(value: unknown) {
   const image = asRecord(value);
   if (!image) return null;
   const imageUrl =
+    readString(image.blob_url) ||
     readString(image.image_url) ||
     readString(image.url_zoom) ||
     readString(image.url_standard) ||

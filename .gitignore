@@ -64,3 +64,6 @@ graphify-out/
 # electron desktop app build output
 /dist-electron/
 /release/
+
+# local snapshot image copies (dev server)
+/.snapshot-images/

@@ -115,6 +115,8 @@ function serverEnv(port) {
     // and Next proxies them back to itself in a loop.
     HOSTNAME: "localhost",
     WORKFLOW_LOCAL_DATA_DIR: join(userData, "workflow-data"),
+    // Local copies of captured snapshot images (no Vercel Blob on the desktop app).
+    SNAPSHOT_IMAGES_DIR: join(userData, "snapshot-images"),
     WORKFLOW_LOCAL_BASE_URL: `http://localhost:${port}`,
     CRON_SECRET: cronSecret,
     NEXT_TELEMETRY_DISABLED: "1",

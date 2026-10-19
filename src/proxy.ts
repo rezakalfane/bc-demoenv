@@ -6,6 +6,8 @@ const isPublicRoute = createRouteMatcher([
   "/access-denied(.*)",
   // Cron has no Clerk session; the route checks CRON_SECRET itself.
   "/api/scheduler/tick",
+  // Content-hash-named image copies, fetched by <img>/next/image.
+  "/api/snapshot-images/(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {

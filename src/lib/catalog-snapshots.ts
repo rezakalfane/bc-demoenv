@@ -1,6 +1,12 @@
 import "server-only";
 
 import { requireAppUser } from "@/lib/auth";
+import { mirrorProductImages } from "@/lib/snapshot-image-blob";
+import {
+  isBlobImageUrl,
+  isLocalImagePath,
+  snapshotImageSrc,
+} from "@/lib/snapshot-image-src";
 import type {
   CatalogCategory,
   CatalogProduct,
@@ -473,10 +479,14 @@ function readImageUrl(value: unknown) {
   if (typeof value !== "string") {
     return null;
   }
+  if (isLocalImagePath(value)) {
+    return value;
+  }
 
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && CDN_HOST_PATTERN.test(url.hostname)
+    return url.protocol === "https:" &&
+      (CDN_HOST_PATTERN.test(url.hostname) || isBlobImageUrl(value))
       ? url.toString()
       : null;
   } catch {
@@ -533,7 +543,7 @@ function toPreviewProduct(product: JsonRecord): CatalogProduct | null {
     name,
     description: toShortDescription(product.description),
     price: calculatedPrice ?? basePrice,
-    imageUrl: readImageUrl(primaryImage?.url_standard),
+    imageUrl: readImageUrl(snapshotImageSrc(primaryImage)),
     categoryIds,
   };
 }
@@ -714,6 +724,9 @@ async function enrichProduct(
       };
     }),
   ]);
+
+  // Keep a durable copy: the source store may later delete these CDN files.
+  await mirrorProductImages(product);
 
   return { data: product, metafields, variantMetafields };
 }
